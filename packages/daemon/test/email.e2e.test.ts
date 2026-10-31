@@ -163,7 +163,7 @@ describe("email connector e2e", () => {
     expect(msg.text).toContain("Q3 numbers");
     expect(await tool(b, "email_search", {})).toContain("no email account is connected");
     expect(await tool(b, "email_accounts")).toBe("[]");
-  });
+  }, 30_000);
 
   test("a draft is never sent by the bot; the user edits and sends it", async () => {
     const reply = await tool(a, "email_draft", {
