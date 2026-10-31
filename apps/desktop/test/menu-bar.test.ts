@@ -191,6 +191,49 @@ test("empty state, guarded browser controls and footer error recovery use real d
   expect(errors).toEqual([]);
 }, 30000);
 
+test.each([
+  ["Outro bot", "UpBot", 1],
+  ["UpBot", "Boto", 1],
+  ["Boto", "UpBot", 0],
+  ["Outro bot", "Relatório semanal", 0],
+] as const)(
+  "quick tasks route correctly with bots named %s and %s",
+  async (firstName, secondName, target) => {
+    const bots = [bot, second] as const;
+    const recipient = bots[target];
+    try {
+      await rpc.request("agents.update", { id: bot.id, name: firstName });
+      await rpc.request("agents.update", { id: second.id, name: secondName });
+      expect(((await rpc.request("agents.list", {})) as Agent[]).map((agent) => agent.id)).toEqual(
+        bots.map((agent) => agent.id),
+      );
+      await page.reload();
+      await page.getByText("Nada aguardando você", { exact: true }).waitFor();
+      const input = page.getByRole("textbox", { name: "Peça uma tarefa ao Boto" });
+      await input.fill("watchdog-idle");
+      await page.getByRole("button", { name: "Enviar tarefa", exact: true }).click();
+      await page
+        .getByRole("region", { name: "Em execução (1)", exact: true })
+        .getByRole("button", { name: new RegExp(`${target === 0 ? firstName : secondName}$`) })
+        .waitFor();
+      const statuses = (await rpc.request("agents.statuses", {})) as Record<
+        string,
+        { status: string }
+      >;
+      expect(["starting", "running"]).toContain(statuses[recipient.id]?.status);
+      expect(statuses[bots[target === 0 ? 1 : 0].id]?.status).toBe("idle");
+      expect(await input.inputValue()).toBe("");
+    } finally {
+      for (const agent of bots) {
+        await rpc.request("chat.cancel", { agentId: agent.id });
+        await rpc.request("agents.update", { id: agent.id, name: agent.name });
+      }
+      await page.getByRole("region", { name: "Em execução (0)", exact: true }).waitFor();
+    }
+  },
+  30000,
+);
+
 test("keyboard app approval becomes done, count decreases and honest undo restores preference", async () => {
   await pending();
   await page.getByText("1 tarefa aguardando você", { exact: true }).waitFor();

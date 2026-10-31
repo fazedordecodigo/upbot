@@ -440,7 +440,10 @@ export default function MenuBar() {
           className={s.quick}
           onSubmit={(event) => {
             event.preventDefault();
-            const agent = agents.find((item) => item.name === "Boto") ?? agents[0];
+            const agent =
+              agents.find((item) => item.name === "Boto") ??
+              agents.find((item) => item.name === "UpBot") ??
+              agents[0];
             if (!agent || !text.trim()) return;
             void perform("send", async () => {
               await client.request("chat.send", { agentId: agent.id, text: text.trim() });
