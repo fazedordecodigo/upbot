@@ -8,7 +8,7 @@ import type {
   ProviderId,
   Routine,
 } from "@upbot/protocol";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useLayerFocus } from "../hooks/useLayerFocus";
 import {
@@ -47,6 +47,7 @@ import {
   SheetIcon,
   UpbotSimboloCurrentcolorIcon,
 } from "./ds/icons";
+import { Icon } from "./icons";
 
 const PROVIDERS: ProviderId[] = [
   "devin",
@@ -111,12 +112,18 @@ function LayerDialog({
   onClose,
   initialFocus,
   testId,
+  alert = false,
+  labelledBy,
+  describedBy,
 }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
   initialFocus?: string;
   testId?: string;
+  alert?: boolean;
+  labelledBy?: string;
+  describedBy?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayerFocus(ref, true);
@@ -134,17 +141,23 @@ function LayerDialog({
   }, [onClose]);
   return (
     <div className={s.scrim}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: o papel é dialog ou alertdialog */}
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: o papel é dialog ou alertdialog */}
       <div
         ref={ref}
         className={s.dialog}
-        role="dialog"
+        role={alert ? "alertdialog" : "dialog"}
         aria-modal="true"
-        aria-label={title}
+        {...(labelledBy ? { "aria-labelledby": labelledBy } : { "aria-label": title })}
+        {...(describedBy ? { "aria-describedby": describedBy } : {})}
         data-od-id={testId}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
             onClose();
+          }
+          if (event.key === "Enter" && event.target === event.currentTarget) {
+            event.preventDefault();
           }
         }}
       >
@@ -201,6 +214,8 @@ export function AgentConfigScreen({
   useLayerFocus(iconPopover, popover);
   const dirty = !deepEqual(saved, draft);
   const agentName = saved.name || agent.name;
+  const deleteTitleId = useId();
+  const deleteBodyId = useId();
   const routineToUndo = useRef<{ routine: DraftRoutine; index: number } | null>(null);
   const abort = useRef<ReturnType<typeof setTimeout> | null>(null);
   const change = (patch: Partial<AgentConfig>) => setDraft((current) => ({ ...current, ...patch }));
@@ -512,7 +527,7 @@ export function AgentConfigScreen({
         <strong>Configurações</strong>
       </header>
       <div className={s.scroll} data-agent-config-scroll="">
-        <main className={s.column}>
+        <div className={s.column}>
           <section className={s.identity}>
             <div className={s.avatarWrap}>
               <button
@@ -866,10 +881,10 @@ export function AgentConfigScreen({
               <div className={`${s.row} ${s.rowSplit}`}>
                 <div>
                   <b>Excluir agente</b>
-                  <p>As rotinas param. As conversas continuam no histórico.</p>
+                  <p>Sai da lista. Por 5 segundos dá para desfazer.</p>
                 </div>
-                <Button className={s.deleteButton} onClick={() => setDialog("delete")}>
-                  Excluir…
+                <Button variant="danger" onClick={() => setDialog("delete")}>
+                  Excluir agente…
                 </Button>
               </div>
             </div>
@@ -879,7 +894,7 @@ export function AgentConfigScreen({
               {error}
             </p>
           )}
-        </main>
+        </div>
       </div>
       {dirty && !dialog && (
         <div className={s.savebar}>
@@ -985,19 +1000,21 @@ export function AgentConfigScreen({
       )}
       {dialog === "delete" && (
         <LayerDialog
-          title={`Excluir ${agentName}?`}
+          alert
+          title={`Excluir o agente “${agentName}”?`}
+          labelledBy={deleteTitleId}
+          describedBy={deleteBodyId}
           onClose={() => setDialog(null)}
           initialFocus='[data-action="cancel"]'
         >
           <div className={s.dialogBody}>
-            <h2>Excluir {agentName}?</h2>
-            <p>
-              {draft.routines.length > 1
-                ? `As ${draft.routines.length} rotinas param de rodar. `
-                : draft.routines.length === 1
-                  ? "A rotina para de rodar. "
-                  : ""}
-              A pasta de trabalho e as conversas continuam guardadas.
+            <h2 id={deleteTitleId} className={s.dialogTitle}>
+              <Icon name="alert" />
+              Excluir o agente “{agentName}”?
+            </h2>
+            <p id={deleteBodyId}>
+              O agente sai da sua lista agora. Por 5 segundos aparece um aviso com “Desfazer”;
+              depois disso, ele não volta pelo app.
             </p>
           </div>
           <footer>
@@ -1006,6 +1023,7 @@ export function AgentConfigScreen({
             </Button>
             <Button
               variant="danger"
+              data-action="confirm"
               onClick={async () => {
                 try {
                   const snapshot = { ...agent, name: agentName };

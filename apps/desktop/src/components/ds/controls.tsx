@@ -7,6 +7,7 @@ import type {
 } from "react";
 import { useEffect, useId, useRef } from "react";
 import { useLayerFocus } from "../../hooks/useLayerFocus";
+import { Icon } from "../icons";
 import s from "./controls.module.css";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -20,6 +21,7 @@ export function Button({
   small,
   arrow,
   className = "",
+  children,
   ...props
 }: ButtonProps) {
   return (
@@ -27,7 +29,10 @@ export function Button({
       type="button"
       {...props}
       className={`${s.button} ${s[variant]} ${small ? s.small : ""} ${arrow ? s.arrow : ""} ${className}`}
-    />
+    >
+      {variant === "danger" ? <Icon name="trash" /> : null}
+      {children}
+    </button>
   );
 }
 
@@ -238,16 +243,24 @@ export function Dialog({
   title,
   children,
   onClose,
+  alert = false,
+  labelledBy,
+  describedBy,
 }: {
   open: boolean;
   title: string;
   children: ReactNode;
   onClose: () => void;
+  alert?: boolean;
+  labelledBy?: string;
+  describedBy?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayerFocus(ref, open);
   useEffect(() => {
-    if (open) ref.current?.querySelector<HTMLElement>("button, input, select, textarea")?.focus();
+    if (!open) return;
+    const cancel = ref.current?.querySelector<HTMLElement>('[data-action="cancel"]');
+    (cancel ?? ref.current?.querySelector<HTMLElement>("button, input, select, textarea"))?.focus();
   }, [open]);
   if (!open) return null;
   return (
@@ -259,16 +272,22 @@ export function Dialog({
         tabIndex={-1}
         onClick={onClose}
       />
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: o papel é dialog ou alertdialog */}
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: o papel é dialog ou alertdialog */}
       <div
         ref={ref}
-        role="dialog"
+        role={alert ? "alertdialog" : "dialog"}
         aria-modal="true"
-        aria-label={title}
+        {...(labelledBy ? { "aria-labelledby": labelledBy } : { "aria-label": title })}
+        {...(describedBy ? { "aria-describedby": describedBy } : {})}
         className={s.dialog}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
             onClose();
+          }
+          if (event.key === "Enter" && event.target === event.currentTarget) {
+            event.preventDefault();
           }
         }}
       >
