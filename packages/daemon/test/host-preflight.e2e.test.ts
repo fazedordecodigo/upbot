@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { type Agent, type HostPreflight, RemoteHost } from "@boto/protocol";
 import { DaemonClient, type DaemonHandle, startDaemon, tmp } from "./helpers";
@@ -8,9 +8,126 @@ import { DaemonClient, type DaemonHandle, startDaemon, tmp } from "./helpers";
 const FAKE_SSH = join(import.meta.dir, "fixtures/fake-preflight-ssh.ts");
 const TOKEN = `host-preflight-${crypto.randomUUID()}`;
 
+// `bun build --compile` plus daemon startup exceeds bun's 5s default on a busy
+// Windows runner (the same file already spends ~4s without compiling). Other
+// daemon e2e files use 30s. The timeout is not a substitute for reaping the
+// child: a startup abandoned at the limit still holds the temp directory.
+setDefaultTimeout(30_000);
+
+type Spawned = ReturnType<typeof Bun.spawn>;
+
+type Stoppable = {
+  kill(signal?: NodeJS.Signals): void;
+  exited: Promise<number>;
+};
+
+/** Kills `proc` if it is still running and resolves when the process has exited. */
+async function waitForStop(proc: Stoppable): Promise<void> {
+  try {
+    proc.kill("SIGKILL");
+  } catch {}
+  await proc.exited;
+}
+
+/** Removes `dir`, retrying while Windows still reports the directory as locked. */
+async function removeDir(dir: string): Promise<void> {
+  const started = Date.now();
+  for (;;) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const retryable = code === "EBUSY" || code === "EPERM" || code === "ENOTEMPTY";
+      if (!retryable || Date.now() - started >= 10_000) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
+/** Stops `proc`, waits for its exit, then removes `dir`. */
+async function removeDirAfterExit(
+  proc: Stoppable | undefined,
+  dir: string,
+  remove: (dir: string) => Promise<void> | void = removeDir,
+): Promise<void> {
+  if (proc) await waitForStop(proc);
+  await remove(dir);
+}
+
+describe("temp directory cleanup", () => {
+  test("removes the directory only after the process has exited", async () => {
+    const dir = tmp("host-preflight-cleanup-");
+    let resolveExit: (code: number) => void = () => {};
+    const exited = new Promise<number>((resolve) => {
+      resolveExit = resolve;
+    });
+    const order: string[] = [];
+    void exited.then(() => order.push("exit"));
+    const proc: Stoppable = {
+      kill() {
+        resolveExit(0);
+      },
+      exited,
+    };
+    try {
+      await removeDirAfterExit(proc, dir, () => {
+        order.push("rm");
+      });
+      expect(order).toEqual(["exit", "rm"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("reaps a live process before deleting its directory", async () => {
+    const dir = tmp("host-preflight-cleanup-live-");
+    const proc = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], { cwd: dir });
+    await removeDirAfterExit(proc, dir);
+    expect(existsSync(dir)).toBe(false);
+    expect(proc.killed).toBe(true);
+    expect(typeof (await proc.exited)).toBe("number");
+  });
+
+  test("startDaemon publishes the process before READY", async () => {
+    const data = tmp("host-preflight-spawn-");
+    const agents = tmp("host-preflight-spawn-agents-");
+    let proc: Spawned | undefined;
+    try {
+      const pending = startDaemon(
+        data,
+        agents,
+        `spawn-${crypto.randomUUID()}`,
+        {},
+        false,
+        (child) => {
+          proc = child;
+          try {
+            child.kill("SIGKILL");
+          } catch {}
+        },
+      );
+      await expect(pending).rejects.toThrow();
+      expect(proc?.pid).toBeGreaterThan(0);
+      await proc?.exited;
+    } finally {
+      if (proc) {
+        try {
+          proc.kill("SIGKILL");
+        } catch {}
+        await proc.exited;
+      }
+      await removeDirAfterExit(undefined, data);
+      await removeDirAfterExit(undefined, agents);
+    }
+  });
+});
+
 describe("host preflight RPC validation", () => {
   let root: string;
   let daemon: DaemonHandle | undefined;
+  let spawned: Spawned | undefined;
+  let startup: Promise<DaemonHandle> | undefined;
   let c: DaemonClient | undefined;
   let preflight: HostPreflight;
 
@@ -37,22 +154,40 @@ describe("host preflight RPC validation", () => {
 
   afterEach(async () => {
     c?.close();
-    if (daemon) {
-      daemon.proc.kill("SIGKILL");
-      await daemon.proc.exited;
-    }
-    daemon = undefined;
     c = undefined;
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    const proc = spawned;
+    const pending = startup;
+    spawned = undefined;
+    startup = undefined;
+    daemon = undefined;
+    // Attach before the kill. A startup still waiting for READY rejects once
+    // stdout closes, and that rejection is otherwise unhandled after a timeout.
+    const settled = pending?.catch(() => {});
+    try {
+      await removeDirAfterExit(proc, root);
+    } finally {
+      await settled;
+    }
   });
 
   async function connect(env: Record<string, string> = {}) {
-    daemon = await startDaemon(join(root, "data"), join(root, "agents"), TOKEN, {
-      BOTO_SSH_COMMAND: JSON.stringify([process.execPath, FAKE_SSH]),
-      FAKE_PREFLIGHT_OUTPUT: join(root, "output"),
-      FAKE_PREFLIGHT_SSH_LOG: join(root, "ssh.jsonl"),
-      ...env,
-    });
+    const pending = startDaemon(
+      join(root, "data"),
+      join(root, "agents"),
+      TOKEN,
+      {
+        BOTO_SSH_COMMAND: JSON.stringify([process.execPath, FAKE_SSH]),
+        FAKE_PREFLIGHT_OUTPUT: join(root, "output"),
+        FAKE_PREFLIGHT_SSH_LOG: join(root, "ssh.jsonl"),
+        ...env,
+      },
+      false,
+      (proc) => {
+        spawned = proc;
+      },
+    );
+    startup = pending;
+    daemon = await pending;
     c = await DaemonClient.connect(daemon.port, TOKEN);
     return c;
   }
