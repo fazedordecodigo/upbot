@@ -387,6 +387,18 @@ test("kit titles are semibold and the Eco palette is on the page", async () => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
 });
 
+test("chat column max-width follows the Eco token", async () => {
+  const maxWidth = await page.evaluate(() => {
+    const column = document.createElement("div");
+    column.className = "thread-inner";
+    document.body.append(column);
+    const value = getComputedStyle(column).maxWidth;
+    column.remove();
+    return value;
+  });
+  expect(maxWidth).toBe("760px");
+});
+
 test("build-tokens.ts leaves committed css unchanged", () => {
   const root = fileURLToPath(new URL("../../..", import.meta.url));
   const tokensPath = join(root, "apps/desktop/src/styles/tokens.css");
