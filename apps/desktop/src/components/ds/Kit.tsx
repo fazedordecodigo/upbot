@@ -94,6 +94,32 @@ export default function Kit() {
       </div>
       <div className={s.grid}>
         <section className={s.card}>
+          <h2>Paleta</h2>
+          {/* list-style: none tira o papel implícito de lista no Chrome. */}
+          {/* biome-ignore lint/a11y/noRedundantRoles: o papel explícito restaura a lista */}
+          <ul className={s.palette} role="list" aria-label="Paleta Eco">
+            {(
+              [
+                ["Fundo", "var(--bg)", "var(--fg)"],
+                ["Superfície", "var(--surface)", "var(--fg)"],
+                ["Texto", "var(--fg)", "var(--bg)"],
+                ["Secundário", "var(--muted)", "var(--bg)"],
+                ["Destaque", "var(--accent)", "var(--on-accent)"],
+                ["Foco", "var(--focus)", "var(--bg)"],
+                ["Erro", "var(--st-err)", "var(--bg)"],
+                ["Execução", "var(--st-run)", "var(--bg)"],
+                ["Aguardando", "var(--st-wait)", "var(--bg)"],
+                ["Concluído", "var(--st-ok)", "var(--bg)"],
+              ] as const
+            ).map(([name, background, color]) => (
+              // biome-ignore lint/a11y/noRedundantRoles: o papel explícito restaura o item
+              <li key={name} role="listitem" aria-label={name} style={{ background, color }}>
+                {name}
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className={s.card}>
           <h2>Configurações do agente</h2>
           <div className={s.row}>
             <Button variant="danger" onClick={() => setMessage("Confirmação de exclusão.")}>

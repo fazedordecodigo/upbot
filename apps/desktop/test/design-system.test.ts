@@ -361,6 +361,32 @@ test("every custom property used in the desktop app resolves on the kit", async 
   expect(missing).toEqual([]);
 });
 
+test("kit titles are semibold and the Eco palette is on the page", async () => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("button", { name: "Tema claro", exact: true }).click();
+  expect(await page.locator("h1").evaluate((element) => getComputedStyle(element).fontWeight)).toBe(
+    "600",
+  );
+  expect(
+    await page
+      .locator("h2")
+      .first()
+      .evaluate((element) => getComputedStyle(element).fontWeight),
+  ).toBe("600");
+  expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe("16px");
+  const swatch = page.getByRole("list", { name: "Paleta Eco" });
+  const accent = await swatch
+    .getByRole("listitem", { name: "Destaque", exact: true })
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(parseRgb(accent)).toEqual([122, 74, 110]);
+  await page.getByRole("button", { name: "Tema escuro", exact: true }).click();
+  const darkAccent = await swatch
+    .getByRole("listitem", { name: "Destaque", exact: true })
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(parseRgb(darkAccent)).toEqual([242, 155, 178]);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+});
+
 test("build-tokens.ts leaves committed css unchanged", () => {
   const root = fileURLToPath(new URL("../../..", import.meta.url));
   const tokensPath = join(root, "apps/desktop/src/styles/tokens.css");
