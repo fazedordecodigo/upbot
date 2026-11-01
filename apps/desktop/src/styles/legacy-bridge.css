@@ -1,5 +1,5 @@
 /* Ponte de migração: nomes antigos do UpBot apontando para os tokens do Boto. GERADO por scripts/build-tokens.ts.
- * Permite trocar apps/desktop/src/styles/tokens.css sem reescrever upbot.css de uma vez. Remover quando ninguém mais usar os nomes antigos. */
+ * Permite trocar apps/desktop/src/styles/tokens.css sem reescrever boto.css de uma vez. Remover quando ninguém mais usar os nomes antigos. */
 :root, [data-theme="dark"] {
   --bg: var(--boto-color-bg);
   --surface: var(--boto-color-surface);

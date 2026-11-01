@@ -213,7 +213,7 @@ export function renderTokensCss(tokens: Tokens, raw: string): string {
 export function renderLegacyBridge(): string {
   const lines = [
     "/* Ponte de migração: nomes antigos do UpBot apontando para os tokens do Boto. GERADO por scripts/build-tokens.ts.",
-    " * Permite trocar apps/desktop/src/styles/tokens.css sem reescrever upbot.css de uma vez. Remover quando ninguém mais usar os nomes antigos. */",
+    " * Permite trocar apps/desktop/src/styles/tokens.css sem reescrever boto.css de uma vez. Remover quando ninguém mais usar os nomes antigos. */",
     ':root, [data-theme="dark"] {',
   ];
   for (const [name, token] of Object.entries(LEGACY_VARS))
