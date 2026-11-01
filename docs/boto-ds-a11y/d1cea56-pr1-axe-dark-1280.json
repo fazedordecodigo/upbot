@@ -1,0 +1,230 @@
+{
+  "sha": "d1cea56",
+  "pr": 1,
+  "tool": "axe",
+  "theme": "dark",
+  "width": 1280,
+  "screens": {
+    "kit": {
+      "summary": {
+        "serious": 0,
+        "critical": 0,
+        "seriousNodes": 0,
+        "criticalNodes": 0,
+        "rules": []
+      },
+      "violations": []
+    },
+    "chat": {
+      "summary": {
+        "serious": 0,
+        "critical": 0,
+        "seriousNodes": 0,
+        "criticalNodes": 0,
+        "rules": []
+      },
+      "violations": [
+        {
+          "id": "page-has-heading-one",
+          "impact": "moderate",
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ],
+          "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+          "help": "Page should contain a level-one heading",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/page-has-heading-one?application=axeAPI",
+          "nodes": [
+            {
+              "any": [],
+              "all": [
+                {
+                  "id": "page-has-heading-one",
+                  "data": null,
+                  "relatedNodes": [],
+                  "impact": "moderate",
+                  "message": "Page must have a level-one heading"
+                }
+              ],
+              "none": [],
+              "impact": "moderate",
+              "html": "<html lang=\"pt-BR\" data-theme-pref=\"dark\" data-theme=\"dark\">",
+              "target": [
+                "html"
+              ],
+              "failureSummary": "Fix all of the following:\n  Page must have a level-one heading"
+            }
+          ]
+        }
+      ]
+    },
+    "approval": {
+      "summary": {
+        "serious": 0,
+        "critical": 0,
+        "seriousNodes": 0,
+        "criticalNodes": 0,
+        "rules": []
+      },
+      "violations": [
+        {
+          "id": "page-has-heading-one",
+          "impact": "moderate",
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ],
+          "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+          "help": "Page should contain a level-one heading",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/page-has-heading-one?application=axeAPI",
+          "nodes": [
+            {
+              "any": [],
+              "all": [
+                {
+                  "id": "page-has-heading-one",
+                  "data": null,
+                  "relatedNodes": [],
+                  "impact": "moderate",
+                  "message": "Page must have a level-one heading"
+                }
+              ],
+              "none": [],
+              "impact": "moderate",
+              "html": "<html lang=\"pt-BR\" data-theme-pref=\"dark\" data-theme=\"dark\">",
+              "target": [
+                "html"
+              ],
+              "failureSummary": "Fix all of the following:\n  Page must have a level-one heading"
+            }
+          ]
+        }
+      ]
+    },
+    "settings": {
+      "summary": {
+        "serious": 1,
+        "critical": 0,
+        "seriousNodes": 2,
+        "criticalNodes": 0,
+        "rules": [
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "nodes": 2,
+            "targets": [
+              [
+                ".side-bot > b"
+              ],
+              [
+                "small[title=\"Pronto para uma tarefa\"]"
+              ]
+            ],
+            "help": "Elements must meet minimum color contrast ratio thresholds"
+          }
+        ]
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "tags": [
+            "cat.color",
+            "wcag2aa",
+            "wcag143",
+            "TTv5",
+            "TT13.c",
+            "EN-301-549",
+            "EN-9.1.4.3",
+            "ACT"
+          ],
+          "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+          "help": "Elements must meet minimum color contrast ratio thresholds",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/color-contrast?application=axeAPI",
+          "nodes": [
+            {
+              "any": [
+                {
+                  "id": "color-contrast",
+                  "data": {
+                    "fgColor": "#eff2f6",
+                    "bgColor": "#6f747c",
+                    "contrastRatio": 4.18,
+                    "fontSize": "11.3pt (15px)",
+                    "fontWeight": "normal",
+                    "messageKey": null,
+                    "expectedContrastRatio": "4.5:1"
+                  },
+                  "relatedNodes": [
+                    {
+                      "html": "<button type=\"button\" class=\"side-bot\"><b>Relatório semanal</b><small title=\"Pronto para uma tarefa\">Pronto para uma tarefa</small><i class=\"dot s-idle\" aria-hidden=\"true\"></i></button>",
+                      "target": [
+                        ".side-bot"
+                      ]
+                    },
+                    {
+                      "html": "<aside id=\"bot-drawer\" class=\"side\" aria-label=\"Bots e tarefas\">",
+                      "target": [
+                        "#bot-drawer"
+                      ]
+                    }
+                  ],
+                  "impact": "serious",
+                  "message": "Element has insufficient color contrast of 4.18 (foreground color: #eff2f6, background color: #6f747c, font size: 11.3pt (15px), font weight: normal). Expected contrast ratio of 4.5:1"
+                }
+              ],
+              "all": [],
+              "none": [],
+              "impact": "serious",
+              "html": "<b>Relatório semanal</b>",
+              "target": [
+                ".side-bot > b"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 4.18 (foreground color: #eff2f6, background color: #6f747c, font size: 11.3pt (15px), font weight: normal). Expected contrast ratio of 4.5:1"
+            },
+            {
+              "any": [
+                {
+                  "id": "color-contrast",
+                  "data": {
+                    "fgColor": "#a5abb4",
+                    "bgColor": "#6f747c",
+                    "contrastRatio": 2.03,
+                    "fontSize": "9.8pt (13px)",
+                    "fontWeight": "normal",
+                    "messageKey": null,
+                    "expectedContrastRatio": "4.5:1"
+                  },
+                  "relatedNodes": [
+                    {
+                      "html": "<button type=\"button\" class=\"side-bot\"><b>Relatório semanal</b><small title=\"Pronto para uma tarefa\">Pronto para uma tarefa</small><i class=\"dot s-idle\" aria-hidden=\"true\"></i></button>",
+                      "target": [
+                        ".side-bot"
+                      ]
+                    },
+                    {
+                      "html": "<aside id=\"bot-drawer\" class=\"side\" aria-label=\"Bots e tarefas\">",
+                      "target": [
+                        "#bot-drawer"
+                      ]
+                    }
+                  ],
+                  "impact": "serious",
+                  "message": "Element has insufficient color contrast of 2.03 (foreground color: #a5abb4, background color: #6f747c, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+                }
+              ],
+              "all": [],
+              "none": [],
+              "impact": "serious",
+              "html": "<small title=\"Pronto para uma tarefa\">Pronto para uma tarefa</small>",
+              "target": [
+                "small[title=\"Pronto para uma tarefa\"]"
+              ],
+              "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.03 (foreground color: #a5abb4, background color: #6f747c, font size: 9.8pt (13px), font weight: normal). Expected contrast ratio of 4.5:1"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
