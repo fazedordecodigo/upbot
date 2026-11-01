@@ -450,8 +450,10 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
     await capture(`05-dialogo-usar-computador-${theme}.png`);
     await page.keyboard.press("Escape");
     await advanced.click();
-    await page.getByRole("button", { name: "Excluir…" }).click();
-    await page.getByRole("dialog", { name: `Excluir ${currentAgent.name}?` }).waitFor();
+    await page.getByRole("button", { name: "Excluir agente…", exact: true }).click();
+    await page
+      .getByRole("alertdialog", { name: `Excluir o agente “${currentAgent.name}”?` })
+      .waitFor();
     await capture(`06-dialogo-excluir-${theme}.png`);
     await page.getByRole("button", { name: "Cancelar" }).click();
     await advanced.click();
@@ -524,8 +526,8 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
     ).toBe("false");
 
     if ((await advanced.getAttribute("aria-expanded")) !== "true") await advanced.click();
-    await page.getByRole("button", { name: "Excluir…" }).click();
-    await page.getByRole("button", { name: "Excluir agente" }).click();
+    await page.getByRole("button", { name: "Excluir agente…", exact: true }).click();
+    await page.getByRole("button", { name: "Excluir agente", exact: true }).click();
     await page.getByText("UpBot foi excluído.").waitFor();
     await capture(`08-agente-excluido-${theme}.png`);
     await page.getByRole("button", { name: "Voltar ao início" }).click();
@@ -541,9 +543,11 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
     ).toBe(true);
     if (theme === "escuro") {
       if ((await advanced.getAttribute("aria-expanded")) !== "true") await advanced.click();
-      await page.getByRole("button", { name: "Excluir…" }).click();
-      await page.getByRole("dialog", { name: `Excluir ${currentAgent.name}?` }).waitFor();
-      await page.getByRole("button", { name: "Excluir agente" }).click();
+      await page.getByRole("button", { name: "Excluir agente…", exact: true }).click();
+      await page
+        .getByRole("alertdialog", { name: `Excluir o agente “${currentAgent.name}”?` })
+        .waitFor();
+      await page.getByRole("button", { name: "Excluir agente", exact: true }).click();
       await page.getByText(`${currentAgent.name} foi excluído.`).waitFor();
       await page.getByRole("button", { name: "Voltar ao início" }).click();
       const retryToast = page.getByRole("status").filter({ hasText: "Agente excluído." });
@@ -638,8 +642,10 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
     await page.getByRole("button", { name: "Permitir" }).click();
 
     if ((await advanced.getAttribute("aria-expanded")) !== "true") await advanced.click();
-    await page.getByRole("button", { name: "Excluir…" }).click();
-    await page.getByRole("dialog", { name: `Excluir ${currentAgent.name}?` }).waitFor();
+    await page.getByRole("button", { name: "Excluir agente…", exact: true }).click();
+    await page
+      .getByRole("alertdialog", { name: `Excluir o agente “${currentAgent.name}”?` })
+      .waitFor();
     expect(
       await page
         .getByRole("button", { name: "Cancelar" })

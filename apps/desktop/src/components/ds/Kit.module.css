@@ -30,4 +30,8 @@
 .icons span { font: var(--fs-label)/1.4 var(--font-mono); overflow-wrap: anywhere; text-align: center; color: var(--muted); }
 .palette { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap-sm); margin: 0; padding: 0; }
 .palette li { min-height: 44px; display: flex; align-items: center; padding: 0 12px; border-radius: var(--radius-sm); font: 500 var(--fs-small)/1.2 var(--font-mono); }
+.confirm h2 { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 8px; font-size: 20px; }
+.confirm h2 svg { flex: none; margin-top: 2px; color: var(--st-err); }
+.confirm p { margin: 0 0 20px; }
+.confirmActions { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 920px) { .grid { grid-template-columns: 1fr; } .brand span { display: none; } }
