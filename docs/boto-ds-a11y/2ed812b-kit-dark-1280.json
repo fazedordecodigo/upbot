@@ -1,0 +1,15 @@
+{
+  "sha": "2ed812b",
+  "screen": "kit",
+  "theme": "dark",
+  "width": 1280,
+  "tool": "axe-core",
+  "summary": {
+    "serious": 0,
+    "critical": 0,
+    "moderate": 0,
+    "minor": 0,
+    "rules": []
+  },
+  "violations": []
+}

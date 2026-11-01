@@ -1,0 +1,15 @@
+{
+  "sha": "c776313",
+  "label": "pr105",
+  "theme": "light",
+  "width": 1280,
+  "run": 3,
+  "url": "http://127.0.0.1:1420/",
+  "requestedUrl": "http://127.0.0.1:1420/#/kit",
+  "fetchTime": "2026-11-01T01:56:07.257Z",
+  "accessibility": null,
+  "performance": 0.96,
+  "lcp": 1051.6368,
+  "cls": 0.0002267047732870898,
+  "tbt": 0
+}
