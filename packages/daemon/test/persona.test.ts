@@ -1,10 +1,18 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import type { Database } from "bun:sqlite";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentStore } from "../src/agents";
 import { openDatabase } from "../src/db";
 import { DEFAULT_BOT_INSTRUCTIONS, DEFAULT_BOT_NAME, seedDefaultBot } from "../src/persona";
+import { removeDir } from "./helpers";
+
+// A fresh database applies every migration. On windows-latest run 41279161718
+// the first case took 5123ms and bun's 5s default failed it; the same case was
+// 195ms on the next green run. Other daemon e2e files use 30s. The handle is
+// closed and the temp dirs removed so Windows can drop the lock.
+setDefaultTimeout(30_000);
 
 const saved = process.env.BOTO_DEFAULT_BOT;
 afterEach(() => {
@@ -12,46 +20,58 @@ afterEach(() => {
   else process.env.BOTO_DEFAULT_BOT = saved;
 });
 
-describe("default Boto bot", () => {
-  test("updates an unchanged seeded UpBot without modifying custom bots", () => {
-    const db = openDatabase(mkdtempSync(join(tmpdir(), "boto-data-")));
-    const store = new AgentStore(db, join(mkdtempSync(join(tmpdir(), "boto-root-")), "agents"));
-    const legacy = store.create({
-      name: "UpBot",
-      provider: "claude",
-      instructions: DEFAULT_BOT_INSTRUCTIONS.replace("You are Boto", "You are UpBot"),
-    });
-    const custom = store.create({
-      name: "UpBot",
-      provider: "claude",
-      instructions: "My customized assistant",
-    });
-    db.query("INSERT INTO settings (key,value) VALUES ('default_bot_seeded','1')").run();
-    seedDefaultBot(db, store);
-    seedDefaultBot(db, store);
-    expect(store.get(legacy.id)?.name).toBe("Boto");
-    expect(store.get(legacy.id)?.instructions).toBe(DEFAULT_BOT_INSTRUCTIONS);
-    expect(store.get(custom.id)?.name).toBe("UpBot");
-    expect(store.get(custom.id)?.instructions).toBe("My customized assistant");
+async function withStore(run: (db: Database, store: AgentStore) => void) {
+  const data = mkdtempSync(join(tmpdir(), "boto-data-"));
+  const root = mkdtempSync(join(tmpdir(), "boto-root-"));
+  const db = openDatabase(data);
+  try {
+    run(db, new AgentStore(db, join(root, "agents")));
+  } finally {
     db.close();
+    await removeDir(data);
+    await removeDir(root);
+  }
+}
+
+describe("default Boto bot", () => {
+  test("updates an unchanged seeded UpBot without modifying custom bots", async () => {
+    await withStore((db, store) => {
+      const legacy = store.create({
+        name: "UpBot",
+        provider: "claude",
+        instructions: DEFAULT_BOT_INSTRUCTIONS.replace("You are Boto", "You are UpBot"),
+      });
+      const custom = store.create({
+        name: "UpBot",
+        provider: "claude",
+        instructions: "My customized assistant",
+      });
+      db.query("INSERT INTO settings (key,value) VALUES ('default_bot_seeded','1')").run();
+      seedDefaultBot(db, store);
+      seedDefaultBot(db, store);
+      expect(store.get(legacy.id)?.name).toBe("Boto");
+      expect(store.get(legacy.id)?.instructions).toBe(DEFAULT_BOT_INSTRUCTIONS);
+      expect(store.get(custom.id)?.name).toBe("UpBot");
+      expect(store.get(custom.id)?.instructions).toBe("My customized assistant");
+    });
   });
-  test("is created once on a fresh install", () => {
+  test("is created once on a fresh install", async () => {
     delete process.env.BOTO_DEFAULT_BOT;
-    const db = openDatabase(mkdtempSync(join(tmpdir(), "boto-data-")));
-    const store = new AgentStore(db, join(mkdtempSync(join(tmpdir(), "boto-root-")), "agents"));
-    seedDefaultBot(db, store);
-    expect(store.list().map((a) => a.name)).toEqual([DEFAULT_BOT_NAME]);
-    store.softDelete(store.list()[0]!.id);
-    seedDefaultBot(db, store);
-    expect(store.list()).toEqual([]);
+    await withStore((db, store) => {
+      seedDefaultBot(db, store);
+      expect(store.list().map((a) => a.name)).toEqual([DEFAULT_BOT_NAME]);
+      store.softDelete(store.list()[0]!.id);
+      seedDefaultBot(db, store);
+      expect(store.list()).toEqual([]);
+    });
   });
 
-  test("is not added to an install that already has bots", () => {
+  test("is not added to an install that already has bots", async () => {
     delete process.env.BOTO_DEFAULT_BOT;
-    const db = openDatabase(mkdtempSync(join(tmpdir(), "boto-data-")));
-    const store = new AgentStore(db, join(mkdtempSync(join(tmpdir(), "boto-root-")), "agents"));
-    store.create({ name: "Mine", provider: "codex", instructions: "" });
-    seedDefaultBot(db, store);
-    expect(store.list().map((a) => a.name)).toEqual(["Mine"]);
+    await withStore((db, store) => {
+      store.create({ name: "Mine", provider: "codex", instructions: "" });
+      seedDefaultBot(db, store);
+      expect(store.list().map((a) => a.name)).toEqual(["Mine"]);
+    });
   });
 });

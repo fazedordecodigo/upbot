@@ -1,17 +1,23 @@
 import { Database } from "bun:sqlite";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "@boto/protocol";
 import {
   DaemonClient,
   type DaemonHandle,
   FAKE_AGENT,
+  removeDir,
   startDaemon,
   stopDaemon,
   tmp,
   toolCall,
 } from "./helpers";
+
+// The publish/revise/list case measured 4983ms of bun's 5s default on
+// windows-latest run 41279161718. toolCall already waits 20s. Other daemon
+// e2e files use 30s. removeDir retries the Windows lock after the daemon exits.
+setDefaultTimeout(30_000);
 
 const TOKEN = `pages-test-${crypto.randomUUID()}`;
 
@@ -50,8 +56,7 @@ describe("pages e2e", () => {
 
   afterAll(async () => {
     await stopDaemon(daemon, c, stateDir);
-    for (const d of [dataDir, agentsRoot, stateDir])
-      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    for (const d of [dataDir, agentsRoot, stateDir]) await removeDir(d);
   });
 
   test("a bot publishes, revises and lists pages; the UI gets a token-protected URL", async () => {

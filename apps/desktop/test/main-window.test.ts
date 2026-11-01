@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -17,8 +17,9 @@ import {
   type DaemonHandle,
   FAKE_AGENT,
   ROOT,
+  removeDir,
   startDaemon,
-  stopTestChildren,
+  stopDaemon,
 } from "../../../packages/daemon/test/helpers";
 import { expectSwitchGeometry } from "./switch-geometry";
 
@@ -152,19 +153,20 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (out) writeFileSync(join(out, "blue-counts.json"), JSON.stringify(blueCounts, null, 2));
-  await browser?.close();
-  rpc?.close();
   try {
-    daemon?.proc.kill();
-  } catch {}
-  try {
-    vite?.kill();
-  } catch {}
-  if (daemon) await daemon.proc.exited;
-  if (vite) await vite.exited;
-  if (state) {
-    await stopTestChildren(join(state, "fake"));
-    rmSync(state, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await browser?.close();
+  } finally {
+    // SIGKILL, wait for exit, then retry the rm. rmSync maxRetries threw EBUSY
+    // in 278ms on windows-latest (run 41278050103); Bun did not honor the retries.
+    if (vite) {
+      try {
+        vite.kill("SIGKILL");
+      } catch {}
+    }
+    if (daemon) await stopDaemon(daemon, rpc, join(state, "fake"));
+    else rpc?.close();
+    if (vite) await vite.exited;
+    if (state) await removeDir(state);
   }
 });
 

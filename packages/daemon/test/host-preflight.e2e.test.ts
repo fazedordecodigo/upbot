@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { type Agent, type HostPreflight, RemoteHost } from "@boto/protocol";
-import { DaemonClient, type DaemonHandle, startDaemon, tmp } from "./helpers";
+import { DaemonClient, type DaemonHandle, removeDirAfterExit, startDaemon, tmp } from "./helpers";
 
 const FAKE_SSH = join(import.meta.dir, "fixtures/fake-preflight-ssh.ts");
 const TOKEN = `host-preflight-${crypto.randomUUID()}`;
@@ -16,45 +16,6 @@ setDefaultTimeout(30_000);
 
 type Spawned = ReturnType<typeof Bun.spawn>;
 
-type Stoppable = {
-  kill(signal?: NodeJS.Signals): void;
-  exited: Promise<number>;
-};
-
-/** Kills `proc` if it is still running and resolves when the process has exited. */
-async function waitForStop(proc: Stoppable): Promise<void> {
-  try {
-    proc.kill("SIGKILL");
-  } catch {}
-  await proc.exited;
-}
-
-/** Removes `dir`, retrying while Windows still reports the directory as locked. */
-async function removeDir(dir: string): Promise<void> {
-  const started = Date.now();
-  for (;;) {
-    try {
-      rmSync(dir, { recursive: true, force: true });
-      return;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      const retryable = code === "EBUSY" || code === "EPERM" || code === "ENOTEMPTY";
-      if (!retryable || Date.now() - started >= 10_000) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-}
-
-/** Stops `proc`, waits for its exit, then removes `dir`. */
-async function removeDirAfterExit(
-  proc: Stoppable | undefined,
-  dir: string,
-  remove: (dir: string) => Promise<void> | void = removeDir,
-): Promise<void> {
-  if (proc) await waitForStop(proc);
-  await remove(dir);
-}
-
 describe("temp directory cleanup", () => {
   test("removes the directory only after the process has exited", async () => {
     const dir = tmp("host-preflight-cleanup-");
@@ -64,7 +25,7 @@ describe("temp directory cleanup", () => {
     });
     const order: string[] = [];
     void exited.then(() => order.push("exit"));
-    const proc: Stoppable = {
+    const proc = {
       kill() {
         resolveExit(0);
       },

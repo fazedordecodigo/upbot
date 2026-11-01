@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -17,7 +17,11 @@ export const ROOT = join(import.meta.dir, "../../..");
 export const DAEMON = join(ROOT, "packages/daemon/src/main.ts");
 export const FAKE_AGENT = join(ROOT, "packages/daemon/test/fixtures/fake-acp-agent.ts");
 
-export type Pending = { resolve: (v: unknown) => void; reject: (e: unknown) => void };
+export type Pending = {
+  resolve: (v: unknown) => void;
+  reject: (e: unknown) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
 
 export class DaemonClient {
   ws: WebSocket;
@@ -25,7 +29,9 @@ export class DaemonClient {
   private eventWaiters: {
     event: string;
     pred: (d: unknown) => boolean;
+    timer: ReturnType<typeof setTimeout>;
     resolve: (d: unknown) => void;
+    reject: (error: unknown) => void;
   }[] = [];
   events: { event: string; data: unknown }[] = [];
   /** Events below this index are considered consumed and never matched again. */
@@ -97,13 +103,26 @@ export class DaemonClient {
   request(method: string, params?: unknown): Promise<unknown>;
   request(method: string, params: unknown = {}): Promise<unknown> {
     const id = crypto.randomUUID();
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify({ id, method, params }));
-      setTimeout(() => {
-        if (this.pending.delete(id)) reject(new Error(`request ${method} timed out`));
+    const promise = new Promise((resolve, reject) => {
+      const pending: Pending = {
+        timer: undefined as unknown as ReturnType<typeof setTimeout>,
+        resolve: (value) => {
+          clearTimeout(pending.timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(pending.timer);
+          reject(error);
+        },
+      };
+      pending.timer = setTimeout(() => {
+        if (this.pending.delete(id)) pending.reject(new Error(`request ${method} timed out`));
       }, 10000);
+      this.pending.set(id, pending);
+      this.ws.send(JSON.stringify({ id, method, params }));
     });
+    // A timed-out test stops awaiting. The rejection still has to be observed.
+    return this.observe(promise);
   }
 
   waitForEvent<E extends DaemonEventName>(event: E, timeoutMs = 10000): Promise<DaemonEventMap[E]> {
@@ -124,17 +143,29 @@ export class DaemonClient {
       this.cursor = idx + 1;
       return Promise.resolve(this.events[idx]?.data as DaemonEventMap[E]);
     }
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`event ${event} timeout`)), timeoutMs);
-      this.eventWaiters.push({
+    const promise = new Promise<DaemonEventMap[E]>((resolve, reject) => {
+      const waiter = {
         event,
         pred: test,
-        resolve: (d) => {
-          clearTimeout(timer);
-          resolve(d as DaemonEventMap[E]);
+        timer: undefined as unknown as ReturnType<typeof setTimeout>,
+        resolve: (data: unknown) => {
+          clearTimeout(waiter.timer);
+          resolve(data as DaemonEventMap[E]);
         },
-      });
+        reject: (error: unknown) => {
+          clearTimeout(waiter.timer);
+          reject(error);
+        },
+      };
+      waiter.timer = setTimeout(() => {
+        const index = this.eventWaiters.indexOf(waiter);
+        if (index >= 0) this.eventWaiters.splice(index, 1);
+        waiter.reject(new Error(`event ${event} timeout`));
+      }, timeoutMs);
+      this.eventWaiters.push(waiter);
     });
+    // Same as request(): bun aborts the test without dropping this promise.
+    return this.observe(promise);
   }
 
   eventKinds(): string[] {
@@ -142,7 +173,21 @@ export class DaemonClient {
   }
 
   close() {
-    this.ws.close();
+    try {
+      this.ws.close();
+    } catch {}
+    // Drop the timers without rejecting. A test bun already aborted is not
+    // awaiting these promises; rejecting them fails the file later (Windows
+    // run 41281851638 reported "client closed" between tests).
+    for (const waiter of this.eventWaiters.splice(0)) clearTimeout(waiter.timer);
+    for (const pending of this.pending.values()) clearTimeout(pending.timer);
+    this.pending.clear();
+  }
+
+  /** Keeps a late rejection from failing the file after the caller is gone. */
+  private observe<T>(promise: Promise<T>): Promise<T> {
+    void promise.catch(() => undefined);
+    return promise;
   }
 }
 
@@ -194,6 +239,53 @@ export function waitForExit(proc: ReturnType<typeof Bun.spawn>, ms: number): Pro
 
 export function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
+}
+
+const REMOVE_DIR_RETRY_MS = 10_000;
+
+type Stoppable = {
+  kill(signal?: NodeJS.Signals): void;
+  exited: Promise<number>;
+};
+
+/**
+ * Removes `dir`, retrying while Windows still reports the directory as locked.
+ * `rmSync`'s maxRetries did not absorb that lock: main-window's afterAll failed
+ * EBUSY in 278ms with maxRetries 10.
+ */
+export async function removeDir(
+  dir: string,
+  rm: (dir: string) => void = (target) => {
+    rmSync(target, { recursive: true, force: true });
+  },
+): Promise<void> {
+  const started = Date.now();
+  for (;;) {
+    try {
+      rm(dir);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const retryable = code === "EBUSY" || code === "EPERM" || code === "ENOTEMPTY";
+      if (!retryable || Date.now() - started >= REMOVE_DIR_RETRY_MS) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
+/** Stops `proc`, waits for its exit, then removes `dir`. */
+export async function removeDirAfterExit(
+  proc: Stoppable | undefined,
+  dir: string,
+  remove: (dir: string) => Promise<void> | void = removeDir,
+): Promise<void> {
+  if (proc) {
+    try {
+      proc.kill("SIGKILL");
+    } catch {}
+    await proc.exited;
+  }
+  await remove(dir);
 }
 
 export async function stopTestChildren(stateDirs: string | string[] | undefined): Promise<void> {

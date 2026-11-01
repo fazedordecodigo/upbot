@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "@boto/protocol";
 import {
@@ -8,11 +8,19 @@ import {
   FAKE_AGENT,
   lastAgentText,
   readLog,
+  removeDir,
   sendAndWait,
   startDaemon,
   stopDaemon,
   tmp,
 } from "./helpers";
+
+// Five sequential bridge turns. On windows-latest run 41279161718 the previous
+// test spent 3197ms on three turns, so this file's skills case crossed bun's 5s
+// default. Bun then killed the in-flight fake agent ("killed 1 dangling process")
+// and the next test's agent.created wait rejected 20s later, between files.
+// Other daemon e2e files use 30s. Closing the client settles that wait.
+setDefaultTimeout(30_000);
 
 const TOKEN = `p8-test-${crypto.randomUUID()}`;
 
@@ -54,8 +62,7 @@ describe("avatars, memories, skills, agent creation e2e", () => {
 
   afterAll(async () => {
     await stopDaemon(daemon, c, stateDir);
-    for (const d of [dataDir, agentsRoot, stateDir, sharedRoot])
-      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    for (const d of [dataDir, agentsRoot, stateDir, sharedRoot]) await removeDir(d);
   });
 
   test("draft turns a description into name, instructions and avatar", async () => {
