@@ -527,7 +527,7 @@ export function AgentConfigScreen({
         <strong>Configurações</strong>
       </header>
       <div className={s.scroll} data-agent-config-scroll="">
-        <main className={s.column}>
+        <div className={s.column}>
           <section className={s.identity}>
             <div className={s.avatarWrap}>
               <button
@@ -881,7 +881,7 @@ export function AgentConfigScreen({
               <div className={`${s.row} ${s.rowSplit}`}>
                 <div>
                   <b>Excluir agente</b>
-                  <p>As conversas e as rotinas dele somem junto. Não dá para desfazer.</p>
+                  <p>Sai da lista. Por 5 segundos dá para desfazer.</p>
                 </div>
                 <Button variant="danger" onClick={() => setDialog("delete")}>
                   Excluir agente…
@@ -894,7 +894,7 @@ export function AgentConfigScreen({
               {error}
             </p>
           )}
-        </main>
+        </div>
       </div>
       {dirty && !dialog && (
         <div className={s.savebar}>
@@ -1013,7 +1013,8 @@ export function AgentConfigScreen({
               Excluir o agente “{agentName}”?
             </h2>
             <p id={deleteBodyId}>
-              As conversas e as rotinas dele somem junto. Não dá para desfazer.
+              O agente sai da sua lista agora. Por 5 segundos aparece um aviso com “Desfazer”;
+              depois disso, ele não volta pelo app.
             </p>
           </div>
           <footer>

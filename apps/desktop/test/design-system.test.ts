@@ -446,6 +446,18 @@ test("escape closes the delete confirmation without deleting", async () => {
   expect(await opener.evaluate((button) => button === document.activeElement)).toBe(true);
 });
 
+test("delete confirmation offers undo instead of promising it is permanent", async () => {
+  await page.getByRole("button", { name: "Excluir agente…", exact: true }).first().click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  const body = (await dialog.locator("p").first().textContent()) ?? "";
+  expect(body).not.toContain("Não dá para desfazer");
+  expect(body).not.toContain("somem");
+  expect(body).toContain("Desfazer");
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached" });
+});
+
 test("the agent is deleted only from the Excluir agente button", async () => {
   const opener = page.getByRole("button", { name: "Excluir agente…", exact: true }).first();
   await opener.click();
@@ -453,12 +465,12 @@ test("the agent is deleted only from the Excluir agente button", async () => {
   await dialog.waitFor();
   await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
   await dialog.waitFor({ state: "detached" });
-  expect(await page.getByRole("status").textContent()).not.toBe("Agente excluído.");
+  expect(await page.getByRole("status").textContent()).not.toBe("Agente “Revisor de PR” excluído.");
   await opener.click();
   await dialog.waitFor();
   await dialog.getByRole("button", { name: "Excluir agente", exact: true }).click();
   await dialog.waitFor({ state: "detached" });
-  expect(await page.getByRole("status").textContent()).toBe("Agente excluído.");
+  expect(await page.getByRole("status").textContent()).toBe("Agente “Revisor de PR” excluído.");
 });
 
 test("chat column max-width follows the Eco token", async () => {

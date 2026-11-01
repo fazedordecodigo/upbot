@@ -180,7 +180,8 @@ export default function Kit() {
                 Excluir o agente “Revisor de PR”?
               </h2>
               <p id={deleteBodyId}>
-                As 12 conversas e as rotinas dele somem junto. Não dá para desfazer.
+                O agente sai da sua lista agora. Por 5 segundos aparece um aviso com “Desfazer”;
+                depois disso, ele não volta pelo app.
               </p>
               <div className={s.confirmActions}>
                 <Button data-action="cancel" onClick={() => setDialogOpen(false)}>
@@ -189,7 +190,7 @@ export default function Kit() {
                 <Button
                   variant="danger"
                   onClick={() => {
-                    setMessage("Agente excluído.");
+                    setMessage("Agente “Revisor de PR” excluído.");
                     setDialogOpen(false);
                   }}
                 >
