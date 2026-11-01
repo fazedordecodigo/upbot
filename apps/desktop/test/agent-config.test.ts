@@ -531,7 +531,9 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
     await page.getByText("UpBot foi excluído.").waitFor();
     await capture(`08-agente-excluido-${theme}.png`);
     await page.getByRole("button", { name: "Voltar ao início" }).click();
-    const deletedToast = page.getByRole("status").filter({ hasText: "Agente excluído." });
+    const deletedToast = page
+      .getByRole("status")
+      .filter({ hasText: `Agente “${currentAgent.name}” excluído.` });
     await deletedToast.getByRole("button", { name: "Desfazer", exact: true }).waitFor();
     await deletedToast.getByRole("button", { name: "Desfazer", exact: true }).click();
     await page.getByLabel("Instruções").waitFor();
@@ -550,7 +552,9 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
       await page.getByRole("button", { name: "Excluir agente", exact: true }).click();
       await page.getByText(`${currentAgent.name} foi excluído.`).waitFor();
       await page.getByRole("button", { name: "Voltar ao início" }).click();
-      const retryToast = page.getByRole("status").filter({ hasText: "Agente excluído." });
+      const retryToast = page
+        .getByRole("status")
+        .filter({ hasText: `Agente “${currentAgent.name}” excluído.` });
       await retryToast.getByRole("button", { name: "Desfazer", exact: true }).waitFor();
       await rpc.request("agents.restore", { id: currentAgent.id });
       await retryToast.getByRole("button", { name: "Desfazer", exact: true }).click();
