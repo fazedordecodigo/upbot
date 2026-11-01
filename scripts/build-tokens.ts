@@ -222,10 +222,25 @@ export function renderLegacyBridge(): string {
   return lines.join("\n");
 }
 
+/** Keep the checkout's newline so Windows (core.autocrlf) does not see a false diff. */
+function writeIfChanged(path: string, text: string) {
+  const lf = text.replaceAll("\r\n", "\n");
+  let current = "";
+  try {
+    current = readFileSync(path, "utf8");
+  } catch {
+    current = "";
+  }
+  const newline = current.includes("\r\n") ? "\r\n" : "\n";
+  const next = lf.replaceAll("\n", newline);
+  if (current === next) return;
+  writeFileSync(path, next);
+}
+
 if (import.meta.main) {
   const stylesDir = process.argv[2] ?? join(import.meta.dir, "../apps/desktop/src/styles");
   const raw = readFileSync(join(stylesDir, "tokens.json"), "utf8");
   const tokens = JSON.parse(raw) as Tokens;
-  writeFileSync(join(stylesDir, "tokens.css"), renderTokensCss(tokens, raw));
-  writeFileSync(join(stylesDir, "legacy-bridge.css"), renderLegacyBridge());
+  writeIfChanged(join(stylesDir, "tokens.css"), renderTokensCss(tokens, raw));
+  writeIfChanged(join(stylesDir, "legacy-bridge.css"), renderLegacyBridge());
 }
