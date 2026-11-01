@@ -16,7 +16,6 @@ import {
   DaemonClient,
   type DaemonHandle,
   FAKE_AGENT,
-  killProcessTree,
   ROOT,
   removeDir,
   startDaemon,
@@ -157,10 +156,13 @@ afterAll(async () => {
   try {
     await browser?.close();
   } finally {
-    // SIGKILL the tree before rm. On Windows a leftover child (fake agent, MCP)
-    // keeps the temp dir locked, and rmSync maxRetries still threw EBUSY in 278ms
-    // (run 41278050103). removeDir retries EBUSY, EPERM and ENOTEMPTY after exit.
-    if (vite) killProcessTree(vite.pid);
+    // SIGKILL, wait for exit, then retry the rm. rmSync maxRetries threw EBUSY
+    // in 278ms on windows-latest (run 41278050103); Bun did not honor the retries.
+    if (vite) {
+      try {
+        vite.kill("SIGKILL");
+      } catch {}
+    }
     if (daemon) await stopDaemon(daemon, rpc, join(state, "fake"));
     else rpc?.close();
     if (vite) await vite.exited;

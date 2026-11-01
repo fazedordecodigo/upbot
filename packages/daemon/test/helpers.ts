@@ -176,10 +176,11 @@ export class DaemonClient {
     try {
       this.ws.close();
     } catch {}
-    for (const waiter of this.eventWaiters.splice(0)) {
-      waiter.reject(new Error("client closed"));
-    }
-    for (const pending of this.pending.values()) pending.reject(new Error("client closed"));
+    // Drop the timers without rejecting. A test bun already aborted is not
+    // awaiting these promises; rejecting them fails the file later (Windows
+    // run 41281851638 reported "client closed" between tests).
+    for (const waiter of this.eventWaiters.splice(0)) clearTimeout(waiter.timer);
+    for (const pending of this.pending.values()) clearTimeout(pending.timer);
     this.pending.clear();
   }
 
@@ -287,21 +288,6 @@ export async function removeDirAfterExit(
   await remove(dir);
 }
 
-/** Kills `pid`. Windows also kills its children so they release the temp dir. */
-export function killProcessTree(pid: number, signal: NodeJS.Signals = "SIGKILL"): void {
-  if (process.platform === "win32") {
-    const result = Bun.spawnSync(["taskkill", "/pid", String(pid), "/T", "/F"], {
-      stdout: "ignore",
-      stderr: "ignore",
-      windowsHide: true,
-    });
-    if (result.exitCode === 0) return;
-  }
-  try {
-    process.kill(pid, signal);
-  } catch {}
-}
-
 export async function stopTestChildren(stateDirs: string | string[] | undefined): Promise<void> {
   const states = Array.isArray(stateDirs) ? stateDirs : stateDirs ? [stateDirs] : [];
   const pids = [...new Set(states.flatMap((stateDir) => readPids(stateDir)))];
@@ -387,8 +373,7 @@ export async function stopDaemon(
 ): Promise<void> {
   client?.close();
   try {
-    if (signal === "SIGKILL") killProcessTree(handle.proc.pid);
-    else handle.proc.kill(signal);
+    handle.proc.kill(signal);
   } catch {}
   await handle.proc.exited;
   await stopTestChildren(stateDirs);

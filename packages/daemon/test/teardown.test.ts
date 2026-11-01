@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import type { DaemonEventMap } from "@boto/protocol";
-import { DaemonClient, killProcessTree, removeDir, tmp } from "./helpers";
+import { DaemonClient, removeDir, tmp } from "./helpers";
 
 function wsServer() {
   return Bun.serve({
@@ -21,21 +21,25 @@ function boundPort(server: { port: number | undefined }): number {
   return server.port;
 }
 
-test("close settles an event wait instead of rejecting after the caller is gone", async () => {
+test("close cancels an event wait so it cannot reject after the caller is gone", async () => {
   const server = wsServer();
   const client = await DaemonClient.connect(boundPort(server), "teardown");
-  const pending = client.waitForEvent("agent.created", 40);
-  const result = pending.then(
-    () => "resolved",
-    (error: Error) => error.message,
+  let settled = false;
+  const pending = client.waitForEvent("agent.created", 40).then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
   );
   client.close();
   try {
-    expect(await result).toBe("client closed");
     await Bun.sleep(80);
-    expect(await result).toBe("client closed");
+    expect(settled).toBe(false);
   } finally {
     server.stop(true);
+    void pending;
   }
 });
 
@@ -98,11 +102,4 @@ test("removeDir does not retry unrelated errors", async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-});
-
-test("killProcessTree stops a live process", async () => {
-  const proc = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"]);
-  await Bun.sleep(20);
-  killProcessTree(proc.pid);
-  expect(typeof (await proc.exited)).toBe("number");
 });
