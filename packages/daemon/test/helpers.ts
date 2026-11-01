@@ -158,6 +158,9 @@ export async function startDaemon(
   token: string,
   env: Record<string, string> = {},
   captureStderr = false,
+  // Fires once the child exists and before READY, so a caller can reap the
+  // process when startup is abandoned (the handle is not returned until READY).
+  onSpawn?: (proc: ReturnType<typeof Bun.spawn>) => void,
 ): Promise<DaemonHandle> {
   const proc = Bun.spawn(["bun", DAEMON, "--data-dir", dataDir, "--agents-root", agentsRoot], {
     env: { ...process.env, BOTO_DEFAULT_BOT: "off", ...env },
@@ -166,12 +169,15 @@ export async function startDaemon(
     stderr: "pipe",
     cwd: ROOT,
   });
+  onSpawn?.(proc);
   const stderrText = captureStderr
     ? new Response(proc.stderr as ReadableStream<Uint8Array>).text()
     : undefined;
   // token is delivered on the first stdin line, never via env
   const port = await readReadyPort(proc, token, 15000).catch((error) => {
-    proc.kill();
+    try {
+      proc.kill();
+    } catch {}
     throw error;
   });
   return stderrText ? { proc, port, stderrText } : { proc, port };
