@@ -1,10 +1,8 @@
     :root {
       --on-wait: var(--bg);
       --shade: var(--fg);
-      --accent-soft: var(--fg-soft);
-      --fg-softer: color-mix(in oklch, var(--fg) 3%, transparent);
       --fs-h3: var(--fs-card);
-      --sidebar-width: 270px; --panel: 320px;
+      --panel: 320px;
     }
 
     *, *::before, *::after { box-sizing: border-box; }
@@ -67,9 +65,9 @@
     .side-bot b, .side-bot small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .side-bot .dot { grid-row: 1 / span 2; grid-column: 2; }
     .side-bot:hover { background: var(--fg-soft); }
-    .side-bot[aria-current="true"] { background: var(--fg); color: var(--bg); }
-    .side-bot[aria-current="true"] small { color: color-mix(in oklch, var(--bg) 70%, var(--fg)); }
-    .side-bot[aria-current="true"] .dot:is(.s-idle, .s-queue) { background: color-mix(in oklch, var(--bg) 70%, var(--fg)); }
+    .side-bot[aria-current="true"] { background: var(--boto-color-surface-selected); color: var(--fg); }
+    .side-bot[aria-current="true"] small { color: var(--muted); }
+    .side-bot[aria-current="true"] .dot:is(.s-idle, .s-queue) { background: var(--boto-color-status-idle); }
     .side-empty { padding: 8px 10px; color: var(--muted); font-size: var(--fs-small); }
     .side-foot { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 64px; border-top: 1px solid var(--border); flex: none; }
     .side-avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--fg); color: var(--bg); font: 800 var(--fs-ui) var(--font-display); flex: none; }
@@ -354,7 +352,7 @@
     .vs-err code { font: 1.6cqw var(--font-mono); color: var(--v-muted); }
     .vs.term { --v-bg: var(--fg); gap: .5cqw; padding: 3cqw 3.6cqw; background: var(--v-bg); color: var(--muted); font: 1.9cqw/1.6 var(--font-mono); }
     .vs.term .m { color: var(--muted); } .vs.term .g { color: var(--muted); }
-    .vs-cursor { position: absolute; z-index: 2; left: var(--x); top: var(--y); display: flex; align-items: flex-start; pointer-events: none; }
+    .vs-cursor { --x: 0%; --y: 0%; position: absolute; z-index: 2; left: var(--x); top: var(--y); display: flex; align-items: flex-start; pointer-events: none; }
     .vs-cursor svg { width: 2.8cqw; height: 2.8cqw; }
     .vs-cursor path { fill: var(--v-fg); stroke: var(--v-surface); stroke-width: 1.6; stroke-linejoin: round; }
     .vs-cursor span { margin: 2.2cqw 0 0 -.4cqw; padding: .4cqw 1.1cqw; border-radius: 99px; background: var(--v-fg); color: var(--v-surface); font: 500 1.5cqw var(--font-body); white-space: nowrap; }
@@ -495,7 +493,7 @@
     .channel-composer-reply .meta { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .channel-composer-reply .icon-btn { width: 28px; height: 28px; flex: none; }
     .channel-mentions { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 0; }
-    .channel-error { margin: 0 auto 8px; max-width: 720px; color: var(--fg); }
+    .channel-error { margin: 0 auto 8px; max-width: 720px; color: var(--boto-color-danger-text); }
 
     .side-titlebar { height: 52px; flex: none; width: 100%; user-select: none; }
     .side-titlebar { padding-left: 78px; }
@@ -517,11 +515,12 @@
     .app-choice[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
     .app-choice[aria-pressed="true"] div { color: inherit; }
     .search input:focus, .input:focus { outline: 2px solid var(--focus); outline-offset: 3px; }
-    .step.ok .ico, .step.run .ico, .step.wait .ico, .step.err .ico,
-    .agent-item.is-err .sub, .p-step.err, .step.err .meta, .errlog, .err { color: var(--fg); }
-    .errlog { background: var(--fg-soft); }
-    .approval, .approval.is-err, .input[aria-invalid="true"] { border-color: var(--border); }
-    .md a { color: var(--fg); text-decoration-color: var(--muted); }
+    .step.ok .ico, .step.run .ico, .step.wait .ico { color: var(--fg); }
+    .step.err .ico, .agent-item.is-err .sub, .p-step.err, .step.err .meta, .errlog, .err { color: var(--boto-color-danger-text); }
+    .errlog { background: var(--boto-color-danger-soft); }
+    .approval { border-color: var(--border); }
+    .approval.is-err, .input[aria-invalid="true"] { border-color: var(--boto-color-danger); }
+    .md a { color: var(--boto-color-accent-text); text-decoration-color: var(--muted); }
     .md a:hover { text-decoration-color: var(--fg); }
     @media (max-width: 759px) { .window-menu { display: grid; } }
     .channel-composer-wrap .hint { margin-top: 8px; }

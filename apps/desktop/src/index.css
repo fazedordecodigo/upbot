@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @source inline("sr-only");
 @import "./styles/tokens.css";
+@import "./styles/legacy-bridge.css";
 @import "./styles/upbot.css";
 
 dialog {
@@ -104,15 +105,15 @@ button.bg-sky-600, button.bg-sky-700 {
   --color-amber-800: var(--fg);
   --color-amber-900: var(--fg);
   --color-amber-950: var(--fg);
-  --color-red-50: var(--fg);
-  --color-red-100: var(--fg);
-  --color-red-200: var(--fg);
-  --color-red-300: var(--fg);
-  --color-red-400: var(--fg);
-  --color-red-500: var(--fg);
-  --color-red-600: var(--fg);
-  --color-red-700: var(--fg);
-  --color-red-800: var(--fg);
-  --color-red-900: var(--fg-soft);
-  --color-red-950: var(--fg-soft);
+  --color-red-50: var(--boto-color-danger-text);
+  --color-red-100: var(--boto-color-danger-text);
+  --color-red-200: var(--boto-color-danger-text);
+  --color-red-300: var(--boto-color-danger-text);
+  --color-red-400: var(--boto-color-danger-text);
+  --color-red-500: var(--boto-color-danger-text);
+  --color-red-600: var(--boto-color-danger-text);
+  --color-red-700: var(--boto-color-danger-text);
+  --color-red-800: var(--boto-color-danger-text);
+  --color-red-900: var(--boto-color-danger-soft);
+  --color-red-950: var(--boto-color-danger-soft);
 }

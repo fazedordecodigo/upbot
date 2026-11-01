@@ -228,7 +228,7 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
         ),
     ).toBe(true);
     expect(await page.locator(".side").evaluate((el) => el.getBoundingClientRect().width)).toBe(
-      270,
+      280,
     );
     expect(
       await page.locator(".thread-inner").evaluate((el) => el.getBoundingClientRect().width),
@@ -635,7 +635,7 @@ test("sidebar navigation, real approval counts, routines, groups, profile and th
   expect(
     await selected.evaluate((element) => {
       const probe = document.createElement("i");
-      probe.style.background = "var(--fg)";
+      probe.style.background = "var(--boto-color-surface-selected)";
       document.body.append(probe);
       const ink = getComputedStyle(probe).backgroundColor;
       probe.remove();
@@ -686,9 +686,7 @@ test("sidebar navigation, real approval counts, routines, groups, profile and th
         const b = luminance(foreground);
         const neutral = status === "idle" || status === "queue";
         const probe = document.createElement("i");
-        probe.style.background = neutral
-          ? "color-mix(in oklch, var(--bg) 70%, var(--fg))"
-          : `var(--st-${status})`;
+        probe.style.background = neutral ? "var(--boto-color-status-idle)" : `var(--st-${status})`;
         element.append(probe);
         const matchesToken =
           getComputedStyle(probe).backgroundColor === getComputedStyle(dot).backgroundColor;

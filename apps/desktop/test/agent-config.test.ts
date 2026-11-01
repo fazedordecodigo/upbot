@@ -224,6 +224,8 @@ async function capture(name: string, target = page, fullPage = false) {
     probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--accent");
     document.body.append(probe);
     const accent = getComputedStyle(probe).color;
+    probe.style.color = "var(--muted)";
+    const muted = getComputedStyle(probe).color;
     probe.remove();
     return [...document.querySelectorAll("body *")]
       .filter((element) => {
@@ -235,7 +237,7 @@ async function capture(name: string, target = page, fullPage = false) {
         const parent = element.parentElement && getComputedStyle(element.parentElement);
         return (
           style.backgroundColor === accent ||
-          (style.color === accent && parent?.color !== accent) ||
+          (style.color === accent && style.color !== muted && parent?.color !== accent) ||
           (style.outlineColor === accent && style.outlineStyle !== "none") ||
           style.boxShadow.includes(accent) ||
           ["Top", "Right", "Bottom", "Left"].some(

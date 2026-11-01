@@ -1,8 +1,5 @@
-/* UpBot — tokens de design (v1)
- * Fonte única de verdade para cor, tipo, espaço, raio, sombra e movimento.
- * Tema claro em :root; tema escuro em [data-theme="dark"] no <html>.
- * Regra: nenhum hex fora deste arquivo. Tons derivados usam color-mix(in oklch, …).
- */
+/* Boto — tokens de design. GERADO por scripts/build-tokens.ts a partir de tokens.json. Não edite à mão. */
+/* Tema claro em :root; escuro em [data-theme="dark"] no <html> (apps/desktop/src/lib/theme.ts). */
 
 @font-face {
   font-family: 'Host Grotesk';
@@ -30,107 +27,166 @@
 
 :root {
   color-scheme: light;
-
-  /* ── Marca (7) ───────────────────────────────────────── */
-  --bg:        #fbfcfd;  /* Papel — fundo do app */
-  --surface:   #ffffff;  /* Superfície — cartões, conversa, painéis */
-  --fg:        #0e1217;  /* Tinta — texto, seleção (inversão) */
-  --muted:     #5e646a;  /* Neblina — texto secundário, metadados */
-  --border:    #e2e5e8;  /* Linha — divisões de 1px */
-  --accent:    #2a67bd;  /* Azul UpBot — símbolo + 1 ação principal por tela */
-  --sky:       #e4f2ff;  /* Céu — SÓ peças de marca, nunca na UI do produto */
-  --on-accent: #ffffff;
-  --ink: #000000;
-  --preview-light-bg: #ffffff;
-  --preview-light-fg: #0e1217;
-  --preview-light-border: #e2e5e8;
-  --preview-dark-bg: #0e1624;
-  --preview-dark-surface: #171f2e;
-  --preview-dark-fg: #eff2f6;
-  --preview-dark-border: #2b3341;
-
-  /* ── Estado (cada cor presa a um estado, nunca decoração) ── */
-  --st-run:  #0094a2;  /* Em execução */
-  --st-wait: #ca7a00;  /* Aguardando você */
-  --st-ok:   #319751;  /* Concluído */
-  --st-err:  #d33a3c;  /* Erro */
-  --pill-mix: 14%;     /* fundo da pílula = estado a 14% */
-  --pill-ink: 70%;     /* texto da pílula = estado 70% + Tinta */
-
-  /* ── Papéis derivados ─────────────────────────────────── */
-  --logo-sym: var(--accent);
-  --focus:    var(--accent);
-  --fg-soft:  color-mix(in oklch, var(--fg) 5%, transparent);     /* véu de hover */
-  --side:     color-mix(in oklch, var(--fg) 2.5%, var(--bg));     /* lateral do app */
-  --foot-bg:  color-mix(in oklch, var(--fg) 2%, var(--surface));  /* rodapé de cartão/diálogo */
-  --scrim:    color-mix(in oklch, var(--fg) 22%, transparent);
-  --shadow-pop: 0 1px 2px color-mix(in oklch, var(--fg) 8%, transparent),
-                0 16px 40px -10px color-mix(in oklch, var(--fg) 22%, transparent);
-  --shadow-icon: 0 1px 2px color-mix(in oklch, var(--fg) 12%, transparent);
-
-  /* ── Tipografia ───────────────────────────────────────── */
-  --font-display: 'Host Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-body:    'Host Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono:    'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-  --font-win:     'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; /* só para imitar chrome do Windows */
-
-  /* produto (app desktop) */
-  --fs-page:   28px;  /* título de página — Host Grotesk 800, -0.015em */
-  --fs-home:   34px;  /* título da tela inicial — Host Grotesk 800, -0.02em, 1.1 */
-  --fs-dialog: 20px;  /* título de diálogo — Host Grotesk 800 */
-  --fs-sec:    18px;  /* título de seção — Host Grotesk 700 */
-  --fs-card:   16px;  /* título de cartão / barra — Host Grotesk 700–800 */
-  --fs-body:   15px;  /* texto do app, line-height 1.47 */
-  --fs-ui:     14px;  /* listas, itens, campos secundários */
-  --fs-meta:   13px;
-  --fs-small:  12px;
-  --fs-label:  11px;  /* eyebrow mono CAIXA ALTA +0.08em */
-  /* marketing / documentação */
-  --fs-h1:   clamp(44px, 6vw, 72px);    /* 800 / 1.02 / -0.025em */
-  --fs-h2:   clamp(30px, 3.6vw, 44px);  /* 750 / 1.08 / -0.02em */
-  --fs-lead: 19px;                      /* Neblina, máx 56ch */
-
-  /* ── Espaço e forma ───────────────────────────────────── */
-  --gap-xs: 8px; --gap-sm: 12px; --gap-md: 20px; --gap-lg: 32px; --gap-xl: 56px; --gap-2xl: 96px;
-  --container: 1120px; --gutter: 32px; --col-chat: 720px;
-  --radius-xs: 6px;    /* tags de escopo, foco */
-  --radius-sm: 9px;    /* itens de lista, icon-buttons, botões de segmented */
-  --radius:    10px;   /* botões, campos, caixas pequenas, menu */
-  --radius-md: 14px;   /* popover da barra de menus */
-  --radius-lg: 16px;   /* cartões, diálogos, composer, paleta */
-  --radius-xl: 28px;   /* tile do símbolo no hero */
-  --radius-pill: 99px;
-  --border-w: 1px;
-
-  /* ── Movimento ────────────────────────────────────────── */
-  --ease: cubic-bezier(.2, 0, 0, 1);
-  --dur-fast: 150ms;   /* cor, fundo, borda */
-  --dur-theme: 200ms;  /* troca de tema */
-  --dur-layer: 180ms;  /* diálogo, paleta, painel lateral */
-  --dur-status: 1600ms;
-  --dur-spin: 1200ms;
-  --dur-preview: 7000ms;
-  --dur-progress: 400ms;
+  --boto-font-sans: 'Host Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --boto-font-mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --boto-font-weight-regular: 400;
+  --boto-font-weight-medium: 500;
+  --boto-font-weight-semibold: 600;
+  --boto-font-size-label: 12px;
+  --boto-font-size-small: 14px;
+  --boto-font-size-body: 16px;
+  --boto-font-size-lead: 18px;
+  --boto-font-size-title: 22px;
+  --boto-font-size-page: 28px;
+  --boto-font-size-display: 36px;
+  --boto-line-height-tight: 1.1;
+  --boto-line-height-snug: 1.3;
+  --boto-line-height-normal: 1.5;
+  --boto-line-height-relaxed: 1.65;
+  --boto-letter-spacing-title: -0.01em;
+  --boto-letter-spacing-label: 0.08em;
+  --boto-letter-spacing-normal: 0;
+  --boto-space-0: 0px;
+  --boto-space-0-5: 2px;
+  --boto-space-1: 4px;
+  --boto-space-2: 8px;
+  --boto-space-3: 12px;
+  --boto-space-4: 16px;
+  --boto-space-5: 20px;
+  --boto-space-6: 24px;
+  --boto-space-8: 32px;
+  --boto-space-10: 40px;
+  --boto-space-12: 48px;
+  --boto-space-16: 64px;
+  --boto-radius-xs: 4px;
+  --boto-radius-sm: 8px;
+  --boto-radius-md: 12px;
+  --boto-radius-lg: 16px;
+  --boto-radius-xl: 24px;
+  --boto-radius-pill: 999px;
+  --boto-duration-fast: 120ms;
+  --boto-duration-base: 180ms;
+  --boto-duration-slow: 280ms;
+  --boto-duration-pulse: 1600ms;
+  --boto-duration-preview: 7000ms;
+  --boto-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --boto-easing-exit: cubic-bezier(0.3, 0, 1, 1);
+  --boto-size-target-min: 24px;
+  --boto-size-target: 44px;
+  --boto-size-sidebar: 280px;
+  --boto-size-chat-column: 760px;
+  --boto-size-header: 56px;
+  --boto-size-avatar-sm: 24px;
+  --boto-size-avatar-md: 32px;
+  --boto-size-avatar-lg: 40px;
+  --boto-size-focus-ring: 2px;
+  --boto-size-focus-offset: 3px;
+  --boto-size-container: 1120px;
+  --boto-size-gutter: 32px;
+  --boto-size-bp-mobile: 760px;
+  --boto-size-bp-wide: 1180px;
+  --boto-color-bg: #EDE6EA;
+  --boto-color-bg-sidebar: #EDE6EA;
+  --boto-color-surface: #F8F5F7;
+  --boto-color-surface-raised: #FCFBFC;
+  --boto-color-surface-hover: #E0D9DD;
+  --boto-color-surface-selected: #FCE5EB;
+  --boto-color-fg: #110E12;
+  --boto-color-fg-muted: #7A4A6E;
+  --boto-color-fg-disabled: #999498;
+  --boto-color-border: #D3CCD0;
+  --boto-color-border-strong: #865A7A;
+  --boto-color-accent: #7A4A6E;
+  --boto-color-accent-hover: #6A4160;
+  --boto-color-accent-pressed: #5A3852;
+  --boto-color-on-accent: #EDE6EA;
+  --boto-color-accent-text: #9B4564;
+  --boto-color-accent-soft: #FCE9EE;
+  --boto-color-focus: #C2557B;
+  --boto-color-bubble-user: #FBE1E8;
+  --boto-color-on-bubble-user: #110E12;
+  --boto-color-logo-body: #C2557B;
+  --boto-color-logo-echo: #7A4A6E;
+  --boto-color-danger: #9F4766;
+  --boto-color-danger-text: #90415E;
+  --boto-color-danger-soft: #F8EBEF;
+  --boto-color-status-run: #7A4A6E;
+  --boto-color-status-wait: #40293B;
+  --boto-color-status-ok: #656064;
+  --boto-color-status-idle: #7F7A7E;
+  --boto-color-ink: #110E12;
+  --boto-color-preview-light-bg: #F8F5F7;
+  --boto-color-preview-light-fg: #110E12;
+  --boto-color-preview-light-border: #D3CCD0;
+  --boto-color-preview-dark-bg: #110E12;
+  --boto-color-preview-dark-surface: #201D21;
+  --boto-color-preview-dark-fg: #EDE6EA;
+  --boto-color-preview-dark-border: #322E32;
+  --boto-color-scrim: rgba(17, 14, 18, 0.48);
+  --boto-color-shadow-color: rgba(17, 14, 18, 0.16);
+  --boto-shadow-sm: 0 1px 2px var(--boto-color-shadow-color);
+  --boto-shadow-md: 0 8px 24px -8px var(--boto-color-shadow-color);
+  --boto-shadow-lg: 0 24px 64px -16px var(--boto-color-shadow-color);
+  --boto-mix-pill-bg: 14%;
+  --boto-mix-pill-ink: 70%;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0e1624;       /* Noite */
-  --surface: #171f2e;  /* Superfície noturna */
-  --fg: #eff2f6;       /* Tinta clara */
-  --muted: #a5abb4;    /* Neblina clara */
-  --border: #2b3341;   /* Linha noturna */
-  --st-run: #00c8d8; --st-wait: #ffb831; --st-ok: #32ce69; --st-err: #ff5b58;
-  --pill-mix: 18%; --pill-ink: 82%;
-  --logo-sym: var(--fg);  /* símbolo vira branco; azul nunca é texto/símbolo sobre Noite */
-  --focus: var(--fg);
-  --side: color-mix(in oklch, black 18%, var(--bg));
-  --scrim: color-mix(in oklch, black 55%, transparent);
-  --shadow-pop: 0 1px 2px color-mix(in oklch, black 40%, transparent),
-                0 20px 48px -10px color-mix(in oklch, black 65%, transparent);
+  --boto-color-bg: #110E12;
+  --boto-color-bg-sidebar: #1A171B;
+  --boto-color-surface: #201D21;
+  --boto-color-surface-raised: #29262A;
+  --boto-color-surface-hover: #322E32;
+  --boto-color-surface-selected: #462C40;
+  --boto-color-fg: #EDE6EA;
+  --boto-color-fg-muted: #ABA5A9;
+  --boto-color-fg-disabled: #605C60;
+  --boto-color-border: #322E32;
+  --boto-color-border-strong: #7B767A;
+  --boto-color-accent: #F29BB2;
+  --boto-color-accent-hover: #F1AEC0;
+  --boto-color-accent-pressed: #E88DA7;
+  --boto-color-on-accent: #110E12;
+  --boto-color-accent-text: #F29BB2;
+  --boto-color-accent-soft: #381E29;
+  --boto-color-focus: #F29BB2;
+  --boto-color-bubble-user: #7A4A6E;
+  --boto-color-on-bubble-user: #EDE6EA;
+  --boto-color-logo-body: #F29BB2;
+  --boto-color-logo-echo: #C2557B;
+  --boto-color-danger: #DA7896;
+  --boto-color-danger-text: #E68AA4;
+  --boto-color-danger-soft: #341C27;
+  --boto-color-status-run: #AE90A6;
+  --boto-color-status-wait: #EEDBE2;
+  --boto-color-status-ok: #999498;
+  --boto-color-status-idle: #837E82;
+  --boto-color-ink: #110E12;
+  --boto-color-preview-light-bg: #F8F5F7;
+  --boto-color-preview-light-fg: #110E12;
+  --boto-color-preview-light-border: #D3CCD0;
+  --boto-color-preview-dark-bg: #110E12;
+  --boto-color-preview-dark-surface: #201D21;
+  --boto-color-preview-dark-fg: #EDE6EA;
+  --boto-color-preview-dark-border: #322E32;
+  --boto-color-scrim: rgba(17, 14, 18, 0.72);
+  --boto-color-shadow-color: rgba(17, 14, 18, 0.6);
+  --boto-shadow-sm: 0 1px 2px var(--boto-color-shadow-color);
+  --boto-shadow-md: 0 8px 24px -8px var(--boto-color-shadow-color);
+  --boto-shadow-lg: 0 24px 64px -16px var(--boto-color-shadow-color);
+  --boto-mix-pill-bg: 18%;
+  --boto-mix-pill-ink: 60%;
 }
 
+/* Movimento reduzido (WCAG 2.3.3, preferência do sistema): durações zeradas e animações paradas. */
 @media (prefers-reduced-motion: reduce) {
-  :root { --dur-fast: 0ms; --dur-theme: 0ms; --dur-layer: 0ms; --dur-progress: 0ms; }
+  :root {
+    --boto-duration-fast: 0ms;
+    --boto-duration-base: 0ms;
+    --boto-duration-slow: 0ms;
+    --boto-duration-pulse: 0ms;
+    --boto-duration-preview: 0ms;
+  }
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
