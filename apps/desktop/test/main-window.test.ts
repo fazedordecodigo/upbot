@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -16,9 +16,11 @@ import {
   DaemonClient,
   type DaemonHandle,
   FAKE_AGENT,
+  killProcessTree,
   ROOT,
+  removeDir,
   startDaemon,
-  stopTestChildren,
+  stopDaemon,
 } from "../../../packages/daemon/test/helpers";
 import { expectSwitchGeometry } from "./switch-geometry";
 
@@ -152,19 +154,17 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (out) writeFileSync(join(out, "blue-counts.json"), JSON.stringify(blueCounts, null, 2));
-  await browser?.close();
-  rpc?.close();
   try {
-    daemon?.proc.kill();
-  } catch {}
-  try {
-    vite?.kill();
-  } catch {}
-  if (daemon) await daemon.proc.exited;
-  if (vite) await vite.exited;
-  if (state) {
-    await stopTestChildren(join(state, "fake"));
-    rmSync(state, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    await browser?.close();
+  } finally {
+    // SIGKILL the tree before rm. On Windows a leftover child (fake agent, MCP)
+    // keeps the temp dir locked, and rmSync maxRetries still threw EBUSY in 278ms
+    // (run 41278050103). removeDir retries EBUSY, EPERM and ENOTEMPTY after exit.
+    if (vite) killProcessTree(vite.pid);
+    if (daemon) await stopDaemon(daemon, rpc, join(state, "fake"));
+    else rpc?.close();
+    if (vite) await vite.exited;
+    if (state) await removeDir(state);
   }
 });
 
