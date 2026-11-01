@@ -1,5 +1,7 @@
 # Polimento do design system
 
+A paleta, as fontes e o gerador atuais estão em [design-system.md](design-system.md). Este arquivo registra o que a fase 6 fez.
+
 ## Escolhas
 
 - O daemon real e seus RPCs permanecem responsáveis por tarefas, decisões, páginas e conversas em grupo.
