@@ -141,6 +141,37 @@ test("theme persists, focus is visible, colors invert, reduced motion stops puls
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
 });
 
+test("kit loads packaged Host Grotesk and DM Mono", async () => {
+  const loaded = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const hostFaces = await document.fonts.load('600 16px "Host Grotesk"');
+    const monoFaces = await document.fonts.load('400 13px "DM Mono"');
+    const h1 = document.querySelector("h1");
+    const probe = document.createElement("p");
+    probe.className = "meta";
+    probe.textContent = "rótulo";
+    document.body.appendChild(probe);
+    const h1Family = h1 ? getComputedStyle(h1).fontFamily : "";
+    const metaFamily = getComputedStyle(probe).fontFamily;
+    probe.remove();
+    const unquote = (family: string) => family.replaceAll(/["']/g, "");
+    return {
+      host: document.fonts.check('600 16px "Host Grotesk"'),
+      mono: document.fonts.check('400 13px "DM Mono"'),
+      hostFaces: hostFaces.length,
+      monoFaces: monoFaces.length,
+      h1Family: unquote(h1Family),
+      metaFamily: unquote(metaFamily),
+    };
+  });
+  expect(loaded.h1Family.split(",")[0]?.trim()).toBe("Host Grotesk");
+  expect(loaded.metaFamily.split(",")[0]?.trim()).toBe("DM Mono");
+  expect(loaded.host).toBe(true);
+  expect(loaded.mono).toBe(true);
+  expect(loaded.hostFaces).toBeGreaterThan(0);
+  expect(loaded.monoFaces).toBeGreaterThan(0);
+});
+
 test("all authored colors are token-based and dark controls retain visible focus and targets", async () => {
   const source = fileURLToPath(new URL("../src", import.meta.url));
   for (const file of readdirSync(source, { recursive: true })) {

@@ -5,9 +5,25 @@
  */
 
 @font-face {
-  font-family: 'Nunito';
-  src: url('../fonts/nunito-latin.woff2') format('woff2');
-  font-weight: 500 800;
+  font-family: 'Host Grotesk';
+  src: url('../fonts/host-grotesk-latin.woff2') format('woff2');
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  src: url('../fonts/dm-mono-400-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  src: url('../fonts/dm-mono-500-latin.woff2') format('woff2');
+  font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
@@ -53,17 +69,17 @@
   --shadow-icon: 0 1px 2px color-mix(in oklch, var(--fg) 12%, transparent);
 
   /* ── Tipografia ───────────────────────────────────────── */
-  --font-display: 'Nunito', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
-  --font-body:    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
-  --font-mono:    ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --font-display: 'Host Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body:    'Host Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:    'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --font-win:     'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; /* só para imitar chrome do Windows */
 
   /* produto (app desktop) */
-  --fs-page:   28px;  /* título de página — Nunito 800, -0.015em */
-  --fs-home:   34px;  /* título da tela inicial — Nunito 800, -0.02em, 1.1 */
-  --fs-dialog: 20px;  /* título de diálogo — Nunito 800 */
-  --fs-sec:    18px;  /* título de seção — Nunito 700 */
-  --fs-card:   16px;  /* título de cartão / barra — Nunito 700–800 */
+  --fs-page:   28px;  /* título de página — Host Grotesk 800, -0.015em */
+  --fs-home:   34px;  /* título da tela inicial — Host Grotesk 800, -0.02em, 1.1 */
+  --fs-dialog: 20px;  /* título de diálogo — Host Grotesk 800 */
+  --fs-sec:    18px;  /* título de seção — Host Grotesk 700 */
+  --fs-card:   16px;  /* título de cartão / barra — Host Grotesk 700–800 */
   --fs-body:   15px;  /* texto do app, line-height 1.47 */
   --fs-ui:     14px;  /* listas, itens, campos secundários */
   --fs-meta:   13px;
