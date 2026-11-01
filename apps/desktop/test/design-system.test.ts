@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -218,4 +219,288 @@ test("all authored colors are token-based and dark controls retain visible focus
     }
   }
   await page.emulateMedia({ reducedMotion: "no-preference" });
+});
+
+/** Pares da paleta Eco (guia / design-system do Versace), não calculados pelo gerador. */
+const ECO = {
+  light: {
+    "--fg": [17, 14, 18],
+    "--bg": [237, 230, 234],
+    "--surface": [248, 245, 247],
+    "--muted": [122, 74, 110],
+    "--accent": [122, 74, 110],
+    "--on-accent": [237, 230, 234],
+    "--focus": [194, 85, 123],
+  },
+  dark: {
+    "--fg": [237, 230, 234],
+    "--bg": [17, 14, 18],
+    "--surface": [32, 29, 33],
+    "--muted": [171, 165, 169],
+    "--accent": [242, 155, 178],
+    "--on-accent": [17, 14, 18],
+    "--focus": [242, 155, 178],
+  },
+} as const;
+
+function parseRgb(value: string): [number, number, number] | null {
+  const match = value.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function contrastRatio(a: [number, number, number], b: [number, number, number]) {
+  const channel = (value: number) => {
+    const s = value / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = (rgb: [number, number, number]) =>
+    0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2]);
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+}
+
+test("eco palette meets AA contrast from computed colors in both themes", async () => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const theme of ["light", "dark"] as const) {
+    await page
+      .getByRole("button", { name: theme === "light" ? "Tema claro" : "Tema escuro", exact: true })
+      .click();
+    const measured = await page.evaluate(() => {
+      const probe = document.createElement("div");
+      document.body.append(probe);
+      const read = (name: string) => {
+        probe.style.color = `var(${name})`;
+        return getComputedStyle(probe).color;
+      };
+      const roles = ["--bg", "--fg", "--surface", "--muted", "--accent", "--on-accent", "--focus"];
+      const colors = Object.fromEntries(roles.map((name) => [name, read(name)]));
+      const save = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent?.trim() === "Salvar",
+      );
+      const button = save ? getComputedStyle(save) : null;
+      probe.remove();
+      return {
+        colors,
+        buttonBg: button?.backgroundColor ?? "",
+        buttonFg: button?.color ?? "",
+      };
+    });
+    const expected = ECO[theme];
+    for (const [name, rgb] of Object.entries(expected)) {
+      expect(parseRgb(measured.colors[name] ?? "")).toEqual([...rgb]);
+    }
+    const fg = parseRgb(measured.colors["--fg"] ?? "");
+    const bg = parseRgb(measured.colors["--bg"] ?? "");
+    const surface = parseRgb(measured.colors["--surface"] ?? "");
+    const muted = parseRgb(measured.colors["--muted"] ?? "");
+    const accent = parseRgb(measured.colors["--accent"] ?? "");
+    const onAccent = parseRgb(measured.colors["--on-accent"] ?? "");
+    const focus = parseRgb(measured.colors["--focus"] ?? "");
+    if (!fg || !bg || !surface || !muted || !accent || !onAccent || !focus) {
+      throw new Error(`cor não resolvida no tema ${theme}`);
+    }
+    expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(fg, surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(muted, bg)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(onAccent, accent)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(focus, bg)).toBeGreaterThanOrEqual(3);
+    expect(parseRgb(measured.buttonBg)).toEqual([...expected["--accent"]]);
+    expect(parseRgb(measured.buttonFg)).toEqual([...expected["--on-accent"]]);
+  }
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+});
+
+test("every custom property used in the desktop app resolves on the kit", async () => {
+  const source = fileURLToPath(new URL("../src", import.meta.url));
+  const used = new Set<string>();
+  for (const file of readdirSync(source, { recursive: true })) {
+    if (
+      !String(file).endsWith(".css") &&
+      !String(file).endsWith(".tsx") &&
+      !String(file).endsWith(".ts")
+    ) {
+      continue;
+    }
+    for (const match of readFileSync(join(source, String(file)), "utf8").matchAll(
+      /var\(\s*--([\w-]+)/g,
+    )) {
+      const name = match[1];
+      if (name) used.add(name);
+    }
+  }
+  const missing = await page.evaluate(
+    (names) => {
+      const declared = new Set<string>();
+      const walk = (rules: CSSRuleList) => {
+        for (const rule of rules) {
+          const style = "style" in rule ? (rule as CSSStyleRule).style : undefined;
+          if (style) {
+            for (const property of style) {
+              if (property.startsWith("--")) declared.add(property.slice(2));
+            }
+          }
+          if ("cssRules" in rule) walk((rule as CSSGroupingRule).cssRules);
+        }
+      };
+      for (const sheet of document.styleSheets) {
+        try {
+          walk(sheet.cssRules);
+        } catch {
+          // folha de outra origem
+        }
+      }
+      const root = getComputedStyle(document.documentElement);
+      return names.filter((name) => {
+        if (root.getPropertyValue(`--${name}`).trim()) return false;
+        return !declared.has(name);
+      });
+    },
+    [...used],
+  );
+  expect(missing).toEqual([]);
+});
+
+test("kit titles are semibold and the Eco palette is on the page", async () => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("button", { name: "Tema claro", exact: true }).click();
+  expect(await page.locator("h1").evaluate((element) => getComputedStyle(element).fontWeight)).toBe(
+    "600",
+  );
+  expect(
+    await page
+      .locator("h2")
+      .first()
+      .evaluate((element) => getComputedStyle(element).fontWeight),
+  ).toBe("600");
+  expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe("16px");
+  const swatch = page.getByRole("list", { name: "Paleta Eco" });
+  const accent = await swatch
+    .getByRole("listitem", { name: "Destaque", exact: true })
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(parseRgb(accent)).toEqual([122, 74, 110]);
+  await page.getByRole("button", { name: "Tema escuro", exact: true }).click();
+  const darkAccent = await swatch
+    .getByRole("listitem", { name: "Destaque", exact: true })
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(parseRgb(darkAccent)).toEqual([242, 155, 178]);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+});
+
+test("danger button outline differs from the primary button in both themes", async () => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const theme of ["light", "dark"] as const) {
+    await page
+      .getByRole("button", { name: theme === "light" ? "Tema claro" : "Tema escuro", exact: true })
+      .click();
+    const read = (name: string) =>
+      page
+        .getByRole("button", { name, exact: true })
+        .first()
+        .evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            background: style.backgroundColor,
+            borderWidth: style.borderTopWidth,
+            borderStyle: style.borderTopStyle,
+          };
+        });
+    const primary = await read("Aprovar e enviar");
+    const danger = await read("Excluir agente…");
+    expect(danger.background).not.toBe(primary.background);
+    expect(danger.borderWidth).toBe("2px");
+    expect(danger.borderStyle).toBe("solid");
+    expect(primary.borderWidth).not.toBe("2px");
+  }
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+});
+
+test("delete confirmation starts on Cancelar and Enter does not delete", async () => {
+  const before = await page.getByRole("status").textContent();
+  const opener = page.getByRole("button", { name: "Excluir agente…", exact: true }).first();
+  await opener.click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  const cancel = dialog.getByRole("button", { name: "Cancelar", exact: true });
+  expect(await cancel.evaluate((button) => button === document.activeElement)).toBe(true);
+  await page.keyboard.press("Tab");
+  const confirm = dialog.getByRole("button", { name: "Excluir agente", exact: true });
+  expect(await confirm.evaluate((button) => button === document.activeElement)).toBe(true);
+  await page.keyboard.press("Tab");
+  expect(await cancel.evaluate((button) => button === document.activeElement)).toBe(true);
+  await page.keyboard.press("Enter");
+  await dialog.waitFor({ state: "detached" });
+  expect(await page.getByRole("status").textContent()).toBe(before);
+  expect(await opener.evaluate((button) => button === document.activeElement)).toBe(true);
+});
+
+test("escape closes the delete confirmation without deleting", async () => {
+  const before = await page.getByRole("status").textContent();
+  const opener = page.getByRole("button", { name: "Excluir agente…", exact: true }).first();
+  await opener.click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached" });
+  expect(await page.getByRole("status").textContent()).toBe(before);
+  expect(await opener.evaluate((button) => button === document.activeElement)).toBe(true);
+});
+
+test("delete confirmation offers undo instead of promising it is permanent", async () => {
+  await page.getByRole("button", { name: "Excluir agente…", exact: true }).first().click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  const body = (await dialog.locator("p").first().textContent()) ?? "";
+  expect(body).not.toContain("Não dá para desfazer");
+  expect(body).not.toContain("somem");
+  expect(body).toContain("Desfazer");
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached" });
+});
+
+test("the agent is deleted only from the Excluir agente button", async () => {
+  const opener = page.getByRole("button", { name: "Excluir agente…", exact: true }).first();
+  await opener.click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await dialog.waitFor({ state: "detached" });
+  expect(await page.getByRole("status").textContent()).not.toBe("Agente “Revisor de PR” excluído.");
+  await opener.click();
+  await dialog.waitFor();
+  await dialog.getByRole("button", { name: "Excluir agente", exact: true }).click();
+  await dialog.waitFor({ state: "detached" });
+  expect(await page.getByRole("status").textContent()).toBe("Agente “Revisor de PR” excluído.");
+});
+
+test("chat column max-width follows the Eco token", async () => {
+  const maxWidth = await page.evaluate(() => {
+    const column = document.createElement("div");
+    column.className = "thread-inner";
+    document.body.append(column);
+    const value = getComputedStyle(column).maxWidth;
+    column.remove();
+    return value;
+  });
+  expect(maxWidth).toBe("760px");
+});
+
+test("build-tokens.ts leaves committed css unchanged", () => {
+  const root = fileURLToPath(new URL("../../..", import.meta.url));
+  const tokensPath = join(root, "apps/desktop/src/styles/tokens.css");
+  const bridgePath = join(root, "apps/desktop/src/styles/legacy-bridge.css");
+  const beforeTokens = readFileSync(tokensPath, "utf8");
+  let beforeBridge = "";
+  try {
+    beforeBridge = readFileSync(bridgePath, "utf8");
+  } catch {
+    beforeBridge = "";
+  }
+  const result = spawnSync(process.execPath, ["scripts/build-tokens.ts"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  expect(result.status).toBe(0);
+  expect(readFileSync(tokensPath, "utf8")).toBe(beforeTokens);
+  expect(readFileSync(bridgePath, "utf8")).toBe(beforeBridge);
 });

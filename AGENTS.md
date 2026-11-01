@@ -173,6 +173,10 @@ devin/grok need a custom image plus `BOTO_PROVIDER_COMMAND_<PROVIDER>`.
 - `apps/desktop` — Tauri 2 + React 19 + Vite + Tailwind 4. Rust spawns the sidecar via
   `tauri-plugin-shell`, parses the READY line, and exposes `daemon_connection` ->
   `{port, token}`. Frontend WS client: `src/lib/daemon.ts`.
+  Design system (Eco): `apps/desktop/src/styles/tokens.json` is the source of truth;
+  `bun scripts/build-tokens.ts` writes `tokens.css` (`--boto-*`) and `legacy-bridge.css`.
+  Host Grotesk and DM Mono are packaged in `apps/desktop/src/fonts/` (SIL OFL).
+  Icons live in `apps/desktop/src/components/ds/icons.tsx`. See `docs/design-system.md`.
 - `spikes` — `acp-probe.ts` probes agent CLIs for ACP support:
   `bun spikes/acp-probe.ts <name> -- <cmd...>` writes `spikes/out/acp-<name>.json`.
 - `scripts/smoke-acp-real.ts` — runs the compiled daemon with a Finder-like PATH

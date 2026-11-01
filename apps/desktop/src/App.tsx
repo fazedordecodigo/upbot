@@ -602,7 +602,7 @@ export default function App() {
                     setSelectedId(null);
                     setAgents((current) => current.filter((item) => item.id !== deletedAgent.id));
                     showAgentUndoToast(
-                      "Agente excluído.",
+                      `Agente “${deletedAgent.name}” excluído.`,
                       () => void restoreDeletedAgent(deletedAgent.id),
                     );
                   }

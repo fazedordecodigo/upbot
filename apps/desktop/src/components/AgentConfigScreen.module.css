@@ -42,8 +42,8 @@
 .modelErrorRow p { margin: 0; color: var(--muted); }
 .row :global(button[role="switch"]) { justify-self: end; }
 .row > button { justify-self: end; }
-.row .deleteButton { border-color: color-mix(in oklch, var(--st-err) 36%, var(--border)); color: color-mix(in oklch, var(--st-err) 78%, var(--fg)); }
-.row .deleteButton:hover { border-color: color-mix(in oklch, var(--st-err) 62%, var(--border)); background: color-mix(in oklch, var(--st-err) 5%, var(--surface)); color: var(--st-err); }
+.dialogTitle { display: flex; align-items: flex-start; gap: 8px; }
+.dialogTitle svg { flex: none; margin-top: 2px; color: var(--st-err); }
 .workdirControl { display: flex; align-items: center; min-width: 0; gap: 8px; }
 .workdirControl code { flex: 1; }
 .workdirControl button { width: 36px; min-width: 36px; padding: 0; }

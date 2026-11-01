@@ -224,6 +224,8 @@ async function capture(name: string, target = page, fullPage = false) {
     probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--accent");
     document.body.append(probe);
     const accent = getComputedStyle(probe).color;
+    probe.style.color = "var(--muted)";
+    const muted = getComputedStyle(probe).color;
     probe.remove();
     return [...document.querySelectorAll("body *")]
       .filter((element) => {
@@ -235,7 +237,7 @@ async function capture(name: string, target = page, fullPage = false) {
         const parent = element.parentElement && getComputedStyle(element.parentElement);
         return (
           style.backgroundColor === accent ||
-          (style.color === accent && parent?.color !== accent) ||
+          (style.color === accent && style.color !== muted && parent?.color !== accent) ||
           (style.outlineColor === accent && style.outlineStyle !== "none") ||
           style.boxShadow.includes(accent) ||
           ["Top", "Right", "Bottom", "Left"].some(
@@ -448,8 +450,10 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
     await capture(`05-dialogo-usar-computador-${theme}.png`);
     await page.keyboard.press("Escape");
     await advanced.click();
-    await page.getByRole("button", { name: "Excluir…" }).click();
-    await page.getByRole("dialog", { name: `Excluir ${currentAgent.name}?` }).waitFor();
+    await page.getByRole("button", { name: "Excluir agente…", exact: true }).click();
+    await page
+      .getByRole("alertdialog", { name: `Excluir o agente “${currentAgent.name}”?` })
+      .waitFor();
     await capture(`06-dialogo-excluir-${theme}.png`);
     await page.getByRole("button", { name: "Cancelar" }).click();
     await advanced.click();
@@ -522,12 +526,14 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
     ).toBe("false");
 
     if ((await advanced.getAttribute("aria-expanded")) !== "true") await advanced.click();
-    await page.getByRole("button", { name: "Excluir…" }).click();
-    await page.getByRole("button", { name: "Excluir agente" }).click();
+    await page.getByRole("button", { name: "Excluir agente…", exact: true }).click();
+    await page.getByRole("button", { name: "Excluir agente", exact: true }).click();
     await page.getByText("Boto foi excluído.").waitFor();
     await capture(`08-agente-excluido-${theme}.png`);
     await page.getByRole("button", { name: "Voltar ao início" }).click();
-    const deletedToast = page.getByRole("status").filter({ hasText: "Agente excluído." });
+    const deletedToast = page
+      .getByRole("status")
+      .filter({ hasText: `Agente “${currentAgent.name}” excluído.` });
     await deletedToast.getByRole("button", { name: "Desfazer", exact: true }).waitFor();
     await deletedToast.getByRole("button", { name: "Desfazer", exact: true }).click();
     await page.getByLabel("Instruções").waitFor();
@@ -539,12 +545,16 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
     ).toBe(true);
     if (theme === "escuro") {
       if ((await advanced.getAttribute("aria-expanded")) !== "true") await advanced.click();
-      await page.getByRole("button", { name: "Excluir…" }).click();
-      await page.getByRole("dialog", { name: `Excluir ${currentAgent.name}?` }).waitFor();
-      await page.getByRole("button", { name: "Excluir agente" }).click();
+      await page.getByRole("button", { name: "Excluir agente…", exact: true }).click();
+      await page
+        .getByRole("alertdialog", { name: `Excluir o agente “${currentAgent.name}”?` })
+        .waitFor();
+      await page.getByRole("button", { name: "Excluir agente", exact: true }).click();
       await page.getByText(`${currentAgent.name} foi excluído.`).waitFor();
       await page.getByRole("button", { name: "Voltar ao início" }).click();
-      const retryToast = page.getByRole("status").filter({ hasText: "Agente excluído." });
+      const retryToast = page
+        .getByRole("status")
+        .filter({ hasText: `Agente “${currentAgent.name}” excluído.` });
       await retryToast.getByRole("button", { name: "Desfazer", exact: true }).waitFor();
       await rpc.request("agents.restore", { id: currentAgent.id });
       await retryToast.getByRole("button", { name: "Desfazer", exact: true }).click();
@@ -636,8 +646,10 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
     await page.getByRole("button", { name: "Permitir" }).click();
 
     if ((await advanced.getAttribute("aria-expanded")) !== "true") await advanced.click();
-    await page.getByRole("button", { name: "Excluir…" }).click();
-    await page.getByRole("dialog", { name: `Excluir ${currentAgent.name}?` }).waitFor();
+    await page.getByRole("button", { name: "Excluir agente…", exact: true }).click();
+    await page
+      .getByRole("alertdialog", { name: `Excluir o agente “${currentAgent.name}”?` })
+      .waitFor();
     expect(
       await page
         .getByRole("button", { name: "Cancelar" })

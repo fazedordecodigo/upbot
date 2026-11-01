@@ -1,11 +1,11 @@
 .kit { min-height: 100vh; background: var(--bg); color: var(--fg); font: var(--fs-body)/1.5 var(--font-body); padding: 0 max(var(--gutter), calc((100vw - var(--container)) / 2)) var(--gap-xl); }
 .kit h1, .kit h2, .brand strong { font-family: var(--font-display); }
-.kit h1 { font-size: var(--fs-page); font-weight: 800; }
-.kit h2 { font-size: var(--fs-card); font-weight: 700; margin: 0 0 var(--gap-md); }
+.kit h1 { font-size: var(--fs-page); font-weight: 600; letter-spacing: -0.01em; }
+.kit h2 { font-size: var(--fs-card); font-weight: 600; margin: 0 0 var(--gap-md); letter-spacing: -0.01em; }
 .header { display: flex; align-items: center; justify-content: space-between; min-height: 80px; border-bottom: 1px solid var(--border); gap: var(--gap-md); }
 .brand { display: flex; align-items: center; gap: var(--gap-sm); }
 .brand svg { color: var(--logo-sym); }
-.brand strong { font-size: var(--fs-sec); font-weight: 800; }
+.brand strong { font-size: var(--fs-sec); font-weight: 600; }
 .brand span { color: var(--muted); font-size: var(--fs-meta); }
 .intro { padding: var(--gap-lg) 0; }
 .intro p { color: var(--muted); }
@@ -28,4 +28,10 @@
 .icons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap-md); }
 .icons > div { display: flex; flex-direction: column; align-items: center; gap: var(--gap-xs); }
 .icons span { font: var(--fs-label)/1.4 var(--font-mono); overflow-wrap: anywhere; text-align: center; color: var(--muted); }
+.palette { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap-sm); margin: 0; padding: 0; }
+.palette li { min-height: 44px; display: flex; align-items: center; padding: 0 12px; border-radius: var(--radius-sm); font: 500 var(--fs-small)/1.2 var(--font-mono); }
+.confirm h2 { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 8px; font-size: 20px; }
+.confirm h2 svg { flex: none; margin-top: 2px; color: var(--st-err); }
+.confirm p { margin: 0 0 20px; }
+.confirmActions { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 920px) { .grid { grid-template-columns: 1fr; } .brand span { display: none; } }
