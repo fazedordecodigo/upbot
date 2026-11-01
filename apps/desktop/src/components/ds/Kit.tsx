@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useId, useState } from "react";
+import { Icon } from "../icons";
 import type { Status } from "./controls";
 import {
   Box,
@@ -58,6 +59,8 @@ export default function Kit() {
   const [pressed, setPressed] = useState(true);
   const [message, setMessage] = useState("Nenhuma ação realizada.");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const deleteTitleId = useId();
+  const deleteBodyId = useId();
   const [toastOpen, setToastOpen] = useState(false);
   const changeTheme = (value: string) => {
     document.documentElement.dataset.themePref = value;
@@ -122,8 +125,8 @@ export default function Kit() {
         <section className={s.card}>
           <h2>Configurações do agente</h2>
           <div className={s.row}>
-            <Button variant="danger" onClick={() => setMessage("Confirmação de exclusão.")}>
-              Excluir agente
+            <Button variant="danger" onClick={() => setDialogOpen(true)}>
+              Excluir agente…
             </Button>
             <Select aria-label="Modelo">
               <optgroup label="Devin">
@@ -136,7 +139,7 @@ export default function Kit() {
             <Tag>Todo dia, 09:00</Tag>
           </div>
           <div className={s.row}>
-            <Button variant="danger">Excluir agente</Button>
+            <Button variant="danger">Excluir agente…</Button>
             <Button variant="danger" disabled>
               Exclusão indisponível
             </Button>
@@ -163,13 +166,37 @@ export default function Kit() {
               Configurações salvas.
             </Toast>
           )}
-          <Dialog open={dialogOpen} title="Excluir agente?" onClose={() => setDialogOpen(false)}>
-            <h2>Excluir agente?</h2>
-            <p>A pasta de trabalho e as conversas continuam guardadas.</p>
-            <Button onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button variant="danger" onClick={() => setDialogOpen(false)}>
-              Excluir agente
-            </Button>
+          <Dialog
+            open={dialogOpen}
+            alert
+            labelledBy={deleteTitleId}
+            describedBy={deleteBodyId}
+            title="Excluir o agente “Revisor de PR”?"
+            onClose={() => setDialogOpen(false)}
+          >
+            <div className={s.confirm}>
+              <h2 id={deleteTitleId}>
+                <Icon name="alert" />
+                Excluir o agente “Revisor de PR”?
+              </h2>
+              <p id={deleteBodyId}>
+                As 12 conversas e as rotinas dele somem junto. Não dá para desfazer.
+              </p>
+              <div className={s.confirmActions}>
+                <Button data-action="cancel" onClick={() => setDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setMessage("Agente excluído.");
+                    setDialogOpen(false);
+                  }}
+                >
+                  Excluir agente
+                </Button>
+              </div>
+            </div>
           </Dialog>
         </section>
         <section className={s.card}>

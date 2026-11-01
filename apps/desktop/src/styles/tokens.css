@@ -110,6 +110,11 @@
   --boto-color-danger: #9F4766;
   --boto-color-danger-text: #90415E;
   --boto-color-danger-soft: #F8EBEF;
+  --boto-color-danger-btn-bg: #FCFBFC;
+  --boto-color-danger-btn-bg-hover: #F8EBEF;
+  --boto-color-danger-btn-bg-pressed: #F3DDE5;
+  --boto-color-danger-btn-border: #9F4766;
+  --boto-color-danger-btn-fg: #90415E;
   --boto-color-status-run: #7A4A6E;
   --boto-color-status-wait: #40293B;
   --boto-color-status-ok: #656064;
@@ -158,6 +163,11 @@
   --boto-color-danger: #DA7896;
   --boto-color-danger-text: #E68AA4;
   --boto-color-danger-soft: #341C27;
+  --boto-color-danger-btn-bg: #29262A;
+  --boto-color-danger-btn-bg-hover: #341C27;
+  --boto-color-danger-btn-bg-pressed: #4A2534;
+  --boto-color-danger-btn-border: #DA7896;
+  --boto-color-danger-btn-fg: #E68AA4;
   --boto-color-status-run: #AE90A6;
   --boto-color-status-wait: #EEDBE2;
   --boto-color-status-ok: #999498;
