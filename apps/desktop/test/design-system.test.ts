@@ -361,6 +361,130 @@ test("every custom property used in the desktop app resolves on the kit", async 
   expect(missing).toEqual([]);
 });
 
+test("kit titles are semibold and the Eco palette is on the page", async () => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("button", { name: "Tema claro", exact: true }).click();
+  expect(await page.locator("h1").evaluate((element) => getComputedStyle(element).fontWeight)).toBe(
+    "600",
+  );
+  expect(
+    await page
+      .locator("h2")
+      .first()
+      .evaluate((element) => getComputedStyle(element).fontWeight),
+  ).toBe("600");
+  expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe("16px");
+  const swatch = page.getByRole("list", { name: "Paleta Eco" });
+  const accent = await swatch
+    .getByRole("listitem", { name: "Destaque", exact: true })
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(parseRgb(accent)).toEqual([122, 74, 110]);
+  await page.getByRole("button", { name: "Tema escuro", exact: true }).click();
+  const darkAccent = await swatch
+    .getByRole("listitem", { name: "Destaque", exact: true })
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(parseRgb(darkAccent)).toEqual([242, 155, 178]);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+});
+
+test("danger button outline differs from the primary button in both themes", async () => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const theme of ["light", "dark"] as const) {
+    await page
+      .getByRole("button", { name: theme === "light" ? "Tema claro" : "Tema escuro", exact: true })
+      .click();
+    const read = (name: string) =>
+      page
+        .getByRole("button", { name, exact: true })
+        .first()
+        .evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            background: style.backgroundColor,
+            borderWidth: style.borderTopWidth,
+            borderStyle: style.borderTopStyle,
+          };
+        });
+    const primary = await read("Aprovar e enviar");
+    const danger = await read("Excluir agente…");
+    expect(danger.background).not.toBe(primary.background);
+    expect(danger.borderWidth).toBe("2px");
+    expect(danger.borderStyle).toBe("solid");
+    expect(primary.borderWidth).not.toBe("2px");
+  }
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+});
+
+test("delete confirmation starts on Cancelar and Enter does not delete", async () => {
+  const before = await page.getByRole("status").textContent();
+  const opener = page.getByRole("button", { name: "Excluir agente…", exact: true }).first();
+  await opener.click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  const cancel = dialog.getByRole("button", { name: "Cancelar", exact: true });
+  expect(await cancel.evaluate((button) => button === document.activeElement)).toBe(true);
+  await page.keyboard.press("Tab");
+  const confirm = dialog.getByRole("button", { name: "Excluir agente", exact: true });
+  expect(await confirm.evaluate((button) => button === document.activeElement)).toBe(true);
+  await page.keyboard.press("Tab");
+  expect(await cancel.evaluate((button) => button === document.activeElement)).toBe(true);
+  await page.keyboard.press("Enter");
+  await dialog.waitFor({ state: "detached" });
+  expect(await page.getByRole("status").textContent()).toBe(before);
+  expect(await opener.evaluate((button) => button === document.activeElement)).toBe(true);
+});
+
+test("escape closes the delete confirmation without deleting", async () => {
+  const before = await page.getByRole("status").textContent();
+  const opener = page.getByRole("button", { name: "Excluir agente…", exact: true }).first();
+  await opener.click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached" });
+  expect(await page.getByRole("status").textContent()).toBe(before);
+  expect(await opener.evaluate((button) => button === document.activeElement)).toBe(true);
+});
+
+test("delete confirmation offers undo instead of promising it is permanent", async () => {
+  await page.getByRole("button", { name: "Excluir agente…", exact: true }).first().click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  const body = (await dialog.locator("p").first().textContent()) ?? "";
+  expect(body).not.toContain("Não dá para desfazer");
+  expect(body).not.toContain("somem");
+  expect(body).toContain("Desfazer");
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached" });
+});
+
+test("the agent is deleted only from the Excluir agente button", async () => {
+  const opener = page.getByRole("button", { name: "Excluir agente…", exact: true }).first();
+  await opener.click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await dialog.waitFor({ state: "detached" });
+  expect(await page.getByRole("status").textContent()).not.toBe("Agente “Revisor de PR” excluído.");
+  await opener.click();
+  await dialog.waitFor();
+  await dialog.getByRole("button", { name: "Excluir agente", exact: true }).click();
+  await dialog.waitFor({ state: "detached" });
+  expect(await page.getByRole("status").textContent()).toBe("Agente “Revisor de PR” excluído.");
+});
+
+test("chat column max-width follows the Eco token", async () => {
+  const maxWidth = await page.evaluate(() => {
+    const column = document.createElement("div");
+    column.className = "thread-inner";
+    document.body.append(column);
+    const value = getComputedStyle(column).maxWidth;
+    column.remove();
+    return value;
+  });
+  expect(maxWidth).toBe("760px");
+});
+
 test("build-tokens.ts leaves committed css unchanged", () => {
   const root = fileURLToPath(new URL("../../..", import.meta.url));
   const tokensPath = join(root, "apps/desktop/src/styles/tokens.css");

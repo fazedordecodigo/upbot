@@ -232,7 +232,7 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
     );
     expect(
       await page.locator(".thread-inner").evaluate((el) => el.getBoundingClientRect().width),
-    ).toBeLessThanOrEqual(720);
+    ).toBeLessThanOrEqual(760);
     await capture(`chat-${theme}`);
     await send("mcp:notas-create_note {}");
     const card = page.getByTestId("approval");

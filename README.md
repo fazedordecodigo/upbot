@@ -62,8 +62,9 @@ The GitHub repository URL is unchanged; updater and marketplace URLs still use i
   you can create from a prompt — then run them on your Mac/PC, or on your own Linux VPS in
   Firecracker microVMs.
 
-Built with Bun, SQLite, Tauri 2 (Rust) and React — with a warm design system of rounded
-corners, soft colors and the Nunito typeface.
+Built with Bun, SQLite, Tauri 2 (Rust) and React. The desktop UI uses the Eco palette
+(Água preta, Rosa, Ametista and Névoa) and the Host Grotesk and DM Mono typefaces.
+See `docs/design-system.md`.
 
 | Marketplace | Gateways |
 |---|---|
@@ -129,6 +130,15 @@ Meet the people who built it so far:
 Want to add yourself? Pick an [issue](https://github.com/fazedordecodigo/upbot/issues) or
 open a small PR — focused changes get reviewed fastest. See the
 [changelog](CHANGELOG.md) for what's shipped.
+
+## Fonts
+
+The desktop app bundles two fonts under the SIL Open Font License 1.1. The license
+text ships next to the files in `apps/desktop/src/fonts/`. Neither license declares
+a Reserved Font Name.
+
+- Host Grotesk — Copyright 2023 The Host Grotesk Project Authors. See `OFL-HostGrotesk.txt`.
+- DM Mono — Copyright 2020 The DM Mono Project Authors. See `OFL-DMMono.txt`.
 
 ## License
 
