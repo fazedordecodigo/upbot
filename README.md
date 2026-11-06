@@ -112,7 +112,9 @@ bun run lint && bun run typecheck
 bun run build:app    # debug bundle for the host platform
 ```
 
-Architecture and conventions: [AGENTS.md](AGENTS.md).
+Architecture and conventions: [AGENTS.md](AGENTS.md). Cursor development can
+follow the AWS AI-DLC workflow already configured in this repo:
+[docs/ai-dlc.md](docs/ai-dlc.md).
 
 ## Contributing
 

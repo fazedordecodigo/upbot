@@ -12,6 +12,13 @@ bun install
 bun run dev
 ```
 
+## AI-DLC
+
+Cursor sessions in this repo can follow AWS AI-DLC. The workflow files are
+already configured and pinned in `.aidlc-version`. Install the matching `aidlc`
+command, then start with `/aidlc` in Cursor. Setup, provenance, and updates:
+[docs/ai-dlc.md](docs/ai-dlc.md).
+
 ## Before opening a PR
 
 ```sh
