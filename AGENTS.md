@@ -110,6 +110,9 @@ remains authoritative. `approval-badge.ts` counts unexpired pending approvals fr
 The main window calls `set_approval_badge`: macOS Dock count, Windows taskbar overlay
 (1–9, then 9+), Linux Unity launcher count where supported by the desktop environment
 and installed .desktop entry. Zero clears it; email drafts are not counted. Badges
+on macOS require `UNAuthorizationOptions::Badge` alongside alert/sound authorization;
+existing installs may need System Settings → Notifications → Boto → Badge application icon
+enabled after upgrading. The app respects the system's disabled badge preference. Badges
 ignore notification mute, which suppresses popups rather than passive pending state.
 Pending approvals and their blocked calls are memory-only: after daemon shutdown,
 toast decisions cannot recover them. Missing IDs open Settings → Approvals with an

@@ -95,6 +95,10 @@ pub fn setup(app: &AppHandle) {
     DELEGATE.with(|value| value.replace(Some(delegate)));
 }
 
+fn authorization_options() -> UNAuthorizationOptions {
+    UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound | UNAuthorizationOptions::Badge
+}
+
 pub fn initialize(done: Completion<bool>) {
     if !bundled() {
         done(Ok(false));
@@ -113,7 +117,7 @@ pub fn initialize(done: Completion<bool>) {
     });
     UNUserNotificationCenter::currentNotificationCenter()
         .requestAuthorizationWithOptions_completionHandler(
-            UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound,
+            authorization_options(),
             &callback,
         );
 }
@@ -200,6 +204,14 @@ pub fn remove(id: &str) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn authorization_includes_dock_badges() {
+        let options = super::authorization_options();
+        assert!(options.contains(super::UNAuthorizationOptions::Badge));
+        assert!(options.contains(super::UNAuthorizationOptions::Alert));
+        assert!(options.contains(super::UNAuthorizationOptions::Sound));
+    }
+
     #[test]
     fn bare_test_binary_never_uses_user_notification_center() {
         assert!(!super::bundled());
