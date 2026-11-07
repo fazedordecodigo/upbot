@@ -29,7 +29,7 @@ export const LOGIN_COMMANDS: Partial<Record<ProviderId, string>> = {
 };
 
 export const AUTH_RE =
-  /\b(auth(entication)?[ _-]?(required|failed)|unauthori[sz]ed|not (logged|signed) in|log ?in required|sign ?in required|please run \/login)\b/i;
+  /\b(auth(entication)?[ _-]?(required|failed)|unauthori[sz]ed|not (logged|signed) in|log ?in required|sign ?in required|please run \/login|please log in)\b/i;
 
 const VM_CREDENTIAL_REJECTION_RE =
   /\b(?:401\b|(?:invalid|incorrect|rejected|expired|revoked)\s+(?:(?:x-)?api\s+)?key\b|(?:api|x-api)[ _-]?key.{0,32}(?:invalid|incorrect|rejected|expired|not valid)|(?:not valid|not a valid)\s+(?:(?:google|gemini)\s+)?(?:api\s+)?key\b|(?:invalid|incorrect|rejected|expired)\s+(?:authentication|credential|token)\b|authentication[ _-]?(?:error|failed|rejected)\b)/i;
@@ -180,6 +180,9 @@ export function providerCommand(
   if (!remote) return resolveProviderCommand(provider);
   const cmd = commandFor(provider);
   if (!cmd) throw new ProviderError("provider_unavailable", `${provider} is not supported yet`);
+  if (provider === "grok" && cmd === DEFAULT_COMMANDS.grok) {
+    return { bin: "grok", args: ["--no-auto-update", "agent", "stdio"] };
+  }
   return { bin: cmd[0]!, args: cmd.slice(1) };
 }
 

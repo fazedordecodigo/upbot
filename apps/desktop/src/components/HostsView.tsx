@@ -47,6 +47,8 @@ const CRED_HINT: Record<VmCredentialProvider, Partial<Record<VmCredentialKind, s
   codex: { api_key: "OpenAI API key" },
   gemini: { api_key: "Gemini API key (aistudio.google.com/apikey)" },
   cursor: { api_key: "Cursor API key (Cursor dashboard → Integrations)" },
+  devin: { api_key: "Windsurf/Devin API key" },
+  grok: { api_key: "xAI API key (console.x.ai)" },
 };
 
 function VmCredentials({
@@ -127,6 +129,8 @@ function VmCredentials({
           <option value="codex">codex</option>
           <option value="gemini">gemini</option>
           <option value="cursor">cursor</option>
+          <option value="devin">devin</option>
+          <option value="grok">grok</option>
         </select>
         <select
           className={`${inputCls} w-44`}

@@ -15,6 +15,8 @@ export const VM_CREDENTIAL_ENV: Record<
   codex: { api_key: ["OPENAI_API_KEY", "CODEX_API_KEY"] },
   gemini: { api_key: ["GEMINI_API_KEY"] },
   cursor: { api_key: ["CURSOR_API_KEY"] },
+  devin: { api_key: ["WINDSURF_API_KEY"] },
+  grok: { api_key: ["XAI_API_KEY"] },
 };
 
 const isProvider = (p: string): p is VmCredentialProvider => p in VM_CREDENTIAL_ENV;

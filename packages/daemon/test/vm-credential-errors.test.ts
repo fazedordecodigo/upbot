@@ -10,6 +10,19 @@ import {
 describe("microVM credential rejection messages", () => {
   const cases = [
     {
+      provider: "devin" as const,
+      name: "API key",
+      credential: "fake-devin-key",
+      detail:
+        "Failed to load team settings: Authentication required: invalid api key fake-devin-key",
+    },
+    {
+      provider: "grok" as const,
+      name: "API key",
+      credential: "fake-grok-key",
+      detail: "Authentication failed: invalid api key fake-grok-key",
+    },
+    {
       provider: "claude" as const,
       name: "API key",
       credential: "sk-ant-api03-fake-claude",
@@ -47,6 +60,20 @@ describe("microVM credential rejection messages", () => {
 
   test("does not classify unrelated provider failures as credential rejections", () => {
     expect(isVmCredentialRejection("network connection timed out")).toBe(false);
+  });
+
+  test("maps signed-out Devin and Grok messages to login commands", () => {
+    expect(
+      mapAcpAuthError("devin", new Error("Please log in to use Devin. Use `/login`"), null)
+        ?.message,
+    ).toContain("devin auth login");
+    expect(
+      mapAcpAuthError(
+        "grok",
+        new Error("Authentication required (no auth method id provided)"),
+        null,
+      )?.message,
+    ).toContain("grok login");
   });
 
   test("redacts provider-masked API keys with visible prefixes and suffixes", () => {

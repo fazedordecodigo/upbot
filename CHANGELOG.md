@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- Devin and Grok in the Firecracker guest image, with vault-backed microVM API keys
+  and headless Grok ACP authentication.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.

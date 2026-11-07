@@ -3,11 +3,13 @@ import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { VERSION } from "../../src/version";
 
-const provider = process.argv[2] as "gemini" | "opencode" | "cursor";
+const provider = process.argv[2] as "gemini" | "opencode" | "cursor" | "devin" | "grok";
 const commands = {
   gemini: ["gemini", "--experimental-acp"],
   opencode: ["opencode", "acp"],
   cursor: ["agent", "acp"],
+  devin: ["devin", "acp"],
+  grok: ["grok", "--no-auto-update", "agent", "stdio"],
 } as const;
 const command = commands[provider];
 if (!command) throw new Error(`unsupported ACP probe provider: ${provider}`);

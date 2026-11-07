@@ -637,6 +637,18 @@ export class AcpDriver implements ProviderDriver {
     let initRes: Awaited<ReturnType<typeof init>>;
     try {
       initRes = await init();
+      if (this.provider === "grok" && opts.remote?.credentials.XAI_API_KEY) {
+        await startupRequest(
+          boundedRequest(
+            this.provider,
+            "authenticate",
+            conn.agent.request("authenticate", {
+              methodId: "xai.api_key",
+              _meta: { headless: true },
+            } as never),
+          ),
+        );
+      }
     } catch (e) {
       await abortStartup();
       if (e instanceof ProviderError) throw e;

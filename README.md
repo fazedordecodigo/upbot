@@ -102,6 +102,14 @@ or inside its own Firecracker microVM, with credentials delivered only inside th
 guide, host requirements and microVM internals:
 [docs/remote-hosts.md](docs/remote-hosts.md).
 
+The Firecracker image supports Claude, Codex, Gemini, OpenCode, Cursor, Devin and Grok.
+Build with `--providers "claude codex gemini opencode cursor devin grok" --size-mib 8192`.
+Devin 3000.12.17 and Grok 1.0.77 install under `/opt/devin-home` and `/opt/grok-home`
+(not the persistent `/root` mount). Override pins with `DEVIN_CLI_VERSION` and
+`GROK_CLI_VERSION`. Settings → Hosts accepts Devin's Windsurf API key and Grok's
+xAI API key, delivered only to VM provider processes. Grok uses headless API-key
+authentication and disables auto-update for remote ACP sessions.
+
 ## Develop
 
 ```sh
