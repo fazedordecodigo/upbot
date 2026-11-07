@@ -3,13 +3,25 @@
 ## Unreleased
 
 ### Fixed
+- Clear pending-approval badges immediately on daemon disconnect and reload on reconnect,
+  ignoring snapshots and expiry callbacks from the previous connection.
+- Keep badge expiry timers bound to the browser's global timer API, preventing a WebKit
+  exception from stopping pending-approval notification delivery.
+- Request macOS badge authorization so pending-approval Dock counts can appear. Existing
+  installations may need to enable Badge application icon in Boto's notification settings.
+
 - Keep already delivered interrupted-approval notifications in Notification Center until
   reviewed, so clicking them after a restart opens the specific interrupted notice.
 - OpenCode turns waiting on bridge tools or user approvals no longer fail with a spurious
   sign-in error after 30 seconds.
+- Gemini bots start with `gemini --acp` (the old `--experimental-acp` flag is deprecated). When
+  Gemini is signed out, the error now says to run `gemini` and choose Sign in with Google, a
+  Gemini API key or Vertex AI, including when a cached Google sign-in fails.
 
 ### Added
 - Native Linux approval notifications via freedesktop D-Bus, with actions when supported.
+- Pending-approval badges on the macOS Dock, Windows taskbar and supported Linux launchers,
+  independent of popup notification mute.
 - Opt-in Computer Use on Windows and Linux X11, with unavailable reasons for Wayland or missing tools.
 - Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases.
 - Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
@@ -22,10 +34,9 @@
   "Interrompido pelo reinício" (no actions; the blocked action was not executed), and
   clicking their notification explains that instead of a generic unavailable notice.
 
-### Fixed
-- Gemini bots start with `gemini --acp` (the old `--experimental-acp` flag is deprecated). When
-  Gemini is signed out, the error now says to run `gemini` and choose Sign in with Google, a
-  Gemini API key or Vertex AI, including when a cached Google sign-in fails.
+### Changed
+- Updated remote host and email settings to Eco design-system controls and layouts, with
+  Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
 ## 0.3.0
 
