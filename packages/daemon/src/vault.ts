@@ -124,63 +124,76 @@ function secretServiceKey(dataDir: string): Buffer | null {
   return Buffer.from(hex, "hex");
 }
 
-function protectWithDpapi(hex: string): string {
-  const script = [
-    "$ErrorActionPreference = 'Stop'",
-    "Add-Type -AssemblyName System.Security",
-    "$hex = [Console]::In.ReadToEnd().Trim()",
-    "$bytes = [byte[]]::new([int]($hex.Length / 2))",
-    "for ($i = 0; $i -lt $bytes.Length; $i++) { $bytes[$i] = [Convert]::ToByte($hex.Substring($i * 2, 2), 16) }",
-    "[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect($bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser))",
-  ].join("; ");
-  const result = spawnSync(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-Command", script],
-    {
-      input: hex,
-      encoding: "utf8",
-      timeout: 30_000,
-      windowsHide: true,
-      maxBuffer: 1024 * 1024,
-    },
-  );
-  if (result.error || result.status !== 0 || !result.stdout.trim()) {
-    throw result.error ?? new Error(result.stderr.trim() || "Windows DPAPI encryption failed");
-  }
-  return result.stdout.trim();
+// `Add-Type -AssemblyName` took 25-36 s per cold call on Windows ARM64, while process start,
+// Import-Module Microsoft.PowerShell.Utility and a reflection assembly load each took under
+// a second. The DPAPI scripts therefore use .NET calls only, with autoloading turned off.
+const DPAPI_PRELUDE = [
+  "$ErrorActionPreference = 'Stop'",
+  "$PSModuleAutoLoadingPreference = 'None'",
+  "[void][Reflection.Assembly]::Load('System.Security, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a')",
+];
+const DPAPI_SCOPE = "[Security.Cryptography.DataProtectionScope]::CurrentUser";
+const PROTECT_SCRIPT = [
+  ...DPAPI_PRELUDE,
+  "$hex = [Console]::In.ReadToEnd().Trim()",
+  "$bytes = [byte[]]::new([int]($hex.Length / 2))",
+  "for ($i = 0; $i -lt $bytes.Length; $i++) { $bytes[$i] = [Convert]::ToByte($hex.Substring($i * 2, 2), 16) }",
+  `[Convert]::ToBase64String([Security.Cryptography.ProtectedData]::Protect($bytes, $null, ${DPAPI_SCOPE}))`,
+].join("; ");
+const UNPROTECT_SCRIPT = [
+  ...DPAPI_PRELUDE,
+  "$bytes = [Convert]::FromBase64String([Console]::In.ReadToEnd().Trim())",
+  `$plain = [Security.Cryptography.ProtectedData]::Unprotect($bytes, $null, ${DPAPI_SCOPE})`,
+  "[BitConverter]::ToString($plain).Replace('-', '').ToLowerInvariant()",
+].join("; ");
+
+/** Per-attempt timeouts; a timed-out attempt is retried with the next, longer timeout. */
+export const DPAPI_TIMEOUTS_MS = [30_000, 90_000] as const;
+
+type DpapiResult = { ok: true; stdout: string } | { ok: false; timedOut: boolean; reason: string };
+
+function errorCode(error: unknown): string {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (typeof code === "string" && /^[A-Z0-9_]{1,32}$/.test(code)) return code;
+  return error instanceof Error ? error.name : "unknown error";
 }
 
-function unprotectWithDpapi(value: string): Buffer {
-  const script = [
-    "$ErrorActionPreference = 'Stop'",
-    "Add-Type -AssemblyName System.Security",
-    "$base64 = [Console]::In.ReadToEnd().Trim()",
-    "$bytes = [Convert]::FromBase64String($base64)",
-    "$plain = [Security.Cryptography.ProtectedData]::Unprotect($bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)",
-    "-join ($plain | ForEach-Object { $_.ToString('x2') })",
-  ].join("; ");
-  const result = spawnSync(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-Command", script],
-    {
-      input: value,
-      encoding: "utf8",
-      timeout: 30_000,
-      windowsHide: true,
-      maxBuffer: 1024 * 1024,
-    },
-  );
-  if (result.error || result.status !== 0) {
-    throw result.error ?? new Error(result.stderr.trim() || "Windows DPAPI decryption failed");
+// Errors carry only a code, exit status or "timed out", never PowerShell stderr.
+function runDpapi(script: string, input: string, timeoutsMs: readonly number[]): DpapiResult {
+  let reason = "timed out";
+  for (const [attempt, timeout] of timeoutsMs.entries()) {
+    const result = spawnSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", script],
+      {
+        input,
+        encoding: "utf8",
+        timeout,
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+      },
+    );
+    const timedOut =
+      (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT" ||
+      (!result.error && result.status === null);
+    if (!timedOut) {
+      if (result.error) return { ok: false, timedOut: false, reason: errorCode(result.error) };
+      if (result.status !== 0)
+        return { ok: false, timedOut: false, reason: `exit ${result.status}` };
+      return { ok: true, stdout: result.stdout.trim() };
+    }
+    reason = `timed out after ${timeout / 1000}s`;
+    if (attempt < timeoutsMs.length - 1) {
+      console.error(`[botod] Windows DPAPI ${reason}; retrying`);
+    }
   }
-  const key = keyFromHex(result.stdout.trim());
-  if (!key) throw new Error("Windows DPAPI returned an invalid Boto vault key.");
-  return key;
+  return { ok: false, timedOut: true, reason };
 }
 
 export function loadVaultKey(
   dataDir: string,
   platform: NodeJS.Platform = process.platform,
+  timeoutsMs: readonly number[] = DPAPI_TIMEOUTS_MS,
 ): Buffer {
   const env = process.env.BOTO_VAULT_KEY;
   if (env && /^[0-9a-fA-F]{64}$/.test(env)) return Buffer.from(env, "hex");
@@ -202,29 +215,43 @@ export function loadVaultKey(
     const protectedFile = join(dataDir, "vault.key.dpapi");
     const tempFile = `${protectedFile}.tmp`;
     if (existsSync(protectedFile)) {
-      try {
-        return unprotectWithDpapi(readFileSync(protectedFile, "utf8").trim());
-      } catch (error) {
-        throw new Error("The Boto vault key could not be decrypted with Windows DPAPI.", {
-          cause: error,
-        });
-      }
+      const result = runDpapi(
+        UNPROTECT_SCRIPT,
+        readFileSync(protectedFile, "utf8").trim(),
+        timeoutsMs,
+      );
+      const key = result.ok ? keyFromHex(result.stdout) : null;
+      if (key) return key;
+      throw new Error(
+        `The Boto vault key could not be decrypted with Windows DPAPI (${result.ok ? "invalid key" : result.reason}).`,
+      );
     }
     const key = randomBytes(32);
-    try {
-      writeFileSync(tempFile, protectWithDpapi(key.toString("hex")), { mode: 0o600 });
-      renameSync(tempFile, protectedFile);
-      return key;
-    } catch (error) {
-      try {
-        unlinkSync(tempFile);
-      } catch {}
-      console.error(
-        `Boto could not use Windows DPAPI (${(error as Error).message}); storing the vault key in a plaintext file.`,
+    const result = runDpapi(PROTECT_SCRIPT, key.toString("hex"), timeoutsMs);
+    // A slow DPAPI is not an unavailable one: never trade it for a plaintext key.
+    if (!result.ok && result.timedOut) {
+      throw new Error(
+        `Windows DPAPI ${result.reason}; the Boto vault key was not created. Try again.`,
       );
-      writeFileSync(file, key.toString("hex"), { mode: 0o600 });
-      return key;
     }
+    let reason = result.ok ? "empty output" : result.reason;
+    if (result.ok && result.stdout) {
+      try {
+        writeFileSync(tempFile, result.stdout, { mode: 0o600 });
+        renameSync(tempFile, protectedFile);
+        return key;
+      } catch (error) {
+        reason = errorCode(error);
+        try {
+          unlinkSync(tempFile);
+        } catch {}
+      }
+    }
+    console.error(
+      `Boto could not use Windows DPAPI (${reason}); storing the vault key in a plaintext file.`,
+    );
+    writeFileSync(file, key.toString("hex"), { mode: 0o600 });
+    return key;
   }
 
   if (platform === "linux") {
