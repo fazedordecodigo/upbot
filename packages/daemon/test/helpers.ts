@@ -207,13 +207,23 @@ export async function startDaemon(
   // process when startup is abandoned (the handle is not returned until READY).
   onSpawn?: (proc: ReturnType<typeof Bun.spawn>) => void,
 ): Promise<DaemonHandle> {
-  const proc = Bun.spawn(["bun", DAEMON, "--data-dir", dataDir, "--agents-root", agentsRoot], {
-    env: { ...process.env, BOTO_DEFAULT_BOT: "off", ...env },
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-    cwd: ROOT,
-  });
+  // Windows env keys are case-insensitive: an override such as PATH replaces the inherited Path.
+  const keys = new Set(Object.keys(env).map((key) => key.toLowerCase()));
+  const inherited = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([key]) => process.platform !== "win32" || !keys.has(key.toLowerCase()),
+    ),
+  );
+  const proc = Bun.spawn(
+    [process.execPath, DAEMON, "--data-dir", dataDir, "--agents-root", agentsRoot],
+    {
+      env: { ...inherited, BOTO_DEFAULT_BOT: "off", ...env },
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: ROOT,
+    },
+  );
   onSpawn?.(proc);
   const stderrText = captureStderr
     ? new Response(proc.stderr as ReadableStream<Uint8Array>).text()

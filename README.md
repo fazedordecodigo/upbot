@@ -86,7 +86,7 @@ Download the installer for your OS from [Releases](https://github.com/fazedordec
   normally. For unsigned builds, open System Settings → Privacy & Security and click
   **Open Anyway** (or run `xattr -cr /Applications/Boto.app`). Versions before 0.2.1 were
   reported as "damaged"; use the `xattr` command for those.
-- **Windows x64:** run the per-user `.exe` installer. Signed builds show the publisher;
+- **Windows x64 / ARM64:** run the matching per-user `.exe` installer. Signed builds show the publisher;
   SmartScreen may still warn until reputation builds, especially with OV certificates.
   For unsigned builds, SmartScreen may warn: choose **More info → Run anyway** (in Portuguese,
   **Mais informações → Executar assim mesmo**).
@@ -102,8 +102,10 @@ On Linux install `xdotool` and one of ImageMagick (`import`), `scrot` or `gnome-
 Wayland and missing tools/display are reported as unavailable in bot settings. Windows uses
 Windows PowerShell/.NET and cannot control elevated windows or UAC prompts. macOS requires
 Screen Recording and Accessibility permission. Coordinates are screen points on macOS and
-screen pixels on Windows/Linux (Linux captures the X11 desktop). The built-in `say` voice
-remains macOS-only.
+screen pixels on Windows/Linux (Linux captures the X11 desktop).
+Read-aloud works out of the box with `say` on macOS and System.Speech (Windows PowerShell) on
+Windows; on Linux install `espeak-ng` (or `espeak`, or use a running `speech-dispatcher`). Voice
+input needs `whisper` on PATH or `BOTO_STT_COMMAND`; `BOTO_TTS_COMMAND` overrides read-aloud.
 
 Boto was called BobAgent until 0.3.0; updating moves `~/BobAgent` to `~/Boto` and keeps
 your bots, chats and vault.
@@ -114,6 +116,14 @@ Point Boto at a Linux VPS and each bot session can run there instead — as a pl
 or inside its own Firecracker microVM, with credentials delivered only inside the VM. Setup
 guide, host requirements and microVM internals:
 [docs/remote-hosts.md](docs/remote-hosts.md).
+
+The Firecracker image supports Claude, Codex, Gemini, OpenCode, Cursor, Devin and Grok.
+Build with `--providers "claude codex gemini opencode cursor devin grok" --size-mib 8192`.
+Devin 3000.12.17 and Grok 1.0.77 install under `/opt/devin-home` and `/opt/grok-home`
+(not the persistent `/root` mount). Override pins with `DEVIN_CLI_VERSION` and
+`GROK_CLI_VERSION`. Settings → Hosts accepts Devin's Windsurf API key and Grok's
+xAI API key, delivered only to VM provider processes. Grok uses headless API-key
+authentication and disables auto-update for remote ACP sessions.
 
 ## Develop
 
