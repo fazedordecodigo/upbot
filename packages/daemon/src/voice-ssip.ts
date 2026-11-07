@@ -1,6 +1,6 @@
 import { createConnection, type Socket } from "node:net";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { posix } from "node:path";
 
 // Minimal SSIP client for Speech Dispatcher (the service behind spd-say). The text goes over
 // the user's unix socket, never into a process argument list (visible to other local users)
@@ -12,8 +12,8 @@ export type SsipAddress = { socket: string; custom: boolean };
  * null for addresses this client does not speak (e.g. `inet_socket`). */
 export function ssipAddress(env: NodeJS.ProcessEnv): SsipAddress | null {
   const runtime =
-    env.XDG_RUNTIME_DIR || env.XDG_CACHE_HOME || join(env.HOME || homedir(), ".cache");
-  const fallback = join(runtime, "speech-dispatcher", "speechd.sock");
+    env.XDG_RUNTIME_DIR || env.XDG_CACHE_HOME || posix.join(env.HOME || homedir(), ".cache");
+  const fallback = posix.join(runtime, "speech-dispatcher", "speechd.sock");
   const raw = env.SPEECHD_ADDRESS?.trim();
   if (!raw) return { socket: fallback, custom: false };
   if (raw === "unix_socket") return { socket: fallback, custom: false };
