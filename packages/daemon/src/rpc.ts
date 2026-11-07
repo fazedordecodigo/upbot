@@ -252,6 +252,9 @@ export class Rpc {
       case "agents.compact":
         await this.runtimes.compact((params as MethodParsedParams<typeof method>).agentId);
         return { ok: true };
+      case "agents.newSession":
+        await this.runtimes.newSession((params as MethodParsedParams<typeof method>).agentId);
+        return { ok: true };
       case "team.status":
         return this.extras.team.status();
       case "team.connect": {

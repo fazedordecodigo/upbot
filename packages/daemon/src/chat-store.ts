@@ -271,6 +271,10 @@ export class ChatStore {
     });
   }
 
+  clearContextUsage(agentId: string): AgentUsage {
+    return this.putUsage({ ...this.getUsage(agentId), usedTokens: null, updatedAt: Date.now() });
+  }
+
   getAgentSession(agentId: string): { provider: string; sessionId: string } | null {
     const r = this.db
       .query("SELECT provider, session_id FROM agent_sessions WHERE agent_id = ?")

@@ -330,7 +330,7 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
       "Servidores",
     ])
       expect(await page.getByRole("tab", { name: tab, exact: true }).isVisible()).toBe(true);
-    await page.keyboard.press("Meta+n");
+    await page.keyboard.press("Meta+Shift+n");
     expect(await page.locator("dialog[open]").isVisible()).toBe(true);
     await page.keyboard.press("Escape");
     expect(await page.locator("dialog[open]").count()).toBe(0);
@@ -570,9 +570,13 @@ test("sidebar navigation, real approval counts, routines, groups, profile and th
   const side = page.locator(".side");
   await side.getByRole("button", { name: "Início", exact: true }).click();
   await page.getByRole("heading", { name: "Escolha um bot ou crie um novo." }).waitFor();
-  await side.getByRole("button", { name: "Nova tarefa" }).click();
+  await side.getByRole("button", { name: "Novo bot", exact: true }).click();
   await page.locator("dialog[open]").waitFor();
   await page.keyboard.press("Escape");
+  await side.getByRole("button", { name: /^Nova sessão/ }).click();
+  await page.locator(".main-head").getByRole("heading", { name: bot.name, exact: true }).waitFor();
+  await page.locator("p.meta.day", { hasText: "Nova sessão" }).last().waitFor();
+  expect(await page.locator("dialog[open]").count()).toBe(0);
   await side.getByRole("button", { name: "Agendadas", exact: true }).click();
   await page.getByText("Nenhuma rotina ainda.", { exact: false }).waitFor();
   const routine = (await rpc.request("routines.create", {

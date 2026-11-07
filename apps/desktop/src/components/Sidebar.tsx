@@ -4,11 +4,12 @@ import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { AgentOverview } from "../hooks/useOverview";
 import type { DaemonClient } from "../lib/daemon";
 import { moveControlFocus } from "../lib/keyboard";
-import { mod } from "../lib/platform";
+import { isMac, mod } from "../lib/platform";
 import { useThemePref } from "../lib/theme";
 import { fmtTime } from "../lib/ui";
 import {
   BotoSimboloCurrentcolorIcon,
+  BotPlusIcon,
   ClockIcon,
   HomeIcon,
   MoonIcon,
@@ -34,7 +35,8 @@ export function Sidebar({
   drawer,
   sideRef,
   onClose,
-  onNew,
+  onNewSession,
+  onNewBot,
   onSearch,
   onHome,
   onScheduled,
@@ -57,7 +59,8 @@ export function Sidebar({
   drawer: boolean;
   sideRef: RefObject<HTMLElement | null>;
   onClose: () => void;
-  onNew: () => void;
+  onNewSession: () => void;
+  onNewBot: () => void;
   onSearch: () => void;
   onHome: () => void;
   onScheduled: () => void;
@@ -99,14 +102,25 @@ export function Sidebar({
         </button>
       )}
       <div className="side-titlebar" data-tauri-drag-region />
-      <div className="side-brand" role="img" aria-label="Boto">
-        <BotoSimboloCurrentcolorIcon />
-        <span>Boto</span>
+      <div className="side-top">
+        <div className="side-brand" role="img" aria-label="Boto">
+          <BotoSimboloCurrentcolorIcon />
+          <span>Boto</span>
+        </div>
+        <button
+          type="button"
+          className="icon-btn side-new-bot"
+          aria-label="Novo bot"
+          title={`Novo bot (${mod}${isMac ? "⇧" : "Shift+"}N)`}
+          onClick={onNewBot}
+        >
+          <BotPlusIcon />
+        </button>
       </div>
       <nav className="side-actions" aria-label="Navegação principal">
-        <button type="button" className="side-btn new" onClick={onNew}>
+        <button type="button" className="side-btn new" onClick={onNewSession}>
           <PlusIcon />
-          <span>Nova tarefa</span>
+          <span>Nova sessão</span>
           <kbd>{mod}N</kbd>
         </button>
         <button type="button" className="side-btn" onClick={onSearch}>

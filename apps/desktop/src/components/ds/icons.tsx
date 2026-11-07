@@ -253,6 +253,19 @@ export function PlusIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+export function BotPlusIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...props} viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+      <g fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+        <rect x="3" y="9" width="13" height="11" rx="3.5" />
+        <path d="M9.5 9V6.5M19 3v6M16 6h6" />
+      </g>
+      <circle cx="9.5" cy="5" r="1.2" fill="currentColor" />
+      <circle cx="7.3" cy="14.5" r="1.1" fill="currentColor" />
+      <circle cx="11.7" cy="14.5" r="1.1" fill="currentColor" />
+    </svg>
+  );
+}
 export function ReceiptIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...props} viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">

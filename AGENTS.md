@@ -163,8 +163,8 @@ Channels are "Group chats" in the UI. `ChannelService.post(channelId, text, repl
 message goes to that bot (quoted as `<in_reply_to>`), otherwise the owner. Member replies are
 forwarded to the owner only for bot-originated work (`queue.from_agent_id`). Migration 18 adds
 `channel_messages.reply_to`. UI: `CommandPalette` (⌘K all, ⌘⇧F bots on macOS; Ctrl+K and
-Ctrl+Shift+F elsewhere) and shortcuts in `App.tsx` (⌘N new bot, ⌘1–9 switch bot, ⌘, settings,
-⌘P pages on macOS; Ctrl equivalents elsewhere).
+Ctrl+Shift+F elsewhere) and shortcuts in `App.tsx` (⌘N new session for the selected bot,
+⌘⇧N new bot, ⌘1–9 switch bot, ⌘, settings, ⌘P pages on macOS; Ctrl equivalents elsewhere).
 
 ## ACP providers in microVMs
 
@@ -363,6 +363,10 @@ Claude `result.usage`/`total_cost_usd`/`modelUsage.contextWindow`, Codex
 `BOTO_COMPACT_TIMEOUT_MS`), the provider session is dropped and forgotten, and a
 `compaction` chat item stores the summary. The next fresh session gets
 `<conversation_summary>` plus only the history after it. The queue waits while compacting.
+`agents.newSession` (sidebar "Nova sessão", rejected with `busy` during a turn/compaction)
+drops and forgets the provider session, clears `usedTokens` and adds a `session_reset` item;
+the next session gets no summary or history from before it. Sidebar's small top button
+(`BotPlusIcon`) opens the create-bot dialog.
 Tests: `test/usage.e2e.test.ts`.
 
 ## Avatars, memories, skills, agent creation (Phase 8)
