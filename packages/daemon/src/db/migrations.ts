@@ -259,4 +259,16 @@ export const migrations: string[] = [
     created_at INTEGER NOT NULL
   );
   CREATE INDEX approval_audit_created ON approval_audit(created_at)`,
+  // 22: pending approvals survive a daemon restart as "interrupted" records. Only the
+  // approval_audit fields are stored (never args, detail, bot-written titles or secret values).
+  `CREATE TABLE approval_records (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    turn_id TEXT,
+    status TEXT NOT NULL,
+    data_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    interrupted_at INTEGER
+  );
+  CREATE INDEX approval_records_status ON approval_records(status, created_at)`,
 ];
