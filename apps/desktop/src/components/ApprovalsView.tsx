@@ -91,9 +91,13 @@ export function ApprovalCard({
         ) : (
           <span className={s.meta}>
             {
-              { approved: "Aprovado", denied: "Recusado", expired: "Expirado", done: "Concluído" }[
-                a.status
-              ]
+              {
+                approved: "Aprovado",
+                denied: "Recusado",
+                expired: "Expirado",
+                done: "Concluído",
+                interrupted: "Interrompido pelo reinício",
+              }[a.status]
             }
           </span>
         )}
@@ -117,7 +121,12 @@ export function ApprovalCard({
         )}
         <div className={s.title}>{copy ? copy.description : a.title}</div>
         {copy?.context && <div className={s.meta}>{copy.context}</div>}
-        {requiresFullReview(a) ? (
+        {a.status === "interrupted" ? (
+          <p className={s.meta} data-testid="approval-interrupted">
+            O Boto reiniciou antes da sua decisão. A ação não foi executada e não pode ser retomada;
+            peça ao bot para tentar de novo se ainda precisar.
+          </p>
+        ) : requiresFullReview(a) ? (
           <textarea
             className={s.detail}
             rows={8}

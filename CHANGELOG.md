@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Fixed
+- Keep already delivered interrupted-approval notifications in Notification Center until
+  reviewed, so clicking them after a restart opens the specific interrupted notice.
 - OpenCode turns waiting on bridge tools or user approvals no longer fail with a spurious
   sign-in error after 30 seconds.
 
@@ -14,6 +16,9 @@
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.
 - Linux and Windows CI checks and multi-platform updater releases.
+- Approvals left pending when the daemon stops now appear in Settings → Approvals as
+  "Interrompido pelo reinício" (no actions; the blocked action was not executed), and
+  clicking their notification explains that instead of a generic unavailable notice.
 
 ### Fixed
 - Gemini bots start with `gemini --acp` (the old `--experimental-acp` flag is deprecated). When
