@@ -6,34 +6,50 @@ import type {
   VmCredentialKind,
   VmCredentialProvider,
 } from "@boto/protocol";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { DaemonClient } from "../lib/daemon";
 import { errorMessage } from "../lib/errors";
-import { btnCls, inputCls } from "./AgentSettings";
+import { Button, Field, Select } from "./ds/controls";
+import styles from "./HostsView.module.css";
+
+const subStatus: Record<Subagent["status"], string> = {
+  running: "Em execução",
+  done: "Concluído",
+  failed: "Falhou",
+  stopped: "Parado",
+};
+
+const subIndicator = {
+  running: "run",
+  done: "ok",
+  failed: "err",
+  stopped: "idle",
+} as const;
 
 function Preflight({ h }: { h: RemoteHost }) {
   const p = h.preflight;
-  if (!p) return <p className="text-xs text-zinc-500">Not installed — click Install.</p>;
-  const ok = (v: boolean) => (v ? "text-emerald-400" : "text-amber-400");
+  if (!p) return <p className={styles.muted}>Não instalado — clique em Instalar.</p>;
+  const ok = (v: boolean) => (v ? styles.ready : styles.warning);
   const providers = Object.entries(p.providers)
     .filter(([, v]) => v)
     .map(([k]) => k);
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-zinc-400">
+    <div className={styles.preflight}>
       <span>
         {p.os}/{p.arch} · kernel {p.kernelRelease} · bun {p.bun}
       </span>
-      <span>CLIs: {providers.length ? providers.join(", ") : "none found"}</span>
-      <span className={ok(p.kvm)}>/dev/kvm {p.kvm ? "ok" : "missing"}</span>
+      <span>CLIs: {providers.length ? providers.join(", ") : "nenhuma encontrada"}</span>
+      <span className={ok(p.kvm)}>/dev/kvm {p.kvm ? "ok" : "ausente"}</span>
       <span className={ok(!!p.firecracker?.version)}>
-        firecracker {p.firecracker?.version ?? "missing"}
+        firecracker {p.firecracker?.version ?? "ausente"}
       </span>
       <span className={ok(!!p.kernelImage && !!p.rootfs)}>
-        guest image {p.kernelImage && p.rootfs ? "ok" : "missing (run rootfs/build-rootfs.sh)"}
+        imagem da microVM{" "}
+        {p.kernelImage && p.rootfs ? "ok" : "ausente (execute rootfs/build-rootfs.sh)"}
       </span>
       <span className={ok(p.firecrackerReady)}>
-        microVMs {p.firecrackerReady ? "ready" : "not available"}
+        microVMs {p.firecrackerReady ? "disponíveis" : "indisponíveis"}
       </span>
     </div>
   );
@@ -41,14 +57,14 @@ function Preflight({ h }: { h: RemoteHost }) {
 
 const CRED_HINT: Record<VmCredentialProvider, Partial<Record<VmCredentialKind, string>>> = {
   claude: {
-    oauth_token: "Token from `claude setup-token` (uses your Claude subscription)",
-    api_key: "Anthropic API key",
+    oauth_token: "Token de `claude setup-token` (usa sua assinatura Claude)",
+    api_key: "Chave de API da Anthropic",
   },
-  codex: { api_key: "OpenAI API key" },
-  gemini: { api_key: "Gemini API key (aistudio.google.com/apikey)" },
-  cursor: { api_key: "Cursor API key (Cursor dashboard → Integrations)" },
-  devin: { api_key: "Windsurf/Devin API key" },
-  grok: { api_key: "xAI API key (console.x.ai)" },
+  codex: { api_key: "Chave de API da OpenAI" },
+  gemini: { api_key: "Chave de API do Gemini (aistudio.google.com/apikey)" },
+  cursor: { api_key: "Chave de API do Cursor (painel Cursor → Integrations)" },
+  devin: { api_key: "Chave de API do Windsurf/Devin" },
+  grok: { api_key: "Chave de API da xAI (console.x.ai)" },
 };
 
 function VmCredentials({
@@ -58,6 +74,8 @@ function VmCredentials({
   client: DaemonClient;
   onError: (e: unknown) => void;
 }) {
+  const providerId = useId();
+  const kindId = useId();
   const {
     data: credsData,
     error: credsError,
@@ -74,24 +92,24 @@ function VmCredentials({
   }>({ provider: "claude", kind: "oauth_token", value: "" });
   const kinds = Object.keys(CRED_HINT[form.provider]) as VmCredentialKind[];
   return (
-    <section className="space-y-2">
-      <h3 className="text-sm font-semibold text-zinc-300">MicroVM sign-in</h3>
-      <p className="text-xs text-zinc-500">
-        Each microVM starts signed out. Saved logins are encrypted in the vault, never shown to
-        agents, and only passed to the provider inside its microVM for the length of the session.
-        Process placements keep using the host's own CLI login.
+    <section className={styles.stack}>
+      <h3 className={styles.subtitle}>Autenticação nas microVMs</h3>
+      <p className={styles.muted}>
+        Cada microVM inicia sem autenticação. As credenciais salvas são criptografadas no cofre,
+        nunca são mostradas aos bots e só são entregues ao provedor dentro da microVM durante a
+        sessão. A execução em processo continua usando a autenticação da CLI do próprio servidor.
       </p>
       {creds.map((c) => (
-        <div key={c.provider} className="flex items-center gap-2 text-sm">
-          <span className="w-20">{c.provider}</span>
-          <span className="text-xs text-zinc-500">
-            {c.kind === "oauth_token" ? "subscription token" : "API key"} · saved{" "}
+        <div key={c.provider} className={styles.row}>
+          <span className={styles.provider}>{c.provider}</span>
+          <span className={styles.muted}>
+            {c.kind === "oauth_token" ? "token de assinatura" : "Chave de API"} · salvo em{" "}
             {new Date(c.updatedAt).toLocaleString()}
           </span>
-          <span className="flex-1" />
-          <button
+          <span className={styles.grow} />
+          <Button
             type="button"
-            className="text-xs text-red-400 hover:text-red-300"
+            className={styles.action}
             onClick={() =>
               client
                 .request("vmCredentials.delete", { provider: c.provider })
@@ -99,12 +117,12 @@ function VmCredentials({
                 .catch(onError)
             }
           >
-            Remove
-          </button>
+            Remover
+          </Button>
         </div>
       ))}
       <form
-        className="flex gap-2"
+        className={styles.credentialsForm}
         onSubmit={(e) => {
           e.preventDefault();
           client
@@ -116,45 +134,52 @@ function VmCredentials({
             .catch(onError);
         }}
       >
-        <select
-          className={`${inputCls} w-28`}
-          value={form.provider}
-          onChange={(e) => {
-            const provider = e.target.value as VmCredentialProvider;
-            const kind = Object.keys(CRED_HINT[provider])[0] as VmCredentialKind;
-            setForm({ provider, kind, value: "" });
-          }}
-        >
-          <option value="claude">claude</option>
-          <option value="codex">codex</option>
-          <option value="gemini">gemini</option>
-          <option value="cursor">cursor</option>
-          <option value="devin">devin</option>
-          <option value="grok">grok</option>
-        </select>
-        <select
-          className={`${inputCls} w-44`}
-          value={form.kind}
-          onChange={(e) => setForm({ ...form, kind: e.target.value as VmCredentialKind })}
-        >
-          {kinds.map((k) => (
-            <option key={k} value={k}>
-              {k === "oauth_token" ? "Subscription token" : "API key"}
-            </option>
-          ))}
-        </select>
-        <input
-          className={`${inputCls} flex-1`}
+        <div className={styles.selectField}>
+          <label htmlFor={providerId}>Provedor</label>
+          <Select
+            id={providerId}
+            aria-label="Provedor da microVM"
+            value={form.provider}
+            onChange={(e) => {
+              const provider = e.target.value as VmCredentialProvider;
+              const kind = Object.keys(CRED_HINT[provider])[0] as VmCredentialKind;
+              setForm({ provider, kind, value: "" });
+            }}
+          >
+            <option value="claude">claude</option>
+            <option value="codex">codex</option>
+            <option value="gemini">gemini</option>
+            <option value="cursor">cursor</option>
+            <option value="devin">devin</option>
+            <option value="grok">grok</option>
+          </Select>
+        </div>
+        <div className={styles.selectField}>
+          <label htmlFor={kindId}>Tipo de credencial</label>
+          <Select
+            id={kindId}
+            aria-label="Tipo de credencial"
+            value={form.kind}
+            onChange={(e) => setForm({ ...form, kind: e.target.value as VmCredentialKind })}
+          >
+            {kinds.map((k) => (
+              <option key={k} value={k}>
+                {k === "oauth_token" ? "Token de assinatura" : "Chave de API"}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Field
           type="password"
           autoComplete="off"
-          placeholder={CRED_HINT[form.provider][form.kind]}
+          label="Credencial da microVM"
+          hint={CRED_HINT[form.provider][form.kind] ?? ""}
+          placeholder="Token ou chave de API"
           value={form.value}
           onChange={(e) => setForm({ ...form, value: e.target.value })}
           required
         />
-        <button type="submit" className={btnCls}>
-          Save
-        </button>
+        <Button type="submit">Salvar</Button>
       </form>
     </section>
   );
@@ -229,61 +254,61 @@ export function HostsView({ client, agents }: { client: DaemonClient; agents: Ag
   const nameOf = (id: string) => agents.find((a) => a.id === id)?.name ?? id.slice(0, 8);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div className={styles.page}>
       <div>
-        <h2 className="text-lg font-semibold">Remote hosts</h2>
-        <p className="text-xs text-zinc-500">
-          Run bots on a Linux VPS over SSH instead of this Mac. Boto uses your system{" "}
-          <code>ssh</code> (keys from <code>~/.ssh</code> or the agent; nothing is stored here) and
-          uploads a small helper to <code>~/.boto</code> on the host. With KVM and the guest image
-          installed, each bot and subagent runs in its own Firecracker microVM.
+        <h2 className={styles.title}>Servidores remotos</h2>
+        <p className={styles.muted}>
+          Execute bots em um VPS Linux por SSH em vez deste computador. O Boto usa o{" "}
+          <code>ssh</code> do sistema (chaves de <code>~/.ssh</code> ou do serviço de autenticação
+          SSH; nada é armazenado aqui) e envia um pequeno auxiliar para <code>~/.boto</code> no
+          servidor. Com KVM e a imagem instalados, cada bot e sub-bot executa em sua própria microVM
+          Firecracker.
         </p>
       </div>
-      {error && <p className="rounded bg-red-950/60 px-3 py-2 text-xs text-red-300">{error}</p>}
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
 
-      <section className="space-y-3">
+      <section className={styles.stack}>
         {hosts.map((h) => (
-          <div
-            key={h.id}
-            className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3"
-          >
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{h.name}</span>
-              <code className="text-xs text-zinc-500">
+          <div key={h.id} className={styles.card}>
+            <div className={styles.row}>
+              <span className={styles.name}>{h.name}</span>
+              <code className={styles.muted}>
                 {h.target}:{h.port}
               </code>
-              <span className="flex-1" />
-              <button
+              <span className={styles.grow} />
+              <Button
                 type="button"
-                className={btnCls}
                 disabled={busy === h.id}
                 onClick={() => act(h.id, "hosts.install")}
               >
-                {busy === h.id ? "Working…" : h.root ? "Reinstall" : "Install"}
-              </button>
-              <button
+                {busy === h.id ? "Trabalhando…" : h.root ? "Reinstalar" : "Instalar"}
+              </Button>
+              <Button
                 type="button"
-                className={btnCls}
                 disabled={busy === h.id || !h.root}
                 onClick={() => act(h.id, "hosts.check")}
               >
-                Check
-              </button>
-              <button
+                Verificar
+              </Button>
+              <Button
                 type="button"
-                className="text-xs text-red-400 hover:text-red-300"
+                className={styles.action}
                 onClick={() =>
                   client.request("hosts.delete", { id: h.id }).then(reload).catch(fail)
                 }
               >
-                Remove
-              </button>
+                Remover
+              </Button>
             </div>
             <Preflight h={h} />
           </div>
         ))}
         <form
-          className="grid grid-cols-[1fr_1.5fr_5rem] gap-2 rounded-lg border border-dashed border-zinc-800 p-3"
+          className={styles.hostForm}
           onSubmit={(e) => {
             e.preventDefault();
             setError(null);
@@ -301,73 +326,71 @@ export function HostsView({ client, agents }: { client: DaemonClient; agents: Ag
               .catch(fail);
           }}
         >
-          <input
-            className={inputCls}
-            placeholder="Name"
+          <Field
+            label="Nome"
+            placeholder="Nome"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
-          <input
-            className={inputCls}
+          <Field
+            label="Destino SSH"
             placeholder="user@host"
             required
             value={form.target}
             onChange={(e) => setForm({ ...form, target: e.target.value })}
           />
-          <input
-            className={inputCls}
+          <Field
+            label="Porta SSH"
             placeholder="22"
             inputMode="numeric"
             value={form.port}
             onChange={(e) => setForm({ ...form, port: e.target.value })}
           />
-          <input
-            className={`${inputCls} col-span-2`}
-            placeholder="Identity file (optional, e.g. ~/.ssh/id_ed25519)"
+          <Field
+            label="Arquivo de identidade (opcional)"
+            placeholder="Ex.: ~/.ssh/id_ed25519"
             value={form.identityFile}
             onChange={(e) => setForm({ ...form, identityFile: e.target.value })}
           />
-          <button type="submit" className={btnCls}>
-            Add host
-          </button>
+          <Button type="submit">Adicionar servidor</Button>
         </form>
       </section>
 
-      <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-zinc-300">Where bots run</h3>
+      <section className={styles.stack}>
+        <h3 className={styles.subtitle}>Onde os bots são executados</h3>
         {topLevel.map((a) => {
           const p = placements.find((x) => x.agentId === a.id);
           const host = hosts.find((h) => h.id === p?.hostId);
           return (
-            <div key={a.id} className="flex items-center gap-2 text-sm">
-              <span className="w-40 truncate">{a.name}</span>
-              <select
-                className={`${inputCls} w-48`}
+            <div key={a.id} className={styles.row}>
+              <span className={styles.botName}>{a.name}</span>
+              <Select
+                aria-label={`Servidor de ${a.name}`}
                 value={p?.hostId ?? ""}
                 onChange={(e) => place(a.id, { hostId: e.target.value || null })}
               >
-                <option value="">This Mac</option>
+                <option value="">Este computador</option>
                 {hosts.map((h) => (
                   <option key={h.id} value={h.id} disabled={!h.root}>
                     {h.name}
                   </option>
                 ))}
-              </select>
-              <select
-                className={`${inputCls} w-40`}
+              </Select>
+              <Select
+                aria-label={`Isolamento de ${a.name}`}
                 value={p?.isolation ?? "none"}
                 disabled={!p?.hostId}
                 onChange={(e) =>
                   place(a.id, { isolation: e.target.value as AgentPlacement["isolation"] })
                 }
               >
-                <option value="none">Process</option>
+                <option value="none">Processo</option>
                 <option value="firecracker" disabled={!host?.preflight?.firecrackerReady}>
                   Firecracker microVM
                 </option>
-              </select>
+              </Select>
               {p?.isolation === "firecracker" && (
-                <span className="text-xs text-zinc-500">
+                <span className={styles.muted}>
                   {p.vcpus} vCPU · {p.memMib} MiB
                 </span>
               )}
@@ -379,26 +402,29 @@ export function HostsView({ client, agents }: { client: DaemonClient; agents: Ag
       <VmCredentials client={client} onError={fail} />
 
       {subs.length > 0 && (
-        <section className="space-y-1">
-          <h3 className="text-sm font-semibold text-zinc-300">Subagents</h3>
+        <section className={styles.stack}>
+          <h3 className={styles.subtitle}>Sub-bots</h3>
           {subs
             .slice(-30)
             .reverse()
             .map((s) => (
-              <div key={s.agentId} className="flex gap-2 text-xs text-zinc-400">
-                <span
-                  className={
-                    s.status === "running"
-                      ? "text-sky-400"
-                      : s.status === "done"
-                        ? "text-emerald-400"
-                        : "text-amber-400"
-                  }
-                >
-                  {s.status}
+              <div key={s.agentId} className={styles.row}>
+                <span className={`${styles.status} ${styles[subIndicator[s.status]]}`}>
+                  <svg className={styles.indicator} viewBox="0 0 20 20" aria-hidden="true">
+                    {s.status === "running" ? (
+                      <circle cx="10" cy="10" r="5" fill="currentColor" stroke="none" />
+                    ) : s.status === "done" ? (
+                      <path d="m4 10 4 4 8-8" />
+                    ) : s.status === "failed" ? (
+                      <path d="M10 3 18 17H2Z M10 8v4 M10 14v1" />
+                    ) : (
+                      <circle cx="10" cy="10" r="6" />
+                    )}
+                  </svg>
+                  {subStatus[s.status]}
                 </span>
-                <span className="text-zinc-500">{nameOf(s.parentId)} →</span>
-                <span className="truncate">{s.task}</span>
+                <span className={styles.muted}>{nameOf(s.parentId)} →</span>
+                <span className={styles.truncate}>{s.task}</span>
               </div>
             ))}
         </section>
