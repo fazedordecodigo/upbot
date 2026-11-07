@@ -350,6 +350,10 @@ class AcpSession implements ProviderSession {
     return this.configOptions;
   }
 
+  bridgeActivity(): void {
+    this.activity.promptHandler?.();
+  }
+
   async prompt(text: string): Promise<{ stopReason: string }> {
     let res: {
       stopReason?: string;

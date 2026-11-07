@@ -1,5 +1,7 @@
+import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
+import { join } from "node:path";
 import {
   DaemonClient,
   type DaemonHandle,
@@ -13,7 +15,7 @@ import {
 } from "./helpers";
 
 const TOKEN = `acp-first-activity-${crypto.randomUUID()}`;
-const WATCHDOG_MS = 60;
+const WATCHDOG_MS = 1000;
 
 describe("ACP prompt first-activity watchdog", () => {
   let dataDir: string | undefined;
@@ -95,7 +97,7 @@ describe("ACP prompt first-activity watchdog", () => {
   });
 
   test("non-OpenCode prompts can exceed the OpenCode watchdog threshold", async () => {
-    const result = await runPrompt("cursor", "watchdog-delay:150");
+    const result = await runPrompt("cursor", "watchdog-delay:1500");
     expect(result.turn.status).toBe("completed");
     expect(result.elapsedMs).toBeGreaterThan(WATCHDOG_MS);
     expect(result.pids).toHaveLength(1);
@@ -129,10 +131,52 @@ describe("ACP prompt first-activity watchdog", () => {
   });
 
   test("OpenCode stays unbounded after its first prompt update", async () => {
-    const result = await runPrompt("opencode", "watchdog-activity:10:180");
+    const result = await runPrompt("opencode", "watchdog-activity:10:1500");
     expect(result.turn.status).toBe("completed");
-    expect(result.elapsedMs).toBeGreaterThan(150);
+    expect(result.elapsedMs).toBeGreaterThan(WATCHDOG_MS);
     expect(result.pids).toHaveLength(1);
     await deleteAgent(result.agent.id, result.pids);
   });
+
+  for (const decision of ["approve", "deny"] as const) {
+    test(`OpenCode approval can wait beyond the watchdog and ${decision}`, async () => {
+      const c = getClient();
+      const agent = await c.request("agents.create", {
+        name: `opencode-approval-${decision}`,
+        provider: "opencode",
+        instructions: "",
+      });
+      await c.request("approvals.setRules", {
+        rules: [{ id: "watchdog-ask", pattern: "list_agents", action: "ask", agentId: agent.id }],
+      });
+      const pending = c.waitForEventWhere(
+        "approval.updated",
+        (a) => a.agentId === agent.id && a.status === "pending",
+        10000,
+      );
+      const result = sendAndWait(c, agent.id, "mcp:list_agents {}", 10000);
+      const approval = await pending;
+      await Bun.sleep(WATCHDOG_MS * 2);
+      const approvals = await c.request("approvals.list", {});
+      expect(approvals.find((a) => a.id === approval.id)?.status).toBe("pending");
+      await c.request("approvals.respond", { id: approval.id, decision });
+      const turn = await result;
+      expect(turn.status).toBe("completed");
+      expect(turn.error).toBeNull();
+      if (!dataDir) throw new Error("Daemon data directory is unavailable");
+      const db = new Database(join(dataDir, "boto.db"), { readonly: true });
+      try {
+        const rows = db
+          .query("SELECT data_json FROM approval_audit WHERE event = ? AND agent_id = ?")
+          .all("approval.decided", agent.id) as { data_json: string }[];
+        expect(rows).toHaveLength(1);
+        expect(JSON.parse(rows[0]!.data_json).status).toBe(
+          decision === "approve" ? "approved" : "denied",
+        );
+      } finally {
+        db.close();
+      }
+      await c.request("agents.delete", { id: agent.id });
+    }, 15000);
+  }
 });
