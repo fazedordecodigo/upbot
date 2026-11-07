@@ -23,9 +23,38 @@ function run(argv) {
     }
   }
 }`;
-const TYPE_AS = `on run argv
-  tell application "System Events" to keystroke (item 1 of argv)
-end run`;
+const TYPE_JXA = `ObjC.import("AppKit");
+function run(argv) {
+  const board = $.NSPasteboard.generalPasteboard;
+  const saved = $.NSMutableArray.alloc.init;
+  const items = board.pasteboardItems;
+  for (let i = 0; i < items.count; i++) {
+    const item = items.objectAtIndex(i);
+    const copy = $.NSPasteboardItem.alloc.init;
+    const types = item.types;
+    for (let j = 0; j < types.count; j++) {
+      const type = types.objectAtIndex(j);
+      const data = item.dataForType(type);
+      if (data) copy.setDataForType(data, type);
+    }
+    saved.addObject(copy);
+  }
+  board.clearContents;
+  let version = board.changeCount;
+  try {
+    if (!board.setStringForType($(argv[0]), $.NSPasteboardTypeString)) {
+      throw new Error("Unable to prepare text for paste");
+    }
+    version = board.changeCount;
+    Application("System Events").keystroke("v", { using: ["command down"] });
+    delay(0.5);
+  } finally {
+    if (board.changeCount === version) {
+      board.clearContents;
+      if (saved.count) board.writeObjects(saved);
+    }
+  }
+}`;
 const KEY_CODES: Record<string, number> = {
   return: 36,
   enter: 76,
@@ -47,6 +76,7 @@ const MODIFIERS = new Set(["command", "control", "option", "shift"]);
 const accessSchema = z.array(z.string());
 
 export class ComputerUse {
+  private typing: Promise<void> = Promise.resolve();
   constructor(private db: Database) {}
 
   access(): string[] {
@@ -113,7 +143,11 @@ export class ComputerUse {
   async type(agent: Agent, text: string): Promise<string> {
     this.check(agent);
     if (!text || text.length > 5000) throw new Error("`text` must be 1-5000 characters");
-    await this.exec(["osascript", "-e", TYPE_AS, text]);
+    const typing = this.typing.then(() =>
+      this.exec(["osascript", "-l", "JavaScript", "-e", TYPE_JXA, text]),
+    );
+    this.typing = typing.catch(() => {});
+    await typing;
     return `typed ${text.length} characters`;
   }
 

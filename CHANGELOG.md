@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+- macOS Computer Use types Unicode text via paste instead of layout-dependent keystrokes,
+  preserving accents and emoji and restoring the previous clipboard contents.
+
 ### Added
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,

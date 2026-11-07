@@ -370,7 +370,8 @@ optional service-account token); `connector.bitwarden` -> `bitwarden_get` (`bw g
 BW_SESSION). `BOTO_OP_COMMAND`/`BOTO_BW_COMMAND` override the CLIs.
 Computer Use (`src/computer.ts`, macOS): off per agent until `computer.setAccess`; bridge
 `computer_screenshot` (screencapture), `computer_click` (CoreGraphics via JXA),
-`computer_type`, `computer_key` (System Events, whitelisted keys/modifiers);
+`computer_type` (Unicode clipboard paste with prior clipboard contents restored),
+`computer_key` (System Events, whitelisted keys/modifiers);
 `BOTO_COMPUTER_DRYRUN=<file>` logs commands instead (tests).
 Voice (`src/voice.ts`): `voice.speak` (`say`, or `BOTO_TTS_COMMAND` with text on
 stdin), `voice.transcribe` (`BOTO_STT_COMMAND` with `{file}`, or `whisper` on PATH),
