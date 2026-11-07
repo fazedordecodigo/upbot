@@ -26,6 +26,7 @@ function setup(initial: Approval[] = []) {
   let list = initial;
   let now = 1;
   let reconnect = () => {};
+  let disconnect = () => {};
   let fail = false;
   let resolveList: ((value: Approval[]) => void) | undefined;
   let defer = false;
@@ -54,6 +55,12 @@ function setup(initial: Approval[] = []) {
         reconnect = () => {};
       };
     },
+    onDisconnect: (fn: () => void) => {
+      disconnect = fn;
+      return () => {
+        disconnect = () => {};
+      };
+    },
   } as unknown as DaemonClient;
   const badge = new ApprovalBadge(
     client,
@@ -73,10 +80,14 @@ function setup(initial: Approval[] = []) {
     badge,
     counts,
     listeners,
+    timers,
+    disconnect: () => disconnect(),
     emit: (item: Approval) => {
       for (const fn of listeners) fn(item);
     },
     sync: (items: Approval[]) => {
+      defer = false;
+      fail = false;
       list = items;
       reconnect();
     },
@@ -93,6 +104,7 @@ function setup(initial: Approval[] = []) {
       reconnect();
     },
     resolve: (items: Approval[]) => resolveList?.(items),
+    pendingList: () => resolveList,
   };
 }
 
@@ -126,6 +138,7 @@ test("browser timers keep their global receiver and do not interrupt later appro
       return () => listeners.delete(fn);
     },
     onReconnect: () => () => {},
+    onDisconnect: () => () => {},
   } as unknown as DaemonClient;
   const badge = new ApprovalBadge(
     client,
@@ -207,6 +220,61 @@ test("events arriving during list requests override stale snapshots", async () =
   f.badge.stop();
 });
 
+test("disconnect clears pending approvals and timers immediately, reconnect reloads the live list", async () => {
+  const f = setup([approval("one")]);
+  await f.badge.start();
+  await flush();
+  expect(f.counts).toEqual([0, 1]);
+  const oldTimers = [...f.timers.values()];
+  f.disconnect();
+  await flush();
+  expect(f.counts).toEqual([0, 1, 0]);
+  expect(f.timers.size).toBe(0);
+  f.emit(approval("offline"));
+  for (const timer of oldTimers) timer();
+  await flush();
+  expect(f.counts).toEqual([0, 1, 0]);
+  expect(f.timers.size).toBe(0);
+  f.sync([approval("new"), approval("two")]);
+  await flush();
+  expect(f.counts).toEqual([0, 1, 0, 2]);
+  const liveTimers = [...f.timers.keys()];
+  for (const timer of oldTimers) timer();
+  await flush();
+  expect([...f.timers.keys()]).toEqual(liveTimers);
+  expect(f.counts).toEqual([0, 1, 0, 2]);
+  f.badge.stop();
+  f.sync([approval("stopped")]);
+  f.disconnect();
+  await flush();
+  expect(f.counts).toEqual([0, 1, 0, 2, 0]);
+  expect(f.listeners.size).toBe(0);
+});
+
+test("disconnect invalidates an in-flight snapshot even after reconnect has loaded a newer list", async () => {
+  const f = setup([approval("one")]);
+  await f.badge.start();
+  await flush();
+  f.defer();
+  const staleList = f.pendingList();
+  f.disconnect();
+  await flush();
+  expect(f.counts).toEqual([0, 1, 0]);
+  f.sync([approval("new"), approval("two")]);
+  await flush();
+  staleList?.([approval("stale")]);
+  await flush();
+  expect(f.counts).toEqual([0, 1, 0, 2]);
+  f.disconnect();
+  f.defer();
+  f.disconnect();
+  f.resolve([approval("offline")]);
+  await flush();
+  expect(f.counts).toEqual([0, 1, 0, 2, 0]);
+  expect(f.timers.size).toBe(0);
+  f.badge.stop();
+});
+
 test("failed resync preserves known state and later events still update it", async () => {
   const f = setup([approval("one")]);
   await f.badge.start();
@@ -226,6 +294,7 @@ test("native errors do not block subsequent count writes", async () => {
     request: async () => [approval("one")],
     on: () => () => {},
     onReconnect: () => () => {},
+    onDisconnect: () => () => {},
   } as unknown as DaemonClient;
   const badge = new ApprovalBadge(
     client,

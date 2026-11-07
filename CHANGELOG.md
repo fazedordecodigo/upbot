@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Fixed
+- Clear pending-approval badges immediately on daemon disconnect and reload on reconnect,
+  ignoring snapshots and expiry callbacks from the previous connection.
 - Keep badge expiry timers bound to the browser's global timer API, preventing a WebKit
   exception from stopping pending-approval notification delivery.
 - Request macOS badge authorization so pending-approval Dock counts can appear. Existing

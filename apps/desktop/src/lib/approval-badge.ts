@@ -5,14 +5,16 @@ import { errorFields, logWarn } from "./log";
 export class ApprovalBadge {
   private approvals = new Map<string, Approval>();
   private off: (() => void)[] = [];
-  private timer?: ReturnType<typeof setTimeout>;
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private stopped = false;
   private count = -1;
   private writes = Promise.resolve();
   private revision = 0;
+  private timerRevision = 0;
+  private disconnected = false;
 
   constructor(
-    private client: Pick<DaemonClient, "request" | "on" | "onReconnect">,
+    private client: Pick<DaemonClient, "request" | "on" | "onReconnect" | "onDisconnect">,
     private setCount: (count: number) => Promise<void>,
     private now = Date.now,
     private schedule = (callback: () => void, delay: number) => setTimeout(callback, delay),
@@ -28,7 +30,9 @@ export class ApprovalBadge {
   }
 
   private refresh() {
+    const timerRevision = ++this.timerRevision;
     if (this.timer !== undefined) this.unschedule(this.timer);
+    this.timer = undefined;
     let next = Number.POSITIVE_INFINITY;
     for (const [id, approval] of this.approvals) {
       if (approval.status !== "pending" || approval.expiresAt <= this.now())
@@ -37,7 +41,22 @@ export class ApprovalBadge {
     }
     this.publish(this.approvals.size);
     if (Number.isFinite(next))
-      this.timer = this.schedule(() => this.refresh(), Math.min(2147483647, next - this.now()));
+      this.timer = this.schedule(
+        () => {
+          if (!this.stopped && !this.disconnected && timerRevision === this.timerRevision)
+            this.refresh();
+        },
+        Math.min(2147483647, next - this.now()),
+      );
+  }
+
+  private clear() {
+    this.revision++;
+    this.timerRevision++;
+    if (this.timer !== undefined) this.unschedule(this.timer);
+    this.timer = undefined;
+    this.approvals.clear();
+    this.publish(0);
   }
 
   private async sync() {
@@ -48,7 +67,7 @@ export class ApprovalBadge {
     );
     try {
       const approvals = await this.client.request("approvals.list", {});
-      if (this.stopped || revision !== this.revision) return;
+      if (this.stopped || this.disconnected || revision !== this.revision) return;
       this.approvals = new Map(approvals.map((approval) => [approval.id, approval]));
       for (const [id, approval] of updates) this.approvals.set(id, approval);
       this.refresh();
@@ -63,10 +82,18 @@ export class ApprovalBadge {
     this.publish(0);
     this.off.push(
       this.client.on("approval.updated", (approval) => {
+        if (this.stopped || this.disconnected) return;
         this.approvals.set(approval.id, approval);
         this.refresh();
       }),
-      this.client.onReconnect(() => void this.sync()),
+      this.client.onDisconnect(() => {
+        this.disconnected = true;
+        this.clear();
+      }),
+      this.client.onReconnect(() => {
+        this.disconnected = false;
+        void this.sync();
+      }),
     );
     await this.sync();
   }
@@ -74,8 +101,6 @@ export class ApprovalBadge {
   stop() {
     this.stopped = true;
     for (const off of this.off) off();
-    if (this.timer !== undefined) this.unschedule(this.timer);
-    this.approvals.clear();
-    this.publish(0);
+    this.clear();
   }
 }
