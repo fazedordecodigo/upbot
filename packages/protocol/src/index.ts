@@ -663,9 +663,11 @@ export const Approval = z.object({
   permission: AppPermissionKind.optional(),
   previousLevel: AppPermissionLevel.optional(),
   background: z.boolean(),
-  status: z.enum(["pending", "approved", "denied", "expired", "done"]),
+  status: z.enum(["pending", "approved", "denied", "expired", "done", "interrupted"]),
   createdAt: z.number(),
   expiresAt: z.number(),
+  /** Set when a daemon restart ended the approval before any decision. */
+  interruptedAt: z.number().optional(),
 });
 export type Approval = z.infer<typeof Approval>;
 
