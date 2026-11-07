@@ -19,6 +19,9 @@
 - Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
   DPAPI scripts load System.Security without `Add-Type`, a timed-out call is retried, and a
   persistent timeout reports an error instead of writing a plaintext key.
+- Gemini bots start with `gemini --acp` (the old `--experimental-acp` flag is deprecated). When
+  Gemini is signed out, the error now says to run `gemini` and choose Sign in with Google, a
+  Gemini API key or Vertex AI, including when a cached Google sign-in fails.
 
 ## 0.3.0
 
