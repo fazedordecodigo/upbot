@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Native Linux approval notifications via freedesktop D-Bus, with actions when supported.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.

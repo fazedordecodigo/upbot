@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+#[cfg(target_os = "linux")]
+#[path = "notifications_linux.rs"]
+mod platform;
+
 #[cfg(target_os = "macos")]
 #[path = "notifications_macos.rs"]
 mod platform;
@@ -107,6 +111,8 @@ pub fn forward_launch(app: &AppHandle, args: &[String]) {
 pub type Completion<T> = Box<dyn FnOnce(Result<T, String>) + Send>;
 
 pub fn setup(app: &AppHandle) -> Result<(), String> {
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let _ = app;
     #[cfg(target_os = "macos")]
     platform::setup(app);
     #[cfg(target_os = "windows")]
@@ -127,7 +133,16 @@ async fn on_main<T: Send + 'static>(
     app: AppHandle,
     work: impl FnOnce(Completion<T>) + Send + 'static,
 ) -> Result<T, String> {
+    #[cfg(target_os = "linux")]
+    let _ = &app;
     let (sender, receiver) = tokio::sync::oneshot::channel();
+    #[cfg(target_os = "linux")]
+    tauri::async_runtime::spawn_blocking(move || {
+        work(Box::new(move |result| {
+            let _ = sender.send(result);
+        }))
+    });
+    #[cfg(not(target_os = "linux"))]
     app.run_on_main_thread(move || {
         work(Box::new(move |result| {
             let _ = sender.send(result);
@@ -148,16 +163,18 @@ pub async fn notifications_initialize(app: AppHandle) -> Result<bool, String> {
     {
         return Err(error);
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     let native_app = app.clone();
     on_main(app, move |done| {
         #[cfg(target_os = "macos")]
         platform::initialize(done);
+        #[cfg(target_os = "linux")]
+        done(Ok(platform::initialize(native_app)));
         #[cfg(target_os = "windows")]
         done(Ok(native_app
             .try_state::<platform::WindowsNotifications>()
             .is_some()));
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         done(Ok(false));
     })
     .await
@@ -167,13 +184,16 @@ pub async fn notifications_initialize(app: AppHandle) -> Result<bool, String> {
 pub async fn notifications_post(app: AppHandle, notification: Notification) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let native_app = app.clone();
+    #[cfg(not(target_os = "linux"))]
     let id = notification.id.clone();
     let result = on_main(app, move |done| {
         #[cfg(target_os = "macos")]
         platform::post(notification, done);
+        #[cfg(target_os = "linux")]
+        done(platform::post(notification));
         #[cfg(target_os = "windows")]
         done(platform::post(&native_app, notification));
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         {
             let _ = notification;
             done(Ok(()));
@@ -181,6 +201,9 @@ pub async fn notifications_post(app: AppHandle, notification: Notification) -> R
     })
     .await;
     if let Err(error) = &result {
+        #[cfg(target_os = "linux")]
+        log::warn!("Native notification post: {error}");
+        #[cfg(not(target_os = "linux"))]
         log::warn!("could not post notification {id}: {error}");
     }
     result
@@ -190,21 +213,27 @@ pub async fn notifications_post(app: AppHandle, notification: Notification) -> R
 pub async fn notifications_remove(app: AppHandle, id: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let native_app = app.clone();
+    #[cfg(not(target_os = "linux"))]
     let log_id = id.clone();
     let result = on_main(app, move |done| {
         #[cfg(target_os = "macos")]
         platform::remove(&id);
+        #[cfg(target_os = "linux")]
+        done(platform::remove(&id));
         #[cfg(target_os = "windows")]
         {
             done(platform::remove(&native_app, &id));
         }
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         let _ = id;
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
         done(Ok(()));
     })
     .await;
     if let Err(error) = &result {
+        #[cfg(target_os = "linux")]
+        log::warn!("Native notification remove: {error}");
+        #[cfg(not(target_os = "linux"))]
         log::warn!("could not remove notification {log_id}: {error}");
     }
     result
