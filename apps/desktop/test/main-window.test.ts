@@ -983,6 +983,11 @@ test("routine history opens chat and appears in the saved routine dialog", async
 
 test("skill detail renders fresh Markdown and raw text", async () => {
   await rpc.request("skills.save", {
+    name: "occupied-skill-name",
+    description: "Outra habilidade",
+    body: "Não sobrescrever",
+  });
+  await rpc.request("skills.save", {
     name: "detail-fixture",
     description: "Descrição de teste",
     body: "# Conteúdo completo\n\n**Texto destacado**",
@@ -1000,17 +1005,27 @@ test("skill detail renders fresh Markdown and raw text", async () => {
     expect(await target.locator("pre").textContent()).toContain("description: Descrição de teste");
     await capture("skill-detail-raw", target);
     await target.getByRole("button", { name: "Editar", exact: true }).click();
+    await target.getByPlaceholder("Nome (kebab-case)").fill("occupied-skill-name");
+    await target.getByRole("button", { name: "Salvar", exact: true }).click();
+    await target
+      .getByRole("alert")
+      .getByText("Já existe uma habilidade com esse nome. Escolha outro nome.")
+      .waitFor();
     await target.getByPlaceholder("Nome (kebab-case)").fill("Resumo Renomeado");
     await target.getByRole("button", { name: "Salvar", exact: true }).click();
     await target.getByRole("heading", { name: "resumo-renomeado", exact: true }).waitFor();
-    expect((await rpc.request("skills.get", { name: "detail-fixture" })).name).toBe(
-      "detail-fixture",
-    );
+    await expect(rpc.request("skills.get", { name: "detail-fixture" })).rejects.toMatchObject({
+      code: "not_found",
+    });
     await target.getByRole("button", { name: "Voltar", exact: true }).click();
     await target.getByRole("button", { name: "Nova habilidade", exact: true }).waitFor();
+    await target.getByRole("button", { name: "resumo-renomeado", exact: true }).waitFor();
+    expect(await target.getByRole("button", { name: "detail-fixture", exact: true }).count()).toBe(
+      0,
+    );
   } finally {
     await target.close();
-    await rpc.request("skills.delete", { name: "detail-fixture" });
+    await rpc.request("skills.delete", { name: "occupied-skill-name" });
     await rpc.request("skills.delete", { name: "resumo-renomeado" });
   }
 }, 15000);

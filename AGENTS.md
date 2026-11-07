@@ -381,6 +381,10 @@ return not_found. Desktop skill details offer read-only previous Markdown/raw ve
 metadata and return to current; no restore action or mobile access is exposed.
 `skills.get` and `skills.versions` expose exact file contents as `raw` (including
 frontmatter) for raw viewing; Markdown uses parsed `body`. `skills.list` omits raw.
+`skills.save` accepts optional `previousName`: renames move the skill directory and its
+history, then save a revision. An occupied destination fails with `bad_request` without
+changing either skill; a missing previous name behaves like a plain save. Skills are
+shared globally, not assigned to bots; `skills.changed` has an empty payload.
 Bridge tools: `remember`, `forget`, `list_memories`, `list_skills`, `read_skill`,
 `create_skill`, `revise_skill`, `create_agent`. The first prompt of every fresh session is
 prefixed with `<agent_memories>` and `<skills_library>` (index only). UI:

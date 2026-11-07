@@ -334,6 +334,7 @@ const MemoryText = z.string().trim().min(1).max(2_000);
 export const SkillSaveParams = z
   .object({
     name: z.string().trim().min(1).max(64),
+    previousName: z.string().trim().min(1).max(64).optional(),
     description: z.string().max(500),
     body: z.string().min(1).max(200_000),
   })

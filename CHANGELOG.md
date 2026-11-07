@@ -15,6 +15,7 @@
   Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
 ### Fixed
+- Renomear uma habilidade move seu histórico e remove o nome antigo, sem sobrescrever outra habilidade.
 - Keep Linux interrupted-approval notices until reviewed without presenting replacements
   during mute or replaying them on unmute.
 - Linux approval notifications no longer reappear on server expiry while Boto is muted.
