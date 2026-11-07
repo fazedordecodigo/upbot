@@ -450,6 +450,12 @@ with periodic `relay.audit_suppressed` summaries (`RELAY_AUDIT_WINDOW_MS`).
   `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` (+ `APPLE_ID`, `APPLE_PASSWORD`,
   `APPLE_TEAM_ID`) secrets exist. Bump `version` in `tauri.conf.json` before tagging.
 - In-app updates: `tauri-plugin-updater` + `components/UpdateButton.tsx` (sidebar footer).
+  Repository URLs now use `fazedordecodigo/boto`. Installed clients polling the old
+  `upbot` endpoint follow GitHub's repository redirect; do not recreate an `upbot`
+  repository under the account, which would break that redirect. Release metadata uses
+  `github.repository` for asset URLs. The v0.4.0 tag shipped as UpBot but reported 0.3.0;
+  workspace packages, desktop Rust crate and host now prepare 0.5.0 consistently.
+  CHANGELOG keeps post-v0.4.0 work under `0.5.0 (Unreleased)` until the next tag.
 - Icon source: `apps/desktop/branding/icon.svg` -> `icon.png` (Chrome headless render) ->
   `bunx tauri icon branding/icon.png` (from `apps/desktop`).
 
