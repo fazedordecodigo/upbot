@@ -63,6 +63,8 @@ const CRED_HINT: Record<VmCredentialProvider, Partial<Record<VmCredentialKind, s
   codex: { api_key: "Chave de API da OpenAI" },
   gemini: { api_key: "Chave de API do Gemini (aistudio.google.com/apikey)" },
   cursor: { api_key: "Chave de API do Cursor (painel Cursor → Integrations)" },
+  devin: { api_key: "Chave de API do Windsurf/Devin" },
+  grok: { api_key: "Chave de API da xAI (console.x.ai)" },
 };
 
 function VmCredentials({
@@ -148,6 +150,8 @@ function VmCredentials({
             <option value="codex">codex</option>
             <option value="gemini">gemini</option>
             <option value="cursor">cursor</option>
+            <option value="devin">devin</option>
+            <option value="grok">grok</option>
           </Select>
         </div>
         <div className={styles.selectField}>

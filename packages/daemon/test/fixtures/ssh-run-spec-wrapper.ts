@@ -33,6 +33,8 @@ process.stdin.on("data", (chunk: Buffer) => {
             "CODEX_API_KEY",
             "GEMINI_API_KEY",
             "CURSOR_API_KEY",
+            "WINDSURF_API_KEY",
+            "XAI_API_KEY",
           ];
           appendFileSync(
             logPath,

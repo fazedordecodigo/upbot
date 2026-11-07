@@ -65,6 +65,17 @@ describe("microVM credentials", () => {
     creds.delete("gemini");
     creds.delete("cursor");
     expect(creds.env("devin")).toEqual({});
+    for (const [provider, variable] of [
+      ["devin", "WINDSURF_API_KEY"],
+      ["grok", "XAI_API_KEY"],
+    ] as const) {
+      creds.set(provider, "api_key", "fake-vm-key");
+      expect(creds.env(provider)).toEqual({ [variable]: "fake-vm-key" });
+      expect(() => creds.set(provider, "oauth_token", "fake-token")).toThrow();
+      expect(JSON.stringify(creds.list())).not.toContain("fake-vm-key");
+      creds.delete(provider);
+      expect(creds.env(provider)).toEqual({});
+    }
     expect(() => creds.set("codex", "oauth_token", "x".repeat(10))).toThrow();
     creds.delete("codex");
     expect(creds.env("codex")).toEqual({});

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   createReadStream,
@@ -21,6 +21,8 @@ import {
 } from "./firecracker-ssh.fixtures";
 import { DaemonClient, type DaemonHandle, startDaemon, stopTestChildren, tmp } from "./helpers";
 
+setDefaultTimeout(30000);
+
 const enabled = process.env.BOTO_REAL_FIRECRACKER === "1" && existsSync("/usr/sbin/sshd");
 const providersRequested =
   process.env.BOTO_REAL_FIRECRACKER === "1" && process.env.BOTO_REAL_PROVIDERS === "1";
@@ -31,6 +33,8 @@ const providerCliPaths = {
   gemini: "/usr/local/bin/gemini",
   opencode: "/usr/local/bin/opencode",
   cursor: "/opt/cursor-agent-home/.local/bin/agent",
+  devin: "/usr/local/bin/devin",
+  grok: "/usr/local/bin/grok",
 };
 const missingProviderClis = providersRequested
   ? Object.entries(providerCliPaths)
@@ -107,6 +111,8 @@ async function runGuest(
     "CODEX_API_KEY",
     "GEMINI_API_KEY",
     "CURSOR_API_KEY",
+    "WINDSURF_API_KEY",
+    "XAI_API_KEY",
   ])
     delete guestHostEnv[name];
   const proc = Bun.spawn(["bun", HOST_MAIN, "run"], {
@@ -237,6 +243,7 @@ describe.skipIf(!enabled)("real Firecracker SSH integration", () => {
   let username: string;
   let port: number;
   let providerRunSpecEnvLog: string | null = null;
+  let daemonEnv: Record<string, string>;
 
   beforeAll(async () => {
     sshDir = tmp("fc-sshd-");
@@ -300,7 +307,7 @@ describe.skipIf(!enabled)("real Firecracker SSH integration", () => {
       providersRequested && providerRunSpecEnvLog
         ? [process.execPath, SSH_RUN_SPEC_WRAPPER, providerRunSpecEnvLog]
         : ["ssh", "-o", `UserKnownHostsFile=${knownHosts}`];
-    daemon = await startDaemon(dataDir, agentsRoot, TOKEN, {
+    daemonEnv = {
       FAKE_ACP_STATE_DIR: stateDir,
       BOTO_PROVIDER_COMMAND_DEVIN: JSON.stringify(["bun", "/opt/boto/fake-acp-agent.js"]),
       BOTO_SSH_COMMAND: JSON.stringify(sshCommand),
@@ -314,14 +321,17 @@ describe.skipIf(!enabled)("real Firecracker SSH integration", () => {
             BOTO_PROVIDER_COMMAND_GEMINI: "",
             BOTO_PROVIDER_COMMAND_OPENCODE: "",
             BOTO_PROVIDER_COMMAND_CURSOR: "",
+            BOTO_PROVIDER_COMMAND_GROK: "",
             BOTO_ACP_COMMAND_CLAUDE: "",
             BOTO_ACP_COMMAND_CODEX: "",
             BOTO_ACP_COMMAND_GEMINI: "",
             BOTO_ACP_COMMAND_OPENCODE: "",
             BOTO_ACP_COMMAND_CURSOR: "",
+            BOTO_ACP_COMMAND_GROK: "",
           }
         : {}),
-    });
+    };
+    daemon = await startDaemon(dataDir, agentsRoot, TOKEN, daemonEnv);
     const daemonStderr = daemon.proc.stderr;
     if (!daemonStderr || typeof daemonStderr === "number")
       throw new Error("daemon stderr is unavailable");
@@ -481,23 +491,49 @@ describe.skipIf(!enabled)("real Firecracker SSH integration", () => {
   }, 240000);
 
   describe.skipIf(!realProvidersEnabled)("real providers in Firecracker", () => {
-    test("runs all five installed provider CLIs in a real guest", async () => {
+    beforeAll(async () => {
+      client.close();
+      daemon.proc.kill("SIGTERM");
+      await daemon.proc.exited;
+      await daemonStderrDone;
+      daemon = await startDaemon(daemonDirs[1]!, daemonDirs[2]!, TOKEN, {
+        ...daemonEnv,
+        BOTO_PROVIDER_COMMAND_DEVIN: "",
+        BOTO_ACP_COMMAND_DEVIN: "",
+      });
+      const reader = (daemon.proc.stderr as ReadableStream<Uint8Array>).getReader();
+      daemonStderrDone = (async () => {
+        const decoder = new TextDecoder();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          daemonStderrText += decoder.decode(value, { stream: true });
+        }
+        daemonStderrText += decoder.decode();
+      })();
+      client = await DaemonClient.connect(daemon.port, TOKEN);
+    });
+
+    test("runs all seven installed provider CLIs in a real guest", async () => {
       const result = await runGuest(
         root,
         `cli-versions-${crypto.randomUUID()}`,
         [
           "sh",
           "-c",
-          "claude --version && codex --version && gemini --version && opencode --version && agent --version",
+          "claude --version && codex --version && gemini --version && opencode --version && agent --version && devin --version && grok --no-auto-update --version",
         ],
         {},
-        "",
+        "\n",
+        26000,
       );
       expect(result.code).toBe(0);
+      expect(result.stdout).toContain(`devin ${process.env.DEVIN_CLI_VERSION ?? "3000.12.17"} (`);
+      expect(result.stdout).toContain(process.env.GROK_CLI_VERSION ?? "1.0.77");
       console.log(`Guest CLI versions:\n${result.stdout.trim()}`);
     }, 90000);
 
-    test("surfaces signed-out Gemini, OpenCode, and Cursor ACP errors and cleans up VMs", async () => {
+    test("surfaces signed-out ACP provider errors and cleans up VMs", async () => {
       host = (await client.request("hosts.install", { id: host.id })) as RemoteHost;
       host = (await client.request("hosts.check", { id: host.id })) as RemoteHost;
       expect(host.preflight?.firecrackerReady).toBe(true);
@@ -510,8 +546,10 @@ describe.skipIf(!enabled)("real Firecracker SSH integration", () => {
         gemini: "gemini",
         opencode: "opencode auth login",
         cursor: "agent login",
+        devin: "devin auth login",
+        grok: "grok login",
       } as const;
-      for (const provider of ["gemini", "opencode", "cursor"] as const) {
+      for (const provider of ["gemini", "opencode", "cursor", "devin", "grok"] as const) {
         const probe = await runGuest(
           root,
           `acp-probe-${provider}-${crypto.randomUUID()}`,
@@ -638,7 +676,7 @@ describe.skipIf(!enabled)("real Firecracker SSH integration", () => {
               botoKeys: string[];
             },
         );
-      for (const provider of ["gemini", "opencode", "cursor"] as const) {
+      for (const provider of ["gemini", "opencode", "cursor", "devin", "grok"] as const) {
         const specEnvs = runSpecs.filter((entry) => entry.agentId === providerAgentIds[provider]);
         expect(specEnvs.length).toBeGreaterThan(0);
         for (const entry of specEnvs) {
@@ -882,7 +920,7 @@ describe.skipIf(!enabled)("real Firecracker SSH integration", () => {
           );
 
       const runCredentialed = async (
-        provider: "claude" | "codex" | "gemini" | "cursor",
+        provider: "claude" | "codex" | "gemini" | "cursor" | "devin" | "grok",
         kind: "api_key" | "oauth_token",
         key: string,
         envKeys: string[],
@@ -1011,7 +1049,10 @@ describe.skipIf(!enabled)("real Firecracker SSH integration", () => {
         return agent.id;
       };
 
-      const runNonePlacement = async (provider: "gemini" | "cursor", key: string) => {
+      const runNonePlacement = async (
+        provider: "gemini" | "cursor" | "devin" | "grok",
+        key: string,
+      ) => {
         const agent = (await client.request("agents.create", {
           name: `credential-none-${provider}`,
           provider,
@@ -1108,6 +1149,16 @@ describe.skipIf(!enabled)("real Firecracker SSH integration", () => {
       expect(cursorEnv.stderr).not.toContain(cursorKey);
       console.log("CURSOR_API_KEY reached a guest process through RunSpec env");
       await runNonePlacement("cursor", cursorKey);
+
+      for (const [provider, variable] of [
+        ["devin", "WINDSURF_API_KEY"],
+        ["grok", "XAI_API_KEY"],
+      ] as const) {
+        const key = `sk-${provider}-fake-${crypto.randomUUID()}`;
+        await runCredentialed(provider, "api_key", key, [variable]);
+        await runNonePlacement(provider, key);
+        expect(daemonStderrText).not.toContain(key);
+      }
 
       await Bun.sleep(100);
       expect(daemonStderrText.includes(claudeApiKey)).toBe(false);
