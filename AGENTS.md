@@ -404,7 +404,13 @@ is `BOTO_VAULT_KEY` (64 hex, tests), macOS Keychain (service `Boto`, account `va
 an existing `<data-dir>/vault.key`, then Windows DPAPI or Linux Secret Service. Linux writes
 `vault.key.location` after a successful Secret Service store so a locked/unavailable keyring
 cannot silently orphan secrets; when secure storage is unavailable, a 0600 plaintext key file
-is used with a warning. Fallback diagnostics are covered by `test/vault-platform.test.ts` and
+is used with a warning. Windows DPAPI runs `powershell.exe` with .NET-only scripts and
+`$PSModuleAutoLoadingPreference = 'None'`: `Add-Type -AssemblyName` took 25-36 s per cold call
+on `windows-11-arm` (process start and the Utility module import were under 1 s). A timed-out call is retried once
+(`DPAPI_TIMEOUTS_MS`, 30 s then 90 s); a persistent timeout throws and never writes a plaintext
+key, while a missing `powershell.exe`, non-zero exit or write failure keeps the warned
+fallback. Warnings and errors name only an error code, exit status or timeout, never
+PowerShell stderr. Fallback diagnostics are covered by `test/vault-platform.test.ts` and
 `test/vault-fallback.e2e.test.ts`. Existing plaintext keys are kept without migration.
 Per-secret agent allowlist. RPC
 `vault.list/set/setAccess/delete` (values never returned), event `vault.changed`; bridge
@@ -491,12 +497,12 @@ with periodic `relay.audit_suppressed` summaries (`RELAY_AUDIT_WINDOW_MS`).
 ## CI, releases, updates, branding
 
 - `.github/workflows/ci.yml`: lint/typecheck on Ubuntu; tests, daemon build, Rust check and
-  desktop build on macOS ARM64, Linux x64/ARM64 and Windows x64.
+  desktop build on macOS ARM64 and Linux/Windows x64 and ARM64.
 - `.github/workflows/release.yml`: on `v*` tags, tauri-action builds macOS `.app`/`.dmg`,
-  Linux x64/ARM64 `.AppImage`/`.deb`/`.rpm` and per-user Windows x64 NSIS
+  Linux x64/ARM64 `.AppImage`/`.deb`/`.rpm` and per-user Windows x64/ARM64 NSIS
   `.exe` into a draft release. Linux uses Ubuntu 22.04 on both architectures for the same
   glibc baseline. Native Bun host detection in `beforeBuildCommand` builds the matching sidecar.
-  It composes `latest.json` from four architecture-specific updater assets and signatures
+  It composes `latest.json` from five architecture-specific updater assets and signatures
   before publishing (macOS `.app.tar.gz`, Linux AppImage, Windows NSIS; not deb/rpm).
   RPM and deb packages do not self-update.
   Updater signing uses the `TAURI_SIGNING_PRIVATE_KEY` repo secret (pubkey in `tauri.conf.json`
