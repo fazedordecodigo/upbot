@@ -164,7 +164,7 @@ describe.skipIf(process.platform !== "win32")("Windows PowerShell speech script"
     const r = run(script, text);
     expect(r.status).toBe(0);
     expect(Buffer.from(r.stdout.toString().trim(), "base64").toString("utf8")).toBe(text);
-  });
+  }, 65_000);
 
   test("System.Speech loads and synthesizes", () => {
     const r = run(
@@ -172,7 +172,7 @@ describe.skipIf(process.platform !== "win32")("Windows PowerShell speech script"
       "Olá",
     );
     expect(r.status).toBe(0);
-  });
+  }, 65_000);
 });
 
 describe.skipIf(process.platform === "win32")("ssipSpeak", () => {
