@@ -125,6 +125,19 @@ describe("classifyStartupError", () => {
     );
   });
 
+  test("keeps an earlier sign-in line when a later stderr line is only an HTTP 401", () => {
+    const error = classifyStartupError(
+      "codex",
+      "initialize timed out",
+      "Authentication failed\nHTTP 401",
+      null,
+    );
+    expect(error.code).toBe("auth_required");
+    expect(error.message).toBe(
+      "codex requires sign-in. Run `codex login` in a terminal. (Authentication failed)",
+    );
+  });
+
   test("honors the internal fallback code for resume attempts", () => {
     const error = classifyStartupError("claude", "boom", "", null, "internal");
     expect(error.code).toBe("internal");

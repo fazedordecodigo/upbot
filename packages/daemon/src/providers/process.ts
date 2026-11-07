@@ -128,7 +128,7 @@ export function classifyStartupError(
   const authLine = tail
     .split("\n")
     .map((line) => line.trim())
-    .findLast((line) => isVmCredentialRejection(line));
+    .findLast((line) => (credential ? isVmCredentialRejection(line) : AUTH_RE.test(line)));
   const auth =
     startupAuthError(provider, detail, credential) ??
     (authLine ? startupAuthError(provider, authLine, credential) : null);
