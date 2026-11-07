@@ -10,7 +10,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { DaemonClient } from "../lib/daemon";
 import { errorMessage } from "../lib/errors";
-import { Button, Field, Select, Tag } from "./ds/controls";
+import { Button, Field, Select } from "./ds/controls";
 import styles from "./HostsView.module.css";
 
 const subStatus: Record<Subagent["status"], string> = {
@@ -19,6 +19,13 @@ const subStatus: Record<Subagent["status"], string> = {
   failed: "Falhou",
   stopped: "Parado",
 };
+
+const subIndicator = {
+  running: "run",
+  done: "ok",
+  failed: "err",
+  stopped: "idle",
+} as const;
 
 function Preflight({ h }: { h: RemoteHost }) {
   const p = h.preflight;
@@ -398,7 +405,20 @@ export function HostsView({ client, agents }: { client: DaemonClient; agents: Ag
             .reverse()
             .map((s) => (
               <div key={s.agentId} className={styles.row}>
-                <Tag>{subStatus[s.status]}</Tag>
+                <span className={`${styles.status} ${styles[subIndicator[s.status]]}`}>
+                  <svg className={styles.indicator} viewBox="0 0 20 20" aria-hidden="true">
+                    {s.status === "running" ? (
+                      <circle cx="10" cy="10" r="5" fill="currentColor" stroke="none" />
+                    ) : s.status === "done" ? (
+                      <path d="m4 10 4 4 8-8" />
+                    ) : s.status === "failed" ? (
+                      <path d="M10 3 18 17H2Z M10 8v4 M10 14v1" />
+                    ) : (
+                      <circle cx="10" cy="10" r="6" />
+                    )}
+                  </svg>
+                  {subStatus[s.status]}
+                </span>
                 <span className={styles.muted}>{nameOf(s.parentId)} →</span>
                 <span className={styles.truncate}>{s.task}</span>
               </div>

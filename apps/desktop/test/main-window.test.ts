@@ -1482,18 +1482,16 @@ test("Hosts settings retain creation, preflight, placement, credentials and acti
       else if (request.method === "placements.list") result = placements;
       else if (request.method === "subagents.list")
         result = hosts[0]?.root
-          ? [
-              {
-                agentId: "eco-sub",
-                parentId: bot.id,
-                batchId: "eco-batch",
-                task: "Tarefa de verificação",
-                status: "running",
-                result: null,
-                createdAt: Date.now(),
-                finishedAt: null,
-              },
-            ]
+          ? ["running", "done", "failed", "stopped"].map((status) => ({
+              agentId: `eco-sub-${status}`,
+              parentId: bot.id,
+              batchId: "eco-batch",
+              task: "Tarefa de verificação",
+              status,
+              result: null,
+              createdAt: Date.now(),
+              finishedAt: null,
+            }))
           : [];
       else if (request.method === "vmCredentials.list") result = creds;
       else if (request.method === "hosts.create") {
@@ -1562,7 +1560,21 @@ test("Hosts settings retain creation, preflight, placement, credentials and acti
     await target.getByRole("button", { name: "Instalar", exact: true }).click();
     await target.getByText("microVMs disponíveis", { exact: true }).waitFor();
     await target.getByRole("heading", { name: "Sub-bots", exact: true }).waitFor();
-    await target.getByText("Em execução", { exact: true }).waitFor();
+    const statusClasses = [];
+    for (const [label, indicator] of [
+      ["Em execução", "run"],
+      ["Concluído", "ok"],
+      ["Falhou", "err"],
+      ["Parado", "idle"],
+    ]) {
+      const status = target.getByText(label, { exact: true });
+      await status.waitFor();
+      const className = await status.getAttribute("class");
+      expect(className).toContain(`_${indicator}_`);
+      statusClasses.push(className);
+      expect(await status.locator("svg").getAttribute("aria-hidden")).toBe("true");
+    }
+    expect(new Set(statusClasses).size).toBe(4);
     await target.getByLabel(`Servidor de ${bot.name}`, { exact: true }).selectOption("eco-host");
     const isolation = target.getByLabel(`Isolamento de ${bot.name}`, { exact: true });
     await target.waitForFunction(

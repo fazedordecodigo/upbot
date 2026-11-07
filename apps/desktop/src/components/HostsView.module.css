@@ -20,5 +20,14 @@
 .botName { width: 160px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .truncate { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .action { flex: none; }
+.status { display: inline-flex; align-items: center; gap: var(--boto-space-1); padding: var(--boto-space-1) var(--boto-space-2); border: 1px solid currentColor; border-radius: var(--boto-radius-pill); font-size: var(--boto-font-size-small); }
+.run { color: var(--boto-color-status-run); }
+.ok { color: var(--boto-color-status-ok); }
+.err { color: var(--boto-color-danger); }
+.idle { color: var(--boto-color-status-idle); }
+.indicator { width: var(--boto-space-4); height: var(--boto-space-4); flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.run .indicator { animation: statusPulse var(--boto-duration-pulse) ease-in-out infinite; }
+@keyframes statusPulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .run .indicator { animation: none; } }
 .row select { max-width: 100%; }
 @media (max-width: 759px) { .page { padding: var(--boto-space-6) var(--boto-space-4) var(--boto-space-8); } .hostForm, .preflight, .credentialsForm { grid-template-columns: minmax(0, 1fr); } }
