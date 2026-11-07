@@ -1393,18 +1393,18 @@ test("skill save errors clear on cancel and when creating another skill", async 
     await target.keyboard.press("Meta+,");
     await target.getByRole("tab", { name: "Geral", exact: true }).waitFor();
     await target.getByRole("tab", { name: "Habilidades", exact: true }).click();
-    await target.getByRole("button", { name: "New skill", exact: true }).click();
-    await target.getByPlaceholder("name (kebab-case)").fill("test-skill");
-    await target.getByPlaceholder("When to use it").fill("For testing");
+    await target.getByRole("button", { name: "Nova habilidade", exact: true }).click();
+    await target.getByLabel("Nome (kebab-case)").fill("test-skill");
+    await target.getByLabel("Quando usar").fill("For testing");
     await target.locator("textarea").fill("Skill body");
-    await target.getByRole("button", { name: "Save", exact: true }).click();
+    await target.getByRole("button", { name: "Salvar", exact: true }).click();
     const error = target.getByText("Falha de teste", { exact: true });
     await error.waitFor();
     expect(consoleText.join("\n")).toContain("[desktop] skills.save_failed");
     expect(consoleText.join("\n")).not.toContain("test-skill");
-    await target.getByRole("button", { name: "Cancel", exact: true }).click();
+    await target.getByRole("button", { name: "Cancelar", exact: true }).click();
     expect(await error.count()).toBe(0);
-    await target.getByRole("button", { name: "New skill", exact: true }).click();
+    await target.getByRole("button", { name: "Nova habilidade", exact: true }).click();
     expect(await error.count()).toBe(0);
   } finally {
     await target.close();
@@ -1448,16 +1448,191 @@ test("browser close errors clear after a successful retry", async () => {
     await target.keyboard.press("Meta+,");
     await target.getByRole("tab", { name: "Geral", exact: true }).waitFor();
     await target.getByRole("tab", { name: "Navegador", exact: true }).click();
-    await target.getByRole("button", { name: "Close browser", exact: true }).waitFor();
+    await target.getByRole("button", { name: "Fechar navegador", exact: true }).waitFor();
     const error = target.getByText("Falha de teste", { exact: true });
-    await target.getByRole("button", { name: "Close browser", exact: true }).click();
+    await target.getByRole("button", { name: "Fechar navegador", exact: true }).click();
     await error.waitFor();
-    await target.getByRole("button", { name: "Close browser", exact: true }).click();
+    await target.getByRole("button", { name: "Fechar navegador", exact: true }).click();
     expect(await error.count()).toBe(0);
   } finally {
     await target.close();
   }
 }, 15000);
+
+test("Library screens retain empty states, labelled controls and load errors", async () => {
+  const target = await browser.newPage();
+  let fail = false;
+  const empty: Record<string, unknown> = {
+    "skills.list": [],
+    "browser.status": { available: false, running: false, tabs: [] },
+    "vault.list": [],
+    "gateways.list": [],
+    "marketplace.list": { sources: [], items: [], errors: [] },
+    "mobile.status": { enabled: false, urls: [], devices: [] },
+    "team.status": { configured: false, connected: false, members: [], sharedAgentIds: [] },
+    "team.messages": [],
+  };
+  await target.routeWebSocket(/\/ws\?/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      if (request.method in empty) {
+        socket.send(
+          JSON.stringify(
+            fail
+              ? { id: request.id, error: { code: "internal", message: "Falha da biblioteca" } }
+              : { id: request.id, result: empty[request.method] },
+          ),
+        );
+      } else server.send(message);
+    });
+  });
+  try {
+    await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await target.getByRole("button", { name: "Configurações", exact: true }).click();
+    const screens = [
+      ["Habilidades", "Nenhuma habilidade ainda."],
+      ["Navegador", "Nenhuma aba aberta."],
+      ["Cofre", "Nenhum segredo ainda."],
+      ["Gateways", "Nenhum gateway ainda."],
+      ["Marketplace", "Salvar registros"],
+      ["Celular", "Nenhum ainda."],
+      ["Equipe", "Entrar na equipe"],
+    ];
+    for (const [tab, text] of screens) {
+      await target.getByRole("tab", { name: tab, exact: true }).click();
+      await target.getByText(text, { exact: true }).waitFor();
+      for (const control of await target
+        .locator(".settings input, .settings textarea, .settings select")
+        .all()) {
+        expect(
+          await control.evaluate((element) => {
+            const input = element as HTMLInputElement;
+            return Boolean(input.getAttribute("aria-label") || input.labels?.length);
+          }),
+        ).toBe(true);
+      }
+    }
+    fail = true;
+    for (const [tab] of screens) {
+      await target.getByRole("tab", { name: tab, exact: true }).click();
+      await target.getByText("Falha da biblioteca", { exact: true }).first().waitFor();
+    }
+  } finally {
+    await target.close();
+  }
+}, 20000);
+
+test("Library forms retain skill, vault, gateway, mobile and team actions", async () => {
+  const target = await browser.newPage();
+  const calls: { method: string; params: Record<string, unknown> }[] = [];
+  let mobile = false;
+  await target.routeWebSocket(/\/ws\?/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      calls.push(request);
+      let result: unknown;
+      if (request.method === "mobile.status") result = { enabled: mobile, urls: [], devices: [] };
+      else if (request.method === "mobile.enable") {
+        mobile = request.params.enabled;
+        result = { ok: true };
+      } else if (request.method === "mobile.pair")
+        result = { code: "123456", expiresAt: Date.now() + 300000 };
+      else if (["gateways.create", "team.connect"].includes(request.method)) {
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            error: { code: "internal", message: "Falha de conexão" },
+          }),
+        );
+        return;
+      } else {
+        server.send(message);
+        return;
+      }
+      socket.send(JSON.stringify({ id: request.id, result }));
+    });
+  });
+  try {
+    await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await target.getByRole("button", { name: "Configurações", exact: true }).click();
+    await target.getByRole("tab", { name: "Habilidades", exact: true }).click();
+    await target.getByRole("button", { name: "Nova habilidade", exact: true }).click();
+    await target.getByLabel("Nome (kebab-case)").fill("eco-library-fixture");
+    await target.getByLabel("Quando usar").fill("Revisar telas");
+    await target.getByLabel("Conteúdo da habilidade").fill("Revise os controles.");
+    await target.getByRole("button", { name: "Salvar", exact: true }).click();
+    const skill = target.getByRole("listitem").filter({ hasText: "eco-library-fixture" });
+    await skill.waitFor();
+    await skill.getByRole("button", { name: "Editar", exact: true }).click();
+    expect(await target.getByLabel("Conteúdo da habilidade").inputValue()).toBe(
+      "Revise os controles.\n",
+    );
+    await target.getByRole("button", { name: "Cancelar", exact: true }).click();
+    await skill.getByRole("button", { name: "Excluir", exact: true }).click();
+    await skill.waitFor({ state: "detached" });
+
+    await target.getByRole("tab", { name: "Cofre", exact: true }).click();
+    await target.getByLabel("Nome", { exact: true }).fill("eco.fixture");
+    await target.getByLabel("Valor", { exact: true }).fill("not-a-real-secret");
+    await target.getByRole("button", { name: "Salvar segredo", exact: true }).click();
+    const secret = target.getByRole("listitem").filter({ hasText: "eco.fixture" });
+    await secret.waitFor();
+    const access = secret.getByRole("checkbox", { name: bot.name, exact: true });
+    await access.click();
+    await target.waitForFunction(
+      (input) => input instanceof HTMLInputElement && input.checked,
+      await access.elementHandle(),
+    );
+    await access.click();
+    await target.waitForFunction(
+      (input) => input instanceof HTMLInputElement && !input.checked,
+      await access.elementHandle(),
+    );
+    await secret.getByRole("button", { name: "Excluir", exact: true }).click();
+    await secret.waitFor({ state: "detached" });
+
+    await target.getByRole("tab", { name: "Gateways", exact: true }).click();
+    await target.getByLabel("Serviço do gateway").selectOption("slack");
+    await target.getByLabel("Nome", { exact: true }).fill("Fixture");
+    await target.getByLabel("Token do bot (xoxb-…)").fill("fixture-token");
+    await target.getByLabel("Token do app com connections:write (xapp-…)").fill("fixture-app");
+    await target
+      .getByLabel("IDs de usuário autorizados (separados por vírgula)")
+      .fill("one, two three");
+    await target.getByRole("button", { name: "Conectar", exact: true }).click();
+    await target.getByText("Falha de conexão", { exact: true }).waitFor();
+    expect(calls.findLast((call) => call.method === "gateways.create")?.params).toEqual({
+      kind: "slack",
+      name: "Fixture",
+      agentId: bot.id,
+      tokens: { botToken: "fixture-token", appToken: "fixture-app" },
+      allowedUsers: ["one", "two", "three"],
+    });
+
+    await target.getByRole("tab", { name: "Celular", exact: true }).click();
+    await target.getByRole("switch", { name: "Permitir acesso pelo celular nesta rede" }).click();
+    await target.getByRole("button", { name: "Emparelhar dispositivo", exact: true }).click();
+    await target.getByText("123456", { exact: true }).waitFor();
+    await target.getByRole("switch", { name: "Permitir acesso pelo celular nesta rede" }).click();
+    await target.getByText("123456", { exact: true }).waitFor({ state: "detached" });
+
+    await target.getByRole("tab", { name: "Equipe", exact: true }).click();
+    await target
+      .getByLabel("URL do relay (https://relay.example.com)")
+      .fill("https://relay.example.com");
+    await target.getByLabel("Token de membro").fill("fixture-member");
+    await target.getByRole("button", { name: "Entrar na equipe", exact: true }).click();
+    await target.getByText("Falha de conexão", { exact: true }).waitFor();
+    expect(calls.findLast((call) => call.method === "team.connect")?.params).toEqual({
+      url: "https://relay.example.com",
+      token: "fixture-member",
+    });
+  } finally {
+    await target.close();
+  }
+}, 30000);
 
 test("capture matching prototype states when visual verification is requested", async () => {
   if (!out || !process.env.PHASE2_PROTOTYPE) return;
