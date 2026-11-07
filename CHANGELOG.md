@@ -10,6 +10,7 @@
 - Versões anteriores das habilidades, com leitura de Markdown ou texto bruto e retorno à versão atual.
 - Histórico de execuções das rotinas em Agendadas e nas configurações do bot, com estado da fila e do turno.
 - Detalhes de habilidades com Markdown e texto bruto; pedidos de permissão antigos ficam sem ações quando não estão mais pendentes no daemon.
+- Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases.
 - Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
   Authenticode signing; releases reject incomplete signing secrets and verify signatures.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
