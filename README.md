@@ -76,16 +76,18 @@ See `docs/design-system.md`.
 
 Download the installer for your OS from [Releases](https://github.com/fazedordecodigo/upbot/releases):
 
-- **macOS:** install the `.dmg`; the app updates itself. Builds are not yet notarized by
-  Apple — on first launch, open System Settings → Privacy & Security and click
+- **macOS:** install the `.dmg`; the app updates itself. Signed and notarized builds open
+  normally. For unsigned builds, open System Settings → Privacy & Security and click
   **Open Anyway** (or run `xattr -cr /Applications/Boto.app`). Versions before 0.2.1 were
   reported as "damaged"; use the `xattr` command for those.
-- **Windows x64:** run the per-user `.exe` installer. Builds are unsigned, so SmartScreen
-  may warn you: choose **More info → Run anyway** (in Portuguese, **Mais informações →
-  Executar assim mesmo**).
-- **Linux x64:** use the `.AppImage` for in-app updates (`chmod +x Boto_*.AppImage`, then
-  run it), or install the `.deb` with `sudo apt install ./Boto_*.deb`. The `.deb` does not
-  update itself; install newer `.deb` releases manually.
+- **Windows x64:** run the per-user `.exe` installer. Signed builds show the publisher;
+  SmartScreen may still warn until reputation builds, especially with OV certificates.
+  For unsigned builds, SmartScreen may warn: choose **More info → Run anyway** (in Portuguese,
+  **Mais informações → Executar assim mesmo**).
+- **Linux x64 / ARM64:** use the matching `.AppImage` for in-app updates
+  (`chmod +x Boto_*.AppImage`, then run it), or install the `.deb` with
+  `sudo apt install ./Boto_*.deb` or the `.rpm` with `sudo dnf install ./Boto-*.rpm`.
+  RPM and deb packages do not self-update; install newer releases manually.
 
 On Linux, install `libsecret-tools` to store the vault key in Secret Service. Otherwise
 Boto uses a plaintext key file with owner-only permissions and warns at startup. Windows
