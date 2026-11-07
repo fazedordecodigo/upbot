@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod menubar;
+mod badge;
 mod notifications;
 
 use rand::RngCore;
@@ -200,6 +201,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             daemon_connection,
+            badge::set_approval_badge,
             menubar::set_tray_count,
             menubar::menubar_hide,
             menubar::open_main,

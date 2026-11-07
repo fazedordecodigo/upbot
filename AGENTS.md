@@ -112,7 +112,15 @@ decides. Muted posts close the previous notification without delivery or replay.
 Buttons and click callbacks require
 the server's actions capability; without it notifications show but clicks cannot be reported.
 Native callbacks queue actions until the main frontend can drain them; the daemon
-remains authoritative. Optional dock/taskbar badges are not implemented.
+remains authoritative. `approval-badge.ts` counts unexpired pending approvals from
+`approvals.list` (startup/reconnect) and `approval.updated`, expiring them locally.
+The main window calls `set_approval_badge`: macOS Dock count, Windows taskbar overlay
+(1–9, then 9+), Linux Unity launcher count where supported by the desktop environment
+and installed .desktop entry. Zero clears it; email drafts are not counted. Badges
+on macOS require `UNAuthorizationOptions::Badge` alongside alert/sound authorization;
+existing installs may need System Settings → Notifications → Boto → Badge application icon
+enabled after upgrading. The app respects the system's disabled badge preference. Badges
+ignore notification mute, which suppresses popups rather than passive pending state.
 Blocked calls are memory-only and die with the daemon. Pending approvals are mirrored in
 `approval_records` (migration 22) with only the audit fields (kind, tool, secretName, app
 id/name, permission, background, expiresAt — never args, detail, bot-written titles or secret
