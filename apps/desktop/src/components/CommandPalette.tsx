@@ -130,8 +130,9 @@ export function CommandPalette({
         </div>
         <div className={s.footer}>
           {mod}K buscar · {mod}
-          {isMac ? "⇧" : "Shift+"}F bots · {mod}N novo bot · {mod}1–9 trocar de bot · {mod},
-          configurações · {mod}P páginas
+          {isMac ? "⇧" : "Shift+"}F bots · {mod}N nova sessão · {mod}
+          {isMac ? "⇧" : "Shift+"}N novo bot · {mod}1–9 trocar de bot · {mod}, configurações · {mod}
+          P páginas
         </div>
       </div>
     </div>

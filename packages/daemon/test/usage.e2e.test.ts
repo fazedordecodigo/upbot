@@ -112,6 +112,26 @@ describe("usage + compaction e2e", () => {
     expect(p).not.toContain("usage:1000/10000");
   });
 
+  test("new session starts fresh without earlier history", async () => {
+    await turn(a.id, "echo:before reset");
+    const newsBefore = readLog(stateDir).filter((l) => l.method === "session/new").length;
+    const created = c.waitForEventWhere(
+      "item.created",
+      (d) => d.agentId === a.id && d.kind === "session_reset",
+      20000,
+    );
+    await c.request("agents.newSession", { agentId: a.id });
+    await created;
+    expect((await c.request("agents.usage", { agentId: a.id })).usedTokens).toBeNull();
+    await turn(a.id, "echo:fresh");
+    expect(readLog(stateDir).filter((l) => l.method === "session/new").length).toBe(newsBefore + 1);
+    const p = lastPrompt();
+    expect(p).not.toContain("conversation_summary");
+    expect(p).not.toContain("conversation_history");
+    expect(p).not.toContain("before reset");
+    expect(p).toContain("echo:fresh");
+  });
+
   test("auto compaction runs when the context passes the threshold", async () => {
     const done = compactionDone(a.id, "auto");
     await turn(a.id, "usage:9000/10000");

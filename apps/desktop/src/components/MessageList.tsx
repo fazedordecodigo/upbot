@@ -245,6 +245,8 @@ const MessageItem = memo(function MessageItem({
             </details>
           )}
         </div>
+      ) : item.kind === "session_reset" ? (
+        <p className="meta day">Nova sessão</p>
       ) : null}
     </div>
   );

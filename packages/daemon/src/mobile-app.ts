@@ -165,6 +165,7 @@ function itemNode(it) {
   if (it.kind === "tool_call") return el("div", "meta", "⚙ " + it.title + " · " + it.status);
   if (it.kind === "error") return el("div", "meta error", it.message);
   if (it.kind === "compaction") return el("div", "meta", "Context compacted");
+  if (it.kind === "session_reset") return el("div", "meta", "New session");
   return null;
 }
 

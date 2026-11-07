@@ -197,6 +197,7 @@ export const ChatItem = z.discriminatedUnion("kind", [
     summary: z.string(),
     error: z.string().nullable().optional(),
   }),
+  ChatItemBase.extend({ kind: z.literal("session_reset") }),
 ]);
 export type ChatItem = z.infer<typeof ChatItem>;
 
@@ -822,6 +823,7 @@ export const AgentUsage = z.object({
 export type AgentUsage = z.infer<typeof AgentUsage>;
 export const AgentsUsageParams = z.object({ agentId: z.string() }).strict();
 export const AgentsCompactParams = z.object({ agentId: z.string() }).strict();
+export const AgentsNewSessionParams = z.object({ agentId: z.string() }).strict();
 
 // ---- Channels ----
 
@@ -1248,6 +1250,10 @@ export const methodMap = {
     result: z.object({ ok: z.literal(true) }),
   },
   "agents.compact": { params: AgentsCompactParams, result: z.object({ ok: z.literal(true) }) },
+  "agents.newSession": {
+    params: AgentsNewSessionParams,
+    result: z.object({ ok: z.literal(true) }),
+  },
   "channels.list": { params: ChannelsListParams, result: z.array(Channel) },
   "channels.create": { params: ChannelsCreateParams, result: Channel },
   "channels.history": { params: ChannelsHistoryParams, result: ChannelsHistoryResult },

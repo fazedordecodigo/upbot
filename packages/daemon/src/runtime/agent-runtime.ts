@@ -464,6 +464,10 @@ export class AgentRuntime {
         let summary: string | null = null;
         for (let k = all.length - 1; k >= 0; k--) {
           const it = all[k]!;
+          if (it.kind === "session_reset") {
+            start = k + 1;
+            break;
+          }
           if (it.kind === "compaction" && it.status === "completed") {
             start = k + 1;
             summary = it.summary;
@@ -618,6 +622,18 @@ export class AgentRuntime {
       if (this.status === "running") this.setStatus("idle");
       this.drain();
     }
+  }
+
+  /** Forgets the provider session and earlier history; the next turn starts from scratch. */
+  async newSession(): Promise<void> {
+    if (this.turn || this.compacting || this.sessionStarting || this.disposing) {
+      throw new RpcError("busy", "the agent is busy");
+    }
+    await this.dispose();
+    this.store.clearAgentSession(this.agent.id);
+    this.broadcast("item.created", this.store.createItem(this.agent.id, null, "session_reset", {}));
+    this.broadcast("agent.usage", this.store.clearContextUsage(this.agent.id));
+    this.drain();
   }
 
   cancel(): void {
