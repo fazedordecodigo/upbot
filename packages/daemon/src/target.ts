@@ -12,6 +12,14 @@ const TARGETS: Record<string, DaemonTarget> = {
     bunTarget: "bun-linux-x64",
     rustTriple: "x86_64-unknown-linux-gnu",
   },
+  "linux/arm64": {
+    bunTarget: "bun-linux-arm64",
+    rustTriple: "aarch64-unknown-linux-gnu",
+  },
+  "win32/arm64": {
+    bunTarget: "bun-windows-arm64",
+    rustTriple: "aarch64-pc-windows-msvc",
+  },
   "win32/x64": {
     bunTarget: "bun-windows-x64",
     rustTriple: "x86_64-pc-windows-msvc",

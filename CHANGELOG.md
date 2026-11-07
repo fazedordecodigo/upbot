@@ -9,6 +9,7 @@
 ### Added
 - Devin and Grok in the Firecracker guest image, with vault-backed microVM API keys
   and headless Grok ACP authentication.
+- Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases.
 - Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
   Authenticode signing; releases reject incomplete signing secrets and verify signatures.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
