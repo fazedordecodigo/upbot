@@ -100,6 +100,63 @@ const flush = async () => {
   for (let i = 0; i < 15; i++) await Promise.resolve();
 };
 
+test("browser timers keep their global receiver and do not interrupt later approval listeners", async () => {
+  const schedule = globalThis.setTimeout;
+  const unschedule = globalThis.clearTimeout;
+  const listeners = new Set<(item: Approval) => void>();
+  let scheduled = 0;
+  let cleared = 0;
+  const receivers: unknown[] = [];
+  const counts: number[] = [];
+  globalThis.setTimeout = function (this: unknown) {
+    receivers.push(this);
+    if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+    scheduled++;
+    return 1;
+  } as unknown as typeof setTimeout;
+  globalThis.clearTimeout = function (this: unknown) {
+    receivers.push(this);
+    if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+    cleared++;
+  } as typeof clearTimeout;
+  const client = {
+    request: async () => [],
+    on: (_event: string, fn: (item: Approval) => void) => {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    onReconnect: () => () => {},
+  } as unknown as DaemonClient;
+  const badge = new ApprovalBadge(
+    client,
+    async (count) => {
+      counts.push(count);
+    },
+    () => 1,
+  );
+  try {
+    await badge.start();
+    let notified = 0;
+    listeners.add(() => notified++);
+    for (const fn of listeners) fn(approval("one"));
+    for (const fn of listeners) fn(approval("one", { status: "denied" }));
+    for (const fn of listeners) fn(approval("two"));
+    badge.stop();
+    await flush();
+    expect(notified).toBe(3);
+    expect(counts).toEqual([0, 1, 0, 1, 0]);
+    expect(scheduled).toBe(2);
+    expect(cleared).toBeGreaterThanOrEqual(2);
+    expect(receivers.every((receiver) => receiver === undefined || receiver === globalThis)).toBe(
+      true,
+    );
+  } finally {
+    globalThis.setTimeout = schedule;
+    globalThis.clearTimeout = unschedule;
+    badge.stop();
+  }
+});
+
 test("counts only live pending approvals, deduplicates updates, and clears decisions and expiry", async () => {
   const f = setup([
     approval("one"),

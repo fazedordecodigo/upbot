@@ -15,8 +15,8 @@ export class ApprovalBadge {
     private client: Pick<DaemonClient, "request" | "on" | "onReconnect">,
     private setCount: (count: number) => Promise<void>,
     private now = Date.now,
-    private schedule = setTimeout,
-    private unschedule = clearTimeout,
+    private schedule = (callback: () => void, delay: number) => setTimeout(callback, delay),
+    private unschedule = (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
   ) {}
 
   private publish(count: number) {

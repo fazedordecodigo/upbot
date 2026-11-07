@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Fixed
+- Keep badge expiry timers bound to the browser's global timer API, preventing a WebKit
+  exception from stopping pending-approval notification delivery.
 - Request macOS badge authorization so pending-approval Dock counts can appear. Existing
   installations may need to enable Badge application icon in Boto's notification settings.
 
