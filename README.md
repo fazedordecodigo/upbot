@@ -84,9 +84,10 @@ Download the installer for your OS from [Releases](https://github.com/fazedordec
   SmartScreen may still warn until reputation builds, especially with OV certificates.
   For unsigned builds, SmartScreen may warn: choose **More info → Run anyway** (in Portuguese,
   **Mais informações → Executar assim mesmo**).
-- **Linux x64:** use the `.AppImage` for in-app updates (`chmod +x Boto_*.AppImage`, then
-  run it), or install the `.deb` with `sudo apt install ./Boto_*.deb`. The `.deb` does not
-  update itself; install newer `.deb` releases manually.
+- **Linux x64 / ARM64:** use the matching `.AppImage` for in-app updates
+  (`chmod +x Boto_*.AppImage`, then run it), or install the `.deb` with
+  `sudo apt install ./Boto_*.deb` or the `.rpm` with `sudo dnf install ./Boto-*.rpm`.
+  RPM and deb packages do not self-update; install newer releases manually.
 
 On Linux, install `libsecret-tools` to store the vault key in Secret Service. Otherwise
 Boto uses a plaintext key file with owner-only permissions and warns at startup. Windows
