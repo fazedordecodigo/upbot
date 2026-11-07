@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (Unreleased)
+
+### Changed
+- Renamed UpBot to Boto, with migration of existing UpBot workspaces, app data and vault keys.
+- Updated repository, updater and marketplace URLs to `fazedordecodigo/boto`; saved legacy
+  marketplace sources still migrate automatically without duplicating entries.
+- Refreshed the desktop with the Eco palette, packaged Host Grotesk and DM Mono fonts,
+  dark theme, responsive navigation and keyboard/accessibility improvements.
+- Improved chat streaming performance and rendered bot replies as Markdown.
+- Updated Skills, Browser, Vault, Gateways, Marketplace, Mobile and Team settings to the Eco
+  design-system controls and layout, with Brazilian Portuguese labels and help text.
+- Updated remote host and email settings to Eco design-system controls and layouts, with
+  Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
 ### Fixed
 - Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
@@ -17,6 +29,8 @@
   reviewed, so clicking them after a restart opens the specific interrupted notice.
 - OpenCode turns waiting on bridge tools or user approvals no longer fail with a spurious
   sign-in error after 30 seconds.
+- More reliable provider session recovery, gateway shutdown/reconnection and team delivery status.
+- Surface chat, library and host configuration errors instead of silently dropping failures.
 - Gemini bots start with `gemini --acp` (the old `--experimental-acp` flag is deprecated). When
   Gemini is signed out, the error now says to run `gemini` and choose Sign in with Google, a
   Gemini API key or Vertex AI, including when a cached Google sign-in fails.
@@ -37,6 +51,9 @@
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.
 - Linux and Windows CI checks and multi-platform updater releases.
+- Native approval notifications on macOS and Windows, with one-hour mute, and a macOS
+  menu-bar mini window for pending decisions and running bots.
+- A dedicated bot configuration screen and a persistent approval audit trail.
 - Built-in read-aloud on Windows (System.Speech via Windows PowerShell) and Linux (espeak-ng,
   espeak, or Speech Dispatcher over its socket, so the text never appears in process arguments);
   `voice.status` now reports only commands that are found.
@@ -44,20 +61,26 @@
   "Interrompido pelo reinício" (no actions; the blocked action was not executed), and
   clicking their notification explains that instead of a generic unavailable notice.
 
+## 0.4.0 — 2026-10-26
+
+Released as **UpBot v0.4.0** (commit `f7e53ec`).
+
 ### Changed
-- Updated Skills, Browser, Vault, Gateways, Marketplace, Mobile and Team settings to the Eco
-  design-system controls and layout, with Brazilian Portuguese labels and help text.
-- Updated remote host and email settings to Eco design-system controls and layouts, with
-  Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
+- Redesigned the desktop to the UpBot mockup: navigation, overview, chat, composer,
+  bot settings, tools and a new run panel.
+
+### Fixed
+- Corrected desktop feedback regressions, retry and microphone state.
+- Describe configured microVM placement without implying that the VM is running.
 
 ## 0.3.0
 
 ### Changed
-- Renamed BobAgent to Boto and repositioned it as a hub for general-purpose bots that work
+- Renamed BobAgent to UpBot and repositioned it as a hub for general-purpose bots that work
   together (web, files, email, apps), not only coding agents. Existing data is migrated:
-  `~/BobAgent` -> `~/Boto`, the app data folder, and the vault key in the Keychain.
-- A general-purpose "Boto" bot is created on first launch; all bots share `~/Boto/Workspace`
-  and get an `<boto_context>` with collaboration and safety rules.
+  `~/BobAgent` -> `~/UpBot`, the app data folder, and the vault key in the Keychain.
+- A general-purpose "UpBot" bot is created on first launch; all bots share `~/UpBot/Workspace`
+  and get an `<upbot_context>` with collaboration and safety rules.
 
 ### Added
 - Email (IMAP/SMTP) with bot drafts that only the user can send.

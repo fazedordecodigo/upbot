@@ -487,6 +487,11 @@ sha256 before installing; skills go to the skills library (author `marketplace:<
 agent templates create an agent (chosen provider) and install their listed skills. RPC
 `marketplace.list/install/setSources`; UI `MarketplaceView`. Regenerate the index with
 `bun scripts/marketplace-index.ts`. Tests: `test/marketplace.e2e.test.ts`.
+Saved UpBot/BobAgent registry URLs migrate to Boto and are deduplicated after conversion,
+preserving first-occurrence order. `BOTO_MARKETPLACE_URL` also overrides saved current/legacy
+default registry URLs, allowing daemon RPC migration tests to use a local registry without network.
+Custom source URLs are unchanged. The default registry is served from `main`; publish
+the Boto-branded marketplace there as part of the release, not only on `develop`.
 
 ## Mobile companion (Phase 12c)
 
@@ -543,6 +548,12 @@ with periodic `relay.audit_suppressed` summaries (`RELAY_AUDIT_WINDOW_MS`).
   No signing secrets keeps macOS ad-hoc and Windows unsigned; updater signing is separate.
   Bump `version` in `tauri.conf.json` before tagging.
 - In-app updates: `tauri-plugin-updater` + `components/UpdateButton.tsx` (sidebar footer).
+  Repository URLs now use `fazedordecodigo/boto`. Installed clients polling the old
+  `upbot` endpoint follow GitHub's repository redirect; do not recreate an `upbot`
+  repository under the account, which would break that redirect. Release metadata uses
+  `github.repository` for asset URLs. The v0.4.0 tag shipped as UpBot but reported 0.3.0;
+  workspace packages, desktop Rust crate and host now prepare 0.5.0 consistently.
+  CHANGELOG keeps post-v0.4.0 work under `0.5.0 (Unreleased)` until the next tag.
 - Icon source: `apps/desktop/branding/icon.svg` -> `icon.png` (Chrome headless render) ->
   `bunx tauri icon branding/icon.png` (from `apps/desktop`).
 
