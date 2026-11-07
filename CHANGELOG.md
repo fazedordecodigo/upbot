@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Fixed
+- Clear pending-approval badges immediately on daemon disconnect and reload on reconnect,
+  ignoring snapshots and expiry callbacks from the previous connection.
+- Keep badge expiry timers bound to the browser's global timer API, preventing a WebKit
+  exception from stopping pending-approval notification delivery.
+- Request macOS badge authorization so pending-approval Dock counts can appear. Existing
+  installations may need to enable Badge application icon in Boto's notification settings.
+
 - Keep already delivered interrupted-approval notifications in Notification Center until
   reviewed, so clicking them after a restart opens the specific interrupted notice.
 - OpenCode turns waiting on bridge tools or user approvals no longer fail with a spurious
@@ -15,6 +22,8 @@
 - Versões anteriores das habilidades, com leitura de Markdown ou texto bruto e retorno à versão atual.
 - Histórico de execuções das rotinas em Agendadas e nas configurações do bot, com estado da fila e do turno.
 - Detalhes de habilidades com Markdown e texto bruto; pedidos de permissão antigos ficam sem ações quando não estão mais pendentes no daemon.
+- Pending-approval badges on the macOS Dock, Windows taskbar and supported Linux launchers,
+  independent of popup notification mute.
 - Opt-in Computer Use on Windows and Linux X11, with unavailable reasons for Wayland or missing tools.
 - Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases.
 - Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX

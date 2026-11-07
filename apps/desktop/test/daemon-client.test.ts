@@ -71,6 +71,8 @@ test("reports daemon termination after re-resolving and stops retrying", async (
   };
   const client = new DaemonClient();
   let failure: Error | undefined;
+  let disconnects = 0;
+  const offDisconnect = client.onDisconnect(() => disconnects++);
   const off = client.onFailure((error) => {
     failure = error;
   });
@@ -80,7 +82,10 @@ test("reports daemon termination after re-resolving and stops retrying", async (
     expect(invokeCount).toBe(1);
     expect(socketAttempts).toBe(1);
     server.stop(true);
+    await waitFor(() => disconnects > 0);
+    expect(invokeCount).toBe(1);
     await waitFor(() => failure !== undefined);
+    expect(disconnects).toBe(2);
     expect(failure?.message).toBe(exitMessage);
     expect(invokeCount).toBe(2);
     const callsAfterFailure = invokeCount;
@@ -89,6 +94,7 @@ test("reports daemon termination after re-resolving and stops retrying", async (
     expect(invokeCount).toBe(callsAfterFailure);
     expect(socketAttempts).toBe(socketsAfterFailure);
   } finally {
+    offDisconnect();
     off();
     client.close();
     server.stop(true);
@@ -106,6 +112,8 @@ test("reconnects to the newly resolved daemon connection", async () => {
   });
   const client = new DaemonClient();
   let reconnected = false;
+  let disconnects = 0;
+  const offDisconnect = client.onDisconnect(() => disconnects++);
   const off = client.onReconnect(() => {
     reconnected = true;
   });
@@ -114,10 +122,12 @@ test("reconnects to the newly resolved daemon connection", async () => {
     await client.connect();
     oldServer.stop(true);
     await waitFor(() => reconnected);
+    expect(disconnects).toBe(1);
     expect(invokeCount).toBe(2);
     expect(socketAttempts).toBe(2);
     expect(await client.request("agents.list", {})).toEqual([]);
   } finally {
+    offDisconnect();
     off();
     client.close();
     oldServer.stop(true);
