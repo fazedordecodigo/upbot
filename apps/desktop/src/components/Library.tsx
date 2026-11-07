@@ -5,9 +5,63 @@ import type { DaemonClient } from "../lib/daemon";
 import { errorMessage } from "../lib/errors";
 import { errorFields, type LogFields, logWarn } from "../lib/log";
 import { btnCls, inputCls, PROVIDERS } from "./AgentSettings";
+import { Button } from "./ds/controls";
 import { Markdown } from "./Markdown";
 
+function SkillDetail({
+  client,
+  name,
+  onBack,
+  onEdit,
+}: {
+  client: DaemonClient;
+  name: string;
+  onBack: () => void;
+  onEdit: (skill: { name: string; description: string; body: string }) => void;
+}) {
+  const [raw, setRaw] = useState(false);
+  const { data, error, reload } = useDaemonQuery(
+    client,
+    "skills.get",
+    { name },
+    {
+      events: { "skills.changed": true },
+      onError: (e) => logWarn("skills.get_failed", errorFields(e)),
+    },
+  );
+  return (
+    <section className="mx-auto max-w-2xl space-y-3 p-6">
+      <Button onClick={onBack}>Voltar</Button>
+      {error ? (
+        <div role="alert">
+          <p>Não foi possível carregar a habilidade: {error}</p>
+          <Button onClick={reload}>Tentar novamente</Button>
+        </div>
+      ) : !data ? (
+        <p role="status">Carregando habilidade…</p>
+      ) : (
+        <>
+          <h2>{data.name}</h2>
+          {data.author && <p>Autor: {data.author}</p>}
+          <p>{data.description}</p>
+          <p>Atualizada em {new Date(data.updatedAt).toLocaleString("pt-BR")}</p>
+          <Button onClick={() => onEdit(data)}>Editar</Button>
+          <Button aria-pressed={raw} onClick={() => setRaw(!raw)}>
+            {raw ? "Ver formatado" : "Ver texto bruto"}
+          </Button>
+          {raw ? (
+            <pre style={{ whiteSpace: "pre-wrap" }}>{data.body}</pre>
+          ) : (
+            <Markdown text={data.body} />
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 export function SkillsView({ client }: { client: DaemonClient }) {
+  const [selected, setSelected] = useState<string | null>(null);
   const [edit, setEdit] = useState<{ name: string; description: string; body: string } | null>(
     null,
   );
@@ -78,6 +132,15 @@ export function SkillsView({ client }: { client: DaemonClient }) {
       </form>
     );
   }
+  if (selected)
+    return (
+      <SkillDetail
+        client={client}
+        name={selected}
+        onBack={() => setSelected(null)}
+        onEdit={setEdit}
+      />
+    );
   return (
     <div className="mx-auto max-w-2xl space-y-3 p-6">
       <div className="flex items-center">
@@ -100,7 +163,9 @@ export function SkillsView({ client }: { client: DaemonClient }) {
         {skills.map((s) => (
           <li key={s.name} className="rounded border border-zinc-800 p-3">
             <div className="flex items-center gap-2">
-              <span className="font-medium">{s.name}</span>
+              <Button variant="ghost" onClick={() => setSelected(s.name)}>
+                {s.name}
+              </Button>
               {s.author && <span className="text-xs text-zinc-500">by {s.author}</span>}
               <button
                 type="button"

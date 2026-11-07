@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- Histórico de execuções das rotinas em Agendadas e nas configurações do bot, com estado da fila e do turno.
+- Detalhes de habilidades com Markdown e texto bruto; pedidos de permissão antigos ficam sem ações quando não estão mais pendentes no daemon.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.

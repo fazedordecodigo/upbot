@@ -519,6 +519,14 @@ Tests: `test/remote.e2e.test.ts`, `packages/host/test/host.test.ts`.
 
 ## Permissions
 
+Desktop ChatView loads `permissions.list` and refreshes on permission events and reconnects.
+Persisted unresolved permission cards absent from a successfully loaded live list are
+non-actionable; a failed list keeps cards actionable rather than inventing a resolution.
+Routine history is available in Agendadas and saved routine dialogs. `routines.runs`
+joins the queue for nullable `queueStatus` and the latest linked turn for nullable
+`turn {id,status,startedAt,endedAt}`. Skill details load `skills.get`, refresh on
+`skills.changed`, and offer Markdown or raw SKILL.md text (no version history RPC).
+
 Provider agents ask for approval only when THEIR OWN config says so
 (`PROVIDER_PERMISSION_CONFIG` in `packages/protocol` maps provider -> config path).
 The UI shows this as a notice; we never change or sandbox those configs.

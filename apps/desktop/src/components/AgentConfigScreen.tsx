@@ -48,6 +48,7 @@ import {
   SheetIcon,
 } from "./ds/icons";
 import { Icon } from "./icons";
+import { RoutineRuns } from "./RoutineRuns";
 
 const PROVIDERS: ProviderId[] = [
   "devin",
@@ -1050,6 +1051,7 @@ export function AgentConfigScreen({
           initialFocus="input"
         >
           <RoutineEditor
+            client={client}
             value={routineDraft}
             saved={saved.routines.find((item) => item.id === routineDraft.id)}
             serverRoutine={routines.find((item) => item.id === routineDraft.id)}
@@ -1102,6 +1104,7 @@ function createdDate(timestamp: number) {
 }
 
 function RoutineEditor({
+  client,
   value,
   saved,
   serverRoutine,
@@ -1112,6 +1115,7 @@ function RoutineEditor({
   onDelete,
   onRun,
 }: {
+  client: DaemonClient;
   value: DraftRoutine;
   saved?: DraftRoutine | undefined;
   serverRoutine?: Routine | undefined;
@@ -1235,6 +1239,12 @@ function RoutineEditor({
               </Button>
             </div>
           </div>
+        )}
+        {serverRoutine && (
+          <section>
+            <h3>Histórico de execuções</h3>
+            <RoutineRuns client={client} routineId={serverRoutine.id} />
+          </section>
         )}
       </div>
       <footer>

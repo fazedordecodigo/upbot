@@ -767,6 +767,15 @@ export const RoutineRun = z.object({
   routineId: z.string(),
   trigger: RoutineTrigger,
   queueId: z.string().nullable(),
+  queueStatus: z.enum(["queued", "started", "removed"]).nullable(),
+  turn: z
+    .object({
+      id: z.string(),
+      status: TurnStatus,
+      startedAt: z.number(),
+      endedAt: z.number().nullable(),
+    })
+    .nullable(),
   error: z.string().nullable(),
   createdAt: z.number(),
 });

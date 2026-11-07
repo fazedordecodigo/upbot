@@ -943,6 +943,112 @@ test("group chat keeps only speaker names and its composer stays on one row", as
   }
 }, 15000);
 
+test("routine history opens chat and appears in the saved routine dialog", async () => {
+  const routine = await rpc.request("routines.create", {
+    agentId: bot.id,
+    name: "Histórico manual",
+    prompt: "echo:histórico",
+  });
+  const target = await browser.newPage();
+  try {
+    await rpc.request("routines.run", { id: routine.id });
+    await rpc.waitForEventWhere("turn.ended", (event) => event.agentId === bot.id);
+    await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await target.getByRole("button", { name: "Agendadas", exact: true }).click();
+    const row = target
+      .locator("li")
+      .filter({ has: target.getByRole("button", { name: /Histórico manual/ }) });
+    await row.getByRole("button", { name: "Histórico", exact: true }).click();
+    await row.getByText(/Manual.*Concluída/).waitFor();
+    await row.getByRole("button", { name: "Abrir conversa" }).click();
+    await target.locator(".main-head").getByRole("heading", { name: bot.name }).waitFor();
+    await target.getByRole("button", { name: "Configurar bot", exact: true }).click();
+    await target.getByRole("button", { name: /Histórico manual/ }).click();
+    const dialog = target.getByRole("dialog", { name: "Editar rotina", exact: true });
+    await dialog.getByRole("heading", { name: "Histórico de execuções" }).waitFor();
+    await dialog.getByText(/Manual.*Concluída/).waitFor();
+    await capture("routine-history", target);
+  } finally {
+    await target.close();
+    await rpc.request("routines.delete", { id: routine.id });
+  }
+}, 20000);
+
+test("skill detail renders fresh Markdown and raw text", async () => {
+  await rpc.request("skills.save", {
+    name: "detail-fixture",
+    description: "Descrição de teste",
+    body: "# Conteúdo completo\n\n**Texto destacado**",
+  });
+  const target = await browser.newPage();
+  try {
+    await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await target.getByRole("button", { name: "Agendadas", exact: true }).waitFor();
+    await target.keyboard.press("Meta+,");
+    await target.getByRole("tab", { name: "Habilidades", exact: true }).click();
+    await target.getByRole("button", { name: "detail-fixture", exact: true }).click();
+    await target.getByRole("heading", { name: "Conteúdo completo" }).waitFor();
+    await target.getByRole("button", { name: "Ver texto bruto" }).click();
+    expect(await target.locator("pre").textContent()).toContain("**Texto destacado**");
+    await capture("skill-detail-raw", target);
+    await target.getByRole("button", { name: "Voltar", exact: true }).click();
+    await target.getByRole("button", { name: "New skill", exact: true }).waitFor();
+  } finally {
+    await target.close();
+    await rpc.request("skills.delete", { name: "detail-fixture" });
+  }
+}, 15000);
+
+test("persisted permissions absent from the live list have no actions", async () => {
+  const target = await browser.newPage();
+  await target.addInitScript((id) => {
+    localStorage.setItem("boto.agent", id);
+    localStorage.setItem("boto.view", "chat");
+  }, bot.id);
+  await target.routeWebSocket(/\/ws\?/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      if (request.method === "permissions.list")
+        socket.send(JSON.stringify({ id: request.id, result: [] }));
+      else if (request.method === "chat.history")
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            result: {
+              items: [
+                {
+                  id: "old-permission",
+                  seq: 1,
+                  agentId: bot.id,
+                  turnId: "old-turn",
+                  createdAt: Date.now(),
+                  kind: "permission",
+                  requestId: "old-request",
+                  title: "Pedido antigo",
+                  toolKind: null,
+                  options: [{ optionId: "allow", name: "Permitir teste", kind: "allow_once" }],
+                  resolution: null,
+                },
+              ],
+              turns: [],
+              hasMore: false,
+            },
+          }),
+        );
+      else server.send(message);
+    });
+  });
+  try {
+    await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await target.getByText("Este pedido não está mais pendente.").waitFor();
+    expect(await target.getByRole("button", { name: "Permitir teste" }).count()).toBe(0);
+    await capture("stale-permission", target);
+  } finally {
+    await target.close();
+  }
+}, 15000);
+
 test("scheduled routines show recoverable RPC errors", async () => {
   const target = await browser.newPage();
   let fail = true;
