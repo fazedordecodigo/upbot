@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -103,17 +104,28 @@ export class SkillLibrary {
   }
 
   save(
-    p: { name: string; description: string; body: string; author?: string | null },
+    p: {
+      name: string;
+      previousName?: string | undefined;
+      description: string;
+      body: string;
+      author?: string | null;
+    },
     mode: "create" | "revise" | "upsert",
   ): Skill {
     const slug = skillSlug(p.name);
     if (!NAME_RE.test(slug)) throw new Error("skill name must contain letters or digits");
     const f = this.file(slug);
-    const exists = existsSync(f);
+    const previous = p.previousName === undefined ? slug : skillSlug(p.previousName);
+    const moving = previous !== slug && NAME_RE.test(previous) && existsSync(this.file(previous));
+    if (moving && existsSync(join(this.root, slug)))
+      throw new Error("Já existe uma habilidade com esse nome. Escolha outro nome.");
+    const exists = moving || existsSync(f);
     if (mode === "create" && exists)
       throw new Error(`skill "${slug}" already exists; use revise_skill`);
     if (mode === "revise" && !exists) throw new Error(`no skill named "${slug}"`);
     if (!p.body.trim()) throw new Error("skill body is empty");
+    if (moving) renameSync(join(this.root, previous), join(this.root, slug));
     mkdirSync(join(this.root, slug), { recursive: true });
     if (exists) {
       const hist = join(this.root, slug, ".history");

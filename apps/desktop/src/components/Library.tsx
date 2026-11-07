@@ -156,9 +156,12 @@ function SkillDetail({
 
 export function SkillsView({ client }: { client: DaemonClient }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const [edit, setEdit] = useState<{ name: string; description: string; body: string } | null>(
-    null,
-  );
+  const [edit, setEdit] = useState<{
+    name: string;
+    previousName?: string;
+    description: string;
+    body: string;
+  } | null>(null);
   const { data: skills = [], error: loadError } = useDaemonQuery(
     client,
     "skills.list",
@@ -241,7 +244,7 @@ export function SkillsView({ client }: { client: DaemonClient }) {
         client={client}
         name={selected}
         onBack={() => setSelected(null)}
-        onEdit={setEdit}
+        onEdit={(skill) => setEdit({ ...skill, previousName: skill.name })}
       />
     );
   return (
@@ -276,7 +279,12 @@ export function SkillsView({ client }: { client: DaemonClient }) {
                 className={styles.push}
                 onClick={() => {
                   setError(null);
-                  setEdit({ name: s.name, description: s.description, body: s.body });
+                  setEdit({
+                    name: s.name,
+                    previousName: s.name,
+                    description: s.description,
+                    body: s.body,
+                  });
                 }}
               >
                 Editar

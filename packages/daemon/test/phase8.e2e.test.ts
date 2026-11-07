@@ -242,6 +242,93 @@ describe("avatars, memories, skills, agent creation e2e", () => {
     expect(existsSync(join(sharedRoot, "Skills", "triage"))).toBe(false);
   });
 
+  test("skill rename moves history, removes the old name and refreshes the shared index", async () => {
+    await c.request("skills.save", {
+      name: "rename-old",
+      description: "Original",
+      body: "Original body",
+    });
+    await c.request("skills.save", {
+      name: "rename-old",
+      description: "Revised",
+      body: "Revised body",
+    });
+    const history = await c.request("skills.versions", { name: "rename-old" });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const saved = await c.request("skills.save", {
+      previousName: "Rename Old",
+      name: "Rename New",
+      description: "Renamed",
+      body: "New body",
+    });
+    expect(saved.name).toBe("rename-new");
+    expect(saved.body).toBe("New body\n");
+    expect(existsSync(join(sharedRoot, "Skills", "rename-old"))).toBe(false);
+    await expect(c.request("skills.get", { name: "rename-old" })).rejects.toMatchObject({
+      code: "not_found",
+    });
+    const names = (await c.request("skills.list", {})).map((s) => s.name);
+    expect(names).toContain("rename-new");
+    expect(names).not.toContain("rename-old");
+    const versions = await c.request("skills.versions", { name: "rename-new" });
+    expect(versions.map((v) => v.body)).toEqual(["Revised body\n", "Original body\n"]);
+    expect(versions[1]).toEqual(history[0]);
+    const fresh = await newAgent("Renamed skill reader");
+    await turn(fresh.id, "echo:x");
+    expect(lastPrompt()).toContain("rename-new: Renamed");
+    expect(lastPrompt()).not.toContain("rename-old:");
+  });
+
+  test("skill rename conflicts and invalid content leave both skills untouched", async () => {
+    for (const name of ["conflict-old", "conflict-new"]) {
+      await c.request("skills.save", { name, description: name, body: `Body ${name}` });
+    }
+    const before = await Promise.all(
+      ["conflict-old", "conflict-new"].map((name) => c.request("skills.get", { name })),
+    );
+    await expect(
+      c.request("skills.save", {
+        previousName: "conflict-old",
+        name: "Conflict New",
+        description: "Overwrite",
+        body: "Overwrite",
+      }),
+    ).rejects.toMatchObject({
+      code: "bad_request",
+      message: "Já existe uma habilidade com esse nome. Escolha outro nome.",
+    });
+    await expect(
+      c.request("skills.save", {
+        previousName: "conflict-old",
+        name: "empty-renamed",
+        description: "Empty",
+        body: " ",
+      }),
+    ).rejects.toMatchObject({ code: "bad_request" });
+    for (const [index, name] of ["conflict-old", "conflict-new"].entries()) {
+      expect(before[index]).toEqual(await c.request("skills.get", { name }));
+      expect(await c.request("skills.versions", { name })).toEqual([]);
+    }
+    expect(existsSync(join(sharedRoot, "Skills", "empty-renamed"))).toBe(false);
+  });
+
+  test("missing previous skills use plain save and equivalent slugs revise in place", async () => {
+    await c.request("skills.save", {
+      previousName: "missing-previous",
+      name: "plain-save",
+      description: "Plain",
+      body: "First",
+    });
+    await c.request("skills.save", {
+      previousName: "Plain Save",
+      name: "plain-save",
+      description: "Plain",
+      body: "Second",
+    });
+    expect((await c.request("skills.get", { name: "plain-save" })).body).toBe("Second\n");
+    expect((await c.request("skills.versions", { name: "plain-save" }))[0]?.body).toBe("First\n");
+  });
+
   test("skill versions expose previous files newest first and ignore unrelated files", async () => {
     const name = "versioned-skill";
     await c.request("skills.save", { name, description: "Old description", body: "Old body" });
