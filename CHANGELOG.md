@@ -15,6 +15,9 @@
   Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
 ### Fixed
+- Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
+  DPAPI scripts load System.Security without `Add-Type`, a timed-out call is retried, and a
+  persistent timeout reports an error instead of writing a plaintext key.
 - Clear pending-approval badges immediately on daemon disconnect and reload on reconnect,
   ignoring snapshots and expiry callbacks from the previous connection.
 - Keep badge expiry timers bound to the browser's global timer API, preventing a WebKit
@@ -36,7 +39,7 @@
 - Pending-approval badges on the macOS Dock, Windows taskbar and supported Linux launchers,
   independent of popup notification mute.
 - Opt-in Computer Use on Windows and Linux X11, with unavailable reasons for Wayland or missing tools.
-- Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases.
+- Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases and Windows ARM64 installers.
 - Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
   Authenticode signing; releases reject incomplete signing secrets and verify signatures.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
@@ -46,6 +49,9 @@
 - Native approval notifications on macOS and Windows, with one-hour mute, and a macOS
   menu-bar mini window for pending decisions and running bots.
 - A dedicated bot configuration screen and a persistent approval audit trail.
+- Built-in read-aloud on Windows (System.Speech via Windows PowerShell) and Linux (espeak-ng,
+  espeak, or Speech Dispatcher over its socket, so the text never appears in process arguments);
+  `voice.status` now reports only commands that are found.
 - Approvals left pending when the daemon stops now appear in Settings → Approvals as
   "Interrompido pelo reinício" (no actions; the blocked action was not executed), and
   clicking their notification explains that instead of a generic unavailable notice.

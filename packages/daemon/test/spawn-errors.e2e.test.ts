@@ -62,14 +62,14 @@ describe("asynchronous child spawn errors", () => {
     await expect(client.request("voice.speak", { text: "hello" })).rejects.toMatchObject({
       code: "bad_request",
     });
-    expect(await client.request("voice.status")).toMatchObject({ tts: true });
+    expect(await client.request("voice.status")).toMatchObject({ tts: false });
   });
 
   test("provider command overrides report unavailable without stopping the daemon", async () => {
     await expect(
       client.request("chat.send", { agentId: agent.id, text: "hello" }),
     ).rejects.toMatchObject({ code: "provider_unavailable" });
-    expect(await client.request("voice.status")).toMatchObject({ tts: true });
+    expect(await client.request("voice.status")).toMatchObject({ tts: false });
   });
 
   test("provider startup exposes asynchronous spawn failures", async () => {
