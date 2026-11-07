@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Linux x64/ARM64 RPM releases, ARM64 AppImage/deb releases and Windows ARM64 installers.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.

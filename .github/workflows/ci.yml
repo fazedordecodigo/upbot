@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, ubuntu-22.04, windows-latest]
+        os: [macos-14, ubuntu-22.04, ubuntu-22.04-arm, windows-latest, windows-11-arm]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
