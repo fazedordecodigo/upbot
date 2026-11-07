@@ -24,7 +24,7 @@ A paleta, as fontes e o gerador atuais estão em [design-system.md](design-syste
 - O aplicativo conserva o rail, navegação por bots, tarefas recentes e biblioteca. O protótipo usa uma lateral única orientada a tarefas. Remover essas superfícies mudaria a navegação existente.
 - Conversas e aprovações exibem dados reais, inclusive parâmetros completos para decisões sensíveis. Não reproduzem o exemplo estático de despesas, totais, identidade da pessoa ou etapas de negócio sem informação correspondente no daemon.
 - O painel real inclui uso de contexto, computador, ferramentas e permissões. Não foi substituído pela lista ilustrativa de etapas/acessos do protótipo. Seu breakpoint de sobreposição é 1180px, não 1100px.
-- Integrações secundárias ainda usam layouts utilitários legados, agora com cores derivadas dos tokens, em vez de todos os componentes do kit. Uma migração estrutural dessas telas fica fora deste polimento.
+- Servidores (`HostsView`) e E-mail (`EmailView`) agora usam os componentes do kit, CSS Modules com tokens `--boto-*` e textos em pt-BR. Habilidades, Navegador, Cofre, Gateways, Marketplace, Celular e Equipe (`Library.tsx`) são migrados em um PR separado.
 - O tema da biblioteca de Páginas alcança a interface hospedeira e o fundo do iframe. HTML publicado por um bot permanece em sandbox e pode ter cores próprias; não se injeta CSS em conteúdo publicado.
 - Capturas de Páginas cobrem o estado vazio. Capturas de conversa em grupo cobrem o cabeçalho e o compositor reais, sem inventar mensagens.
 - A verificação visual desta fase é em Chromium, com daemon real e fixtures ACP/MCP. Não substitui uma nova revisão nativa em WebKit/macOS ou WebView2/Windows, nem uma auditoria completa com leitor de tela.
