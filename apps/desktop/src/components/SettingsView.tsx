@@ -3,18 +3,10 @@ import { type ReactNode, useEffect, useState } from "react";
 import type { DaemonClient } from "../lib/daemon";
 import { moveControlFocus } from "../lib/keyboard";
 import { type ThemePreference, useThemePref } from "../lib/theme";
-import { Pill } from "../lib/ui";
 import { Icon } from "./icons";
 import { NotificationSettings } from "./NotificationSettings";
 import { TABS, ToolBody, type ToolTab } from "./ToolsView";
 import { UpdateButton } from "./UpdateButton";
-
-const STATUS_NOTES = {
-  run: "Agindo agora",
-  wait: "Precisa de você",
-  ok: "Entregue",
-  err: "Falhou",
-};
 
 export function SettingsView({
   client,
@@ -206,23 +198,6 @@ export function SettingsView({
                       </>
                     )}
                   </p>
-                </div>
-              </div>
-              <div className="set-group" data-od-id="settings-status-preview">
-                <div>
-                  <h2 style={{ fontSize: "var(--fs-h3)" }}>Cores de status</h2>
-                  <p>
-                    Os mesmos quatro estados nos dois temas. No escuro, o tom fica mais claro e
-                    saturado.
-                  </p>
-                </div>
-                <div className="st-demo">
-                  {(["run", "wait", "ok", "err"] as const).map((st) => (
-                    <div key={st}>
-                      <Pill st={st} />
-                      <span className="meta">{STATUS_NOTES[st]}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             </>
