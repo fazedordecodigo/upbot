@@ -34,6 +34,8 @@
   clicking their notification explains that instead of a generic unavailable notice.
 
 ### Changed
+- Updated Skills, Browser, Vault, Gateways, Marketplace, Mobile and Team settings to the Eco
+  design-system controls and layout, with Brazilian Portuguese labels and help text.
 - Updated remote host and email settings to Eco design-system controls and layouts, with
   Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
