@@ -106,9 +106,19 @@ per-user COM activation registration; mute uses SuppressPopup plus silent audio 
 is also in the toast context menu. General settings expose mute on every platform.
 Native callbacks queue actions until the main frontend can drain them; the daemon
 remains authoritative. Optional dock/taskbar badges are not implemented.
-Pending approvals and their blocked calls are memory-only: after daemon shutdown,
-toast decisions cannot recover them. Missing IDs open Settings → Approvals with an
-unavailable notice and remove the toast, without retrying or fabricating approval.
+Blocked calls are memory-only and die with the daemon. Pending approvals are mirrored in
+`approval_records` (migration 22) with only the audit fields (kind, tool, secretName, app
+id/name, permission, background, expiresAt — never args, detail, bot-written titles or secret
+values); a decision or expiry deletes the row. `ApprovalService.suspend()` runs first on
+shutdown so closing runtimes do not expire them. On start, `interruptLeftovers()` marks leftover
+rows `interrupted` (`interruptedAt`), writes `approval.interrupted` (reason `daemon_restart`)
+once each and keeps the latest 50. `approvals.list` returns them with `detail: ""` and a title
+rebuilt from the tool/secret name; `approvals.respond` rejects them with `not_found`
+("interrupted by a daemon restart"); nothing is resumed or re-run. UI: "Interrompido pelo
+reinício", no actions. Toast clicks for those IDs open Settings → Approvals with
+`INTERRUPTED_NOTICE` and remove the toast; unknown IDs keep the generic unavailable notice.
+Tests: `test/approvals-restart.e2e.test.ts` (SIGKILL and SIGTERM restarts),
+`test/approval-audit.test.ts`, desktop `test/notifications.test.ts`.
 Windows registers its COM activator before spawning the daemon; `-ToastActivated`
 payloads and COM callbacks share the native queue. The single-instance plugin forwards
 second-launch arguments and focuses the existing window before another daemon starts.

@@ -327,3 +327,121 @@ test("secret approval logs and audits a vault read failure without the secret va
     });
   });
 });
+
+type RecordRow = { id: string; status: string; data_json: string; interrupted_at: number | null };
+const records = (db: Database): RecordRow[] =>
+  db.query("SELECT * FROM approval_records ORDER BY created_at").all() as RecordRow[];
+
+test("pending approvals persist audit fields only and leave the table once decided", async () => {
+  await withApprovals(async ({ approvals, db }) => {
+    const gate = approvals.gate("bot", "notes-create_note", { title: "secret-title" }, true);
+    const pending = approvals.list()[0]!;
+    const stored = records(db);
+    expect(stored.map((r) => [r.id, r.status])).toEqual([[pending.id, "pending"]]);
+    expect(JSON.parse(stored[0]!.data_json)).toEqual({
+      kind: "tool",
+      tool: "notes-create_note",
+      secretName: null,
+      appId: "notes",
+      appName: "Notes",
+      permission: "write",
+      background: false,
+      expiresAt: pending.expiresAt,
+    });
+    expect(stored[0]!.data_json).not.toContain("secret-title");
+    await approvals.respond({ id: pending.id, decision: "approve" });
+    await gate;
+    expect(records(db)).toEqual([]);
+  });
+});
+
+test("a restart marks leftovers interrupted, audits them once and never lets them be decided", async () => {
+  await withApprovals(async ({ approvals, apps, vault, db }) => {
+    void approvals.gate("bot", "notes-create_note", { title: "secret-title" }, true);
+    void approvals.requestSecret("bot", "stripe.key", "Stripe secret-label", "secret-reason");
+    approvals.suspend();
+    // Shutdown must not expire them (runtimes closing end their turns).
+    approvals.onTurnEnded("bot", "turn");
+    await Bun.sleep(80);
+    expect(records(db).map((r) => r.status)).toEqual(["pending", "pending"]);
+    expect(rows(db, "approval.decided")).toEqual([]);
+
+    const runtimes = {
+      currentTurn: () => ({ id: "turn2", background: false }),
+    } as unknown as RuntimeManager;
+    const next = new ApprovalService(
+      db,
+      vault,
+      () => runtimes,
+      () => {},
+      apps,
+    );
+    expect(next.interruptLeftovers()).toBe(2);
+    expect(next.interruptLeftovers()).toBe(0);
+    const listed = next.list();
+    expect(listed.map((a) => a.status)).toEqual(["interrupted", "interrupted"]);
+    const tool = listed.find((a) => a.kind === "tool")!;
+    const secret = listed.find((a) => a.kind === "secret")!;
+    expect(tool).toMatchObject({
+      agentId: "bot",
+      turnId: "turn",
+      title: "Run notes-create_note",
+      detail: "",
+      appId: "notes",
+      appName: "Notes",
+      permission: "write",
+    });
+    expect(tool.interruptedAt).toBeGreaterThan(0);
+    expect(secret).toMatchObject({ title: "stripe.key", secretName: "stripe.key", detail: "" });
+    expect(next.list("other-bot")).toEqual([]);
+    const serialized = JSON.stringify([listed, records(db)]);
+    for (const leak of ["secret-title", "secret-label", "secret-reason"])
+      expect(serialized).not.toContain(leak);
+
+    const audited = rows(db, "approval.interrupted");
+    expect(audited).toHaveLength(2);
+    expect(json(audited.find((r) => r.approval_id === tool.id)!)).toMatchObject({
+      kind: "tool",
+      tool: "notes-create_note",
+      appId: "notes",
+      permission: "write",
+      status: "interrupted",
+      reason: "daemon_restart",
+    });
+    expect(JSON.stringify(audited)).not.toContain("secret-");
+
+    for (const decision of ["approve", "deny"] as const) {
+      const error = await next.respond({ id: tool.id, decision }).catch((e) => e);
+      expect(error).toBeInstanceOf(RpcError);
+      expect((error as RpcError).code).toBe("not_found");
+      expect((error as RpcError).message).toContain("interrupted by a daemon restart");
+    }
+    await next.respond({ id: secret.id, decision: "approve", value: "x" }).catch(() => {});
+    expect(vault.get("stripe.key")).toBeNull();
+    expect(rows(db, "approval.decided")).toEqual([]);
+  });
+});
+
+test("interrupted records are capped to the most recent 50", async () => {
+  await withApprovals(async ({ approvals, db }) => {
+    const insert = db.query(
+      "INSERT INTO approval_records (id, agent_id, turn_id, status, data_json, created_at) VALUES (?, 'bot', NULL, 'pending', ?, ?)",
+    );
+    const data = JSON.stringify({
+      kind: "takeover",
+      tool: null,
+      secretName: null,
+      appId: null,
+      appName: null,
+      permission: null,
+      background: true,
+      expiresAt: 1,
+    });
+    for (let i = 0; i < 55; i++) insert.run(`old-${i}`, data, i);
+    expect(approvals.interruptLeftovers()).toBe(55);
+    const listed = approvals.list();
+    expect(listed).toHaveLength(50);
+    expect(listed[0]).toMatchObject({ id: "old-54", title: "Take over the bot browser" });
+    expect(listed.some((a) => a.id === "old-0")).toBe(false);
+  });
+});

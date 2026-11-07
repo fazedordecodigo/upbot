@@ -3,6 +3,7 @@ import type { Approval, ApprovalDecision, ApprovalRule } from "@boto/protocol";
 import { classifyAppTool, isSensitivePermission } from "@boto/protocol";
 import { z } from "zod";
 import type { AppsService } from "./apps";
+import { errorDiagnostics } from "./bridge";
 import { getSetting, InvalidSettingError, setSetting } from "./db/settings";
 import { envPositiveNumber } from "./env/vars";
 import { RpcError } from "./runtime/agent-runtime";
@@ -15,6 +16,8 @@ import type { Vault } from "./vault";
 // gateways, group chats) expire after BOTO_APPROVAL_BACKGROUND_TTL_MS (default 10 min),
 // others after BOTO_APPROVAL_TTL_MS (default 60 min). The same queue carries secure secret
 // requests (value goes straight to the vault) and browser take-over requests.
+// Pending approvals are mirrored in approval_records (audit fields only). The blocked call
+// dies with the daemon, so a restart marks leftovers "interrupted": never resumable.
 
 type Broadcast = (event: string, data: unknown) => void;
 type Waiter = {
@@ -42,6 +45,35 @@ export class GateRejection extends Error {
   }
 }
 
+const MAX_INTERRUPTED = 50;
+
+const recordSchema = z.object({
+  kind: z.enum(["tool", "secret", "takeover"]),
+  tool: z.string().nullable(),
+  secretName: z.string().nullable(),
+  appId: z.string().nullable(),
+  appName: z.string().nullable(),
+  permission: z.enum(["read", "write", "send", "pay", "book", "del"]).nullable(),
+  background: z.boolean(),
+  expiresAt: z.number(),
+});
+type RecordRow = {
+  id: string;
+  agent_id: string;
+  turn_id: string | null;
+  status: string;
+  data_json: string;
+  created_at: number;
+  interrupted_at: number | null;
+};
+
+/** Title rebuilt from stored fields: bot-written titles are not persisted. */
+function recordTitle(r: z.infer<typeof recordSchema>): string {
+  if (r.kind === "tool") return `Run ${r.tool ?? "tool"}`;
+  if (r.kind === "secret") return r.secretName ?? "secret";
+  return "Take over the bot browser";
+}
+
 const rulesSchema = z.array(
   z.looseObject({
     id: z.string(),
@@ -57,6 +89,7 @@ export class ApprovalService {
   private recent: Approval[] = [];
   private grants = new Map<string, Set<string>>();
   private responding = new Set<string>();
+  private suspended = false;
 
   constructor(
     private db: Database,
@@ -133,6 +166,142 @@ export class ApprovalService {
     }
   }
 
+  private persist(a: Approval): void {
+    const data: z.infer<typeof recordSchema> = {
+      kind: a.kind,
+      tool: a.tool,
+      secretName: a.kind === "secret" ? a.secretName : null,
+      appId: a.appId ?? null,
+      appName: a.appName ?? null,
+      permission: a.permission ?? null,
+      background: a.background,
+      expiresAt: a.expiresAt,
+    };
+    try {
+      this.db
+        .query(
+          "INSERT OR REPLACE INTO approval_records (id, agent_id, turn_id, status, data_json, created_at) VALUES (?, ?, ?, 'pending', ?, ?)",
+        )
+        .run(a.id, a.agentId, a.turnId, JSON.stringify(data), a.createdAt);
+    } catch (error) {
+      console.error("[botod] approval.record_write_failed", errorDiagnostics(error));
+    }
+  }
+
+  private unpersist(id: string): void {
+    try {
+      this.db.query("DELETE FROM approval_records WHERE id = ? AND status = 'pending'").run(id);
+    } catch (error) {
+      console.error("[botod] approval.record_write_failed", errorDiagnostics(error));
+    }
+  }
+
+  private fromRecord(r: RecordRow): Approval | null {
+    let parsed: z.infer<typeof recordSchema>;
+    try {
+      parsed = recordSchema.parse(JSON.parse(r.data_json));
+    } catch {
+      return null;
+    }
+    return {
+      id: r.id,
+      agentId: r.agent_id,
+      turnId: r.turn_id,
+      kind: parsed.kind,
+      title: recordTitle(parsed),
+      detail: "",
+      tool: parsed.tool,
+      secretName: parsed.secretName,
+      ...(parsed.appId ? { appId: parsed.appId } : {}),
+      ...(parsed.appName ? { appName: parsed.appName } : {}),
+      ...(parsed.permission ? { permission: parsed.permission } : {}),
+      background: parsed.background,
+      status: "interrupted",
+      createdAt: r.created_at,
+      expiresAt: parsed.expiresAt,
+      ...(r.interrupted_at !== null ? { interruptedAt: r.interrupted_at } : {}),
+    };
+  }
+
+  /**
+   * Run once on daemon start: approvals left pending by the previous process lost their
+   * blocked tool call, so they become "interrupted" (audited, listed, never decidable).
+   */
+  interruptLeftovers(): number {
+    const now = Date.now();
+    const rows = this.db
+      .query("SELECT * FROM approval_records WHERE status = 'pending'")
+      .all() as RecordRow[];
+    for (const r of rows) {
+      this.db
+        .query(
+          "UPDATE approval_records SET status = 'interrupted', interrupted_at = ? WHERE id = ?",
+        )
+        .run(now, r.id);
+      const a = this.fromRecord({ ...r, status: "interrupted", interrupted_at: now });
+      this.audit(
+        "approval.interrupted",
+        {
+          approvalId: r.id,
+          agentId: r.agent_id,
+          turnId: r.turn_id,
+          kind: a?.kind ?? null,
+          tool: a?.tool ?? null,
+          appId: a?.appId ?? null,
+          permission: a?.permission ?? null,
+          secretName: a?.kind === "secret" ? a.secretName : null,
+          status: "interrupted",
+          reason: "daemon_restart",
+          background: a?.background ?? null,
+          ageMs: now - r.created_at,
+        },
+        a ?? undefined,
+      );
+    }
+    this.db
+      .query(
+        "DELETE FROM approval_records WHERE status = 'interrupted' AND id NOT IN (SELECT id FROM approval_records WHERE status = 'interrupted' ORDER BY interrupted_at DESC, created_at DESC LIMIT ?)",
+      )
+      .run(MAX_INTERRUPTED);
+    return rows.length;
+  }
+
+  /**
+   * Daemon shutdown: keep pending records as they are so the next start marks them
+   * interrupted, instead of expiring them while runtimes close.
+   */
+  suspend(): void {
+    this.suspended = true;
+  }
+
+  private interrupted(agentId?: string): Approval[] {
+    try {
+      const rows = (
+        agentId
+          ? this.db
+              .query("SELECT * FROM approval_records WHERE status = 'interrupted' AND agent_id = ?")
+              .all(agentId)
+          : this.db.query("SELECT * FROM approval_records WHERE status = 'interrupted'").all()
+      ) as RecordRow[];
+      return rows.map((r) => this.fromRecord(r)).filter((a): a is Approval => a !== null);
+    } catch (error) {
+      console.error("[botod] approval.record_read_failed", errorDiagnostics(error));
+      return [];
+    }
+  }
+
+  private interruptedById(id: string): boolean {
+    try {
+      return (
+        this.db
+          .query("SELECT 1 FROM approval_records WHERE id = ? AND status = 'interrupted'")
+          .get(id) !== null
+      );
+    } catch {
+      return false;
+    }
+  }
+
   /** "ask" | "allow" for a tool call, after rules and defaults. */
   decide(agentId: string, tool: string, isAppTool: boolean): "ask" | "allow" {
     const hits = this.rules().filter(
@@ -158,7 +327,7 @@ export class ApprovalService {
   }
 
   list(agentId?: string): Approval[] {
-    const all = [...this.pending.values(), ...this.recent];
+    const all = [...this.pending.values(), ...this.recent, ...this.interrupted(agentId)];
     return all
       .filter((a) => !agentId || a.agentId === agentId)
       .sort((a, b) => b.createdAt - a.createdAt);
@@ -188,6 +357,7 @@ export class ApprovalService {
       expiresAt: now + ttl,
     };
     this.pending.set(approval.id, approval);
+    this.persist(approval);
     this.broadcast("approval.updated", approval);
     return new Promise((resolve) => {
       const timer = setTimeout(() => this.finish(approval.id, "expired"), ttl);
@@ -209,10 +379,12 @@ export class ApprovalService {
       failure?: string;
     },
   ): Approval | null {
+    if (this.suspended) return null;
     if (status === "expired" && this.responding.has(id)) return null;
     const a = this.pending.get(id);
     if (!a) return null;
     this.pending.delete(id);
+    this.unpersist(id);
     const done = { ...a, status };
     this.recent = [done, ...this.recent].slice(0, 50);
     this.audit(
@@ -251,7 +423,13 @@ export class ApprovalService {
     value?: string | undefined;
   }): Promise<Approval> {
     const a = this.pending.get(p.id);
-    if (!a) throw new RpcError("not_found", "approval not found or no longer pending");
+    if (!a && this.interruptedById(p.id))
+      throw new RpcError(
+        "not_found",
+        "approval was interrupted by a daemon restart; the blocked call cannot be resumed",
+      );
+    if (!a || this.suspended)
+      throw new RpcError("not_found", "approval not found or no longer pending");
     if (this.responding.has(p.id))
       throw new RpcError("busy", "approval decision is already being saved");
     if (a.expiresAt <= Date.now()) {

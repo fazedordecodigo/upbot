@@ -7,6 +7,9 @@
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.
 - Linux and Windows CI checks and multi-platform updater releases.
+- Approvals left pending when the daemon stops now appear in Settings → Approvals as
+  "Interrompido pelo reinício" (no actions; the blocked action was not executed), and
+  clicking their notification explains that instead of a generic unavailable notice.
 
 ## 0.3.0
 
