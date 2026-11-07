@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex,
+};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 #[cfg(target_os = "linux")]
@@ -17,6 +20,13 @@ mod platform;
 #[cfg(any(target_os = "windows", test))]
 #[path = "notifications_xml.rs"]
 mod xml;
+
+static MUTE_UNTIL: AtomicU64 = AtomicU64::new(0);
+
+#[tauri::command]
+pub fn notifications_set_mute(until: u64) {
+    MUTE_UNTIL.store(until, Ordering::SeqCst);
+}
 
 #[derive(Clone, Deserialize)]
 pub struct NotificationButton {
@@ -209,6 +219,17 @@ pub async fn notifications_post(app: AppHandle, notification: Notification) -> R
         log::warn!("could not post notification {id}: {error}");
     }
     result
+}
+
+#[tauri::command]
+pub async fn notifications_retain(app: AppHandle, id: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    return on_main(app, move |done| done(platform::retain(&id))).await;
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, id);
+        Ok(())
+    }
 }
 
 #[tauri::command]

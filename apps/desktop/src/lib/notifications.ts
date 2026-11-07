@@ -1,4 +1,5 @@
 import { type Approval, type ApprovalDecision, classifyToolOperation } from "@boto/protocol";
+import { invoke } from "@tauri-apps/api/core";
 import { type ApprovalResult, decideApproval } from "./approval-decisions";
 import { describeApproval } from "./approval-description";
 import type { DaemonClient } from "./daemon";
@@ -17,6 +18,8 @@ export type DecisionNotification = {
 export type NotificationResponse = { id: string; action: string };
 export interface NotificationBridge {
   initialize(): Promise<boolean>;
+  setMute(until: number): Promise<void>;
+  retain(id: string): Promise<void>;
   post(notification: DecisionNotification): Promise<void>;
   remove(id: string): Promise<void>;
   listen(handler: (response: NotificationResponse) => void): Promise<() => void>;
@@ -35,10 +38,28 @@ export function muteUntil(preferences: Preferences): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-export function muteForHour(preferences: Preferences, now = Date.now()) {
-  const until = now + 60 * 60 * 1000;
+export async function setNativeMute(until: number): Promise<void> {
+  if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window)
+    await invoke("notifications_set_mute", { until });
+}
+
+async function syncMute(until: number, setMute = setNativeMute) {
+  try {
+    await setMute(until);
+  } catch (e) {
+    logWarn("notifications.mute_sync_failed", errorFields(e));
+  }
+}
+
+export function setMuteUntil(preferences: Preferences, until: number, setMute = setNativeMute) {
   preferences.setItem(MUTE_KEY, String(until));
+  void syncMute(until, setMute);
   return until;
+}
+
+export function muteForHour(preferences: Preferences, now = Date.now(), setMute = setNativeMute) {
+  const until = now + 60 * 60 * 1000;
+  return setMuteUntil(preferences, until, setMute);
 }
 
 function notificationDetails(detail: string) {
@@ -157,6 +178,7 @@ export function decisionNotification(
 
 export class ApprovalNotifications {
   private seen = new Set<string>();
+  private retained = new Set<string>();
   private active = new Map<string, Approval>();
   private local = new Set<string>();
   private busy = new Set<string>();
@@ -193,6 +215,7 @@ export class ApprovalNotifications {
   }
 
   async start() {
+    await syncMute(muteUntil(this.preferences), (until) => this.bridge.setMute(until));
     const off = await this.bridge.listen((response) => {
       void this.respond(response).catch((e) =>
         this.fail(e, { op: "decide", approvalId: response.id, action: response.action }),
@@ -242,6 +265,18 @@ export class ApprovalNotifications {
       const timer = this.timers.get(approval.id);
       if (timer !== undefined) clearTimeout(timer);
       this.timers.delete(approval.id);
+      if (
+        this.seen.has(approval.id) &&
+        !this.local.has(approval.id) &&
+        !this.retained.has(approval.id)
+      ) {
+        try {
+          await this.bridge.retain(approval.id);
+          this.retained.add(approval.id);
+        } catch (e) {
+          logWarn("notifications.retain_failed", errorFields(e));
+        }
+      }
       return;
     }
     const notification = decisionNotification(
@@ -285,7 +320,7 @@ export class ApprovalNotifications {
   async respond({ id, action }: NotificationResponse) {
     if (this.stopped || this.busy.has(id) || this.unavailable.has(id)) return;
     if (action === "mute") {
-      muteForHour(this.preferences, this.now());
+      muteForHour(this.preferences, this.now(), (until) => this.bridge.setMute(until));
       return;
     }
     if (action === "apps") {

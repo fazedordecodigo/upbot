@@ -21,7 +21,14 @@ struct Backend {
 }
 
 #[derive(Default)]
-struct Entries(HashMap<String, (u32, Vec<String>, Notification)>);
+struct Entries(HashMap<String, (u32, Vec<String>, Notification, Retention)>);
+
+#[derive(PartialEq)]
+enum Retention {
+    Pending,
+    Server,
+    Local,
+}
 
 impl Entries {
     fn server_id(&self, id: &str) -> u32 {
@@ -30,8 +37,26 @@ impl Entries {
 
     fn replace(&mut self, notification: Notification, server: u32, actions: Vec<String>) {
         self.close(server);
-        self.0
-            .insert(notification.id.clone(), (server, actions, notification));
+        self.0.insert(
+            notification.id.clone(),
+            (server, actions, notification, Retention::Pending),
+        );
+    }
+
+    fn retained(&mut self, id: &str, muted: bool) -> Option<Notification> {
+        let entry = self.0.get_mut(id)?;
+        if entry.3 != Retention::Pending {
+            return None;
+        }
+        let mut notification = entry.2.clone();
+        notification.expires_at = None;
+        notification.actions.clear();
+        if muted {
+            entry.2 = notification;
+            entry.3 = Retention::Local;
+            return None;
+        }
+        Some(notification)
     }
 
     fn remove(&mut self, id: &str) -> Option<u32> {
@@ -42,9 +67,15 @@ impl Entries {
         self.0.retain(|_, entry| entry.0 != server);
     }
 
-    fn expired(&mut self, server: u32, reason: u32, now: u64) -> Option<Notification> {
+    fn expired(
+        &mut self,
+        server: u32,
+        reason: u32,
+        now: u64,
+        mute_until: u64,
+    ) -> Option<Notification> {
         let entry = self.0.values().find(|entry| entry.0 == server)?;
-        if should_repost(reason, &entry.2, now) {
+        if should_repost(reason, &entry.2, now, mute_until) {
             Some(entry.2.clone())
         } else {
             self.close(server);
@@ -53,10 +84,12 @@ impl Entries {
     }
 
     fn response(&self, server: u32, action: &str) -> Option<NotificationResponse> {
-        let (id, _) = self.0.iter().find(|(_, entry)| {
-            entry.0 == server && entry.1.iter().step_by(2).any(|key| key == action)
+        let (id, entry) = self.0.iter().find(|(_, entry)| {
+            entry.0 == server
+                && (entry.3 == Retention::Local
+                    || entry.1.iter().step_by(2).any(|key| key == action))
         })?;
-        let action = if action == "default" {
+        let action = if action == "default" || entry.3 == Retention::Local {
             "review"
         } else {
             action
@@ -79,8 +112,9 @@ fn timeout(expires_at: Option<u64>, now: u64) -> i32 {
     })
 }
 
-fn should_repost(reason: u32, notification: &Notification, now: u64) -> bool {
+fn should_repost(reason: u32, notification: &Notification, now: u64, mute_until: u64) -> bool {
     reason == 1
+        && mute_until <= now
         && !notification.muted
         && notification.expires_at.is_some_and(|expires| expires > now)
 }
@@ -182,14 +216,19 @@ impl Backend {
         }
         let mut entries = self.entries.lock().unwrap();
         let replaces = entries.server_id(&notification.id);
-        self.notify(&mut entries, notification, replaces)
+        self.notify(&mut entries, notification, replaces, false)
             .map(|_| ())
     }
 
     fn closed(&self, server: u32, reason: u32) -> Result<Option<u32>, String> {
         let mut entries = self.entries.lock().unwrap();
-        if let Some(notification) = entries.expired(server, reason, now_ms()) {
-            let result = self.notify(&mut entries, notification, server);
+        if let Some(notification) = entries.expired(
+            server,
+            reason,
+            now_ms(),
+            super::MUTE_UNTIL.load(super::Ordering::SeqCst),
+        ) {
+            let result = self.notify(&mut entries, notification, server, false);
             if result.is_err() {
                 entries.close(server);
             }
@@ -203,9 +242,14 @@ impl Backend {
         entries: &mut Entries,
         notification: Notification,
         replaces: u32,
+        retained: bool,
     ) -> Result<u32, String> {
         let action_list = actions(&notification, self.actions);
-        let hints = HashMap::from([("desktop-entry", Value::from("com.boto.desktop"))]);
+        let mut hints = HashMap::from([("desktop-entry", Value::from("com.boto.desktop"))]);
+        if retained {
+            hints.insert("suppress-sound", Value::from(true));
+            hints.insert("urgency", Value::from(1u8));
+        }
         let server: u32 = self
             .proxy
             .call(
@@ -218,12 +262,30 @@ impl Backend {
                     escape_body(&notification.body, self.markup),
                     &action_list,
                     hints,
-                    timeout(notification.expires_at, now_ms()),
+                    delivery_timeout(&notification, retained, now_ms()),
                 ),
             )
             .map_err(dbus_error)?;
+        let id = notification.id.clone();
         entries.replace(notification, server, action_list);
+        entries.0.get_mut(&id).unwrap().3 = if retained {
+            Retention::Server
+        } else {
+            Retention::Pending
+        };
         Ok(server)
+    }
+
+    fn retain(&self, id: &str) -> Result<(), String> {
+        let mut entries = self.entries.lock().unwrap();
+        if let Some(notification) = entries.retained(
+            id,
+            super::MUTE_UNTIL.load(super::Ordering::SeqCst) > now_ms(),
+        ) {
+            let server = entries.server_id(id);
+            self.notify(&mut entries, notification, server, true)?;
+        }
+        Ok(())
     }
 
     fn remove(&self, id: &str) -> Result<(), String> {
@@ -255,6 +317,23 @@ pub fn remove(id: &str) -> Result<(), String> {
         .unwrap()
         .clone();
     backend.as_ref().map_or(Ok(()), |native| native.remove(id))
+}
+
+pub fn retain(id: &str) -> Result<(), String> {
+    let backend = BACKEND
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap()
+        .clone();
+    backend.as_ref().map_or(Ok(()), |native| native.retain(id))
+}
+
+fn delivery_timeout(notification: &Notification, retained: bool, now: u64) -> i32 {
+    if retained {
+        0
+    } else {
+        timeout(notification.expires_at, now)
+    }
 }
 
 #[cfg(test)]
@@ -308,41 +387,200 @@ mod tests {
     }
 
     #[test]
+    fn retain_transforms_existing_entries_without_replay() {
+        let mut entries = Entries::default();
+        assert!(entries.retained("missing", false).is_none());
+        let mut pending = notification();
+        pending.expires_at = Some(200);
+        entries.replace(pending.clone(), 1, actions(&pending, true));
+        let retained = entries.retained(&pending.id, false).unwrap();
+        assert_eq!(retained.title, pending.title);
+        assert_eq!(retained.body, pending.body);
+        assert!(retained.expires_at.is_none());
+        assert!(retained.actions.is_empty());
+        assert_eq!(delivery_timeout(&retained, true, 100), 0);
+        assert_eq!(actions(&retained, true), vec!["default", "Revisar no Boto"]);
+        assert!(!should_repost(1, &retained, 100, 0));
+        for server in [1, 2] {
+            entries.replace(retained.clone(), server, actions(&retained, true));
+            entries.0.get_mut(&pending.id).unwrap().3 = Retention::Server;
+            assert!(entries.retained(&pending.id, false).is_none());
+            assert_eq!(entries.0.len(), 1);
+            assert_eq!(entries.server_id(&pending.id), server);
+            assert!(entries.response(server, "task").is_none());
+            assert!(entries.response(server, "deny").is_none());
+            assert_eq!(
+                entries.response(server, "default"),
+                parse_activation("review|linux-test")
+            );
+        }
+        assert_eq!(entries.remove(&pending.id), Some(2));
+        assert!(entries.retained(&pending.id, false).is_none());
+        entries.replace(pending.clone(), 3, actions(&pending, true));
+        assert!(entries.expired(3, 1, 200, 0).is_none());
+        assert!(entries.retained(&pending.id, false).is_none());
+    }
+
+    #[test]
+    fn muted_retention_is_local_and_never_replayed() {
+        let mut entries = Entries::default();
+        assert!(entries.retained("missing", true).is_none());
+        let mut pending = notification();
+        pending.expires_at = Some(200);
+        entries.replace(pending.clone(), 7, actions(&pending, true));
+        assert!(entries.retained(&pending.id, true).is_none());
+        assert_eq!(entries.server_id(&pending.id), 7);
+        assert!(entries.0[&pending.id].2.expires_at.is_none());
+        assert!(!should_repost(1, &entries.0[&pending.id].2, 100, 0));
+        for action in ["default", "task", "deny", "approve", "always", "unknown"] {
+            assert_eq!(
+                entries.response(7, action),
+                parse_activation("review|linux-test")
+            );
+        }
+        assert!(entries.response(8, "task").is_none());
+        assert!(entries.retained(&pending.id, true).is_none());
+        assert!(entries.retained(&pending.id, false).is_none());
+        assert_eq!(entries.server_id(&pending.id), 7);
+        assert_eq!(entries.remove(&pending.id), Some(7));
+        entries.replace(pending.clone(), 8, actions(&pending, true));
+        assert!(entries.retained(&pending.id, true).is_none());
+        assert!(entries.expired(8, 1, 100, 0).is_none());
+        assert!(entries.0.is_empty());
+        assert!(entries.retained(&pending.id, false).is_none());
+    }
+
+    #[test]
+    #[ignore = "requires a freedesktop notification server; monitor Notify calls"]
+    fn notifications_real_muted_retention() {
+        struct ResetMute;
+        impl Drop for ResetMute {
+            fn drop(&mut self) {
+                super::super::notifications_set_mute(0);
+            }
+        }
+        let _reset = ResetMute;
+        let native = connect().expect("notification server");
+        let mut pending = with_id("linux-muted-retain-test");
+        pending.expires_at = Some(now_ms() + 30_000);
+        native.post(pending.clone()).unwrap();
+        let first = native.entries.lock().unwrap().server_id(&pending.id);
+        super::super::notifications_set_mute(now_ms() + 60_000);
+        native.retain(&pending.id).unwrap();
+        super::super::notifications_set_mute(0);
+        native.retain(&pending.id).unwrap();
+        {
+            let entries = native.entries.lock().unwrap();
+            assert_eq!(entries.server_id(&pending.id), first);
+            assert!(entries.0[&pending.id].2.expires_at.is_none());
+            for action in ["default", "task", "deny", "approve"] {
+                assert_eq!(
+                    entries.response(first, action),
+                    parse_activation("review|linux-muted-retain-test")
+                );
+            }
+        }
+        println!("muted retain and unmute kept server id {first}; all actions route to review");
+        native.remove(&pending.id).unwrap();
+        assert!(native.entries.lock().unwrap().0.is_empty());
+        println!("remove closed locally retained notice");
+    }
+
+    #[test]
+    #[ignore = "requires a freedesktop notification server supporting retention"]
+    fn notifications_real_retention() {
+        let native = connect().expect("notification server");
+        let mut signals = native.proxy.receive_all_signals().unwrap();
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for message in &mut signals {
+                if message.header().member().map(|m| m.as_str()) == Some("NotificationClosed") {
+                    let closed = message.body().deserialize::<(u32, u32)>().unwrap();
+                    if send.send(closed).is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+        let mut pending = with_id("linux-retain-test");
+        pending.expires_at = Some(now_ms() + 1000);
+        native.post(pending.clone()).unwrap();
+        let first = native.entries.lock().unwrap().server_id(&pending.id);
+        native.retain(&pending.id).unwrap();
+        let server = native.entries.lock().unwrap().server_id(&pending.id);
+        {
+            let entries = native.entries.lock().unwrap();
+            assert_eq!(entries.0.len(), 1);
+            assert_eq!(entries.0[&pending.id].1, vec!["default", "Revisar no Boto"]);
+            assert!(entries.0[&pending.id].2.expires_at.is_none());
+        }
+        native.retain(&pending.id).unwrap();
+        assert_eq!(
+            native.entries.lock().unwrap().server_id(&pending.id),
+            server
+        );
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(2200);
+        while let Ok((closed, reason)) =
+            receive.recv_timeout(until.saturating_duration_since(std::time::Instant::now()))
+        {
+            assert!((closed != first && closed != server) || reason != 1);
+            if std::time::Instant::now() >= until {
+                break;
+            }
+        }
+        println!("retained {first} -> {server}; default only; no expiry past original deadline (2200 ms)");
+        native.remove(&pending.id).unwrap();
+        loop {
+            let (closed, reason) = receive
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("remove closure");
+            if closed == server {
+                assert_eq!(reason, 3);
+                break;
+            }
+        }
+        assert_eq!(native.entries.lock().unwrap().server_id(&pending.id), 0);
+        native.retain(&pending.id).unwrap();
+        assert!(native.entries.lock().unwrap().0.is_empty());
+        println!("remove closed retained notification; retain after remove is a no-op");
+    }
+
+    #[test]
     fn notification_expiry_and_muted_removal() {
         let mut pending = notification();
         pending.expires_at = Some(200);
-        assert!(should_repost(1, &pending, 100));
-        assert!(!should_repost(1, &pending, 200));
-        assert!(!should_repost(1, &pending, 201));
+        assert!(should_repost(1, &pending, 100, 0));
+        assert!(!should_repost(1, &pending, 200, 0));
+        assert!(!should_repost(1, &pending, 201, 0));
         for reason in [0, 2, 3, 4] {
-            assert!(!should_repost(reason, &pending, 100));
+            assert!(!should_repost(reason, &pending, 100, 0));
         }
-        assert!(!should_repost(1, &notification(), 100));
+        assert!(!should_repost(1, &notification(), 100, 0));
         let mut muted = pending.clone();
         muted.muted = true;
-        assert!(!should_repost(1, &muted, 100));
+        assert!(!should_repost(1, &muted, 100, 0));
 
         let mut entries = Entries::default();
-        assert!(entries.expired(1, 1, 100).is_none());
+        assert!(entries.expired(1, 1, 100, 0).is_none());
         entries.replace(pending.clone(), 1, actions(&pending, true));
-        let repost = entries.expired(1, 1, 100).unwrap();
+        let repost = entries.expired(1, 1, 100, 0).unwrap();
         assert_eq!(repost.expires_at, pending.expires_at);
         assert_eq!(repost.body, pending.body);
         assert_eq!(entries.server_id(&pending.id), 1);
         entries.replace(repost, 2, actions(&pending, true));
-        assert!(entries.expired(1, 1, 100).is_none());
+        assert!(entries.expired(1, 1, 100, 0).is_none());
         assert_eq!(entries.server_id(&pending.id), 2);
         entries.replace(notification(), 2, vec![]);
-        assert!(entries.expired(2, 1, 100).is_none());
+        assert!(entries.expired(2, 1, 100, 0).is_none());
         assert!(entries.0.is_empty());
         for reason in [1, 2, 3, 4] {
             entries.replace(pending.clone(), 1, vec![]);
-            assert!(entries.expired(1, reason, 200).is_none());
+            assert!(entries.expired(1, reason, 200, 0).is_none());
             assert!(entries.0.is_empty());
         }
         entries.replace(pending.clone(), 1, vec![]);
         assert_eq!(entries.remove(&muted.id), Some(1));
-        assert!(entries.expired(1, 1, 100).is_none());
+        assert!(entries.expired(1, 1, 100, 0).is_none());
         assert_eq!(entries.remove(&muted.id), None);
     }
 
@@ -353,7 +591,7 @@ mod tests {
             pending.expires_at = Some(200);
             let mut entries = Entries::default();
             entries.replace(pending.clone(), 1, actions(&pending, true));
-            let repost = entries.expired(1, 1, 100).unwrap();
+            let repost = entries.expired(1, 1, 100, 0).unwrap();
             entries.replace(repost, replacement, actions(&pending, true));
             assert_eq!(entries.0.len(), 1);
             assert_eq!(entries.server_id(&pending.id), replacement);
@@ -363,15 +601,31 @@ mod tests {
             );
             if replacement != 1 {
                 assert!(entries.response(1, "task").is_none());
-                assert!(entries.expired(1, 1, 100).is_none());
-                assert!(entries.expired(1, 1, 100).is_none());
+                assert!(entries.expired(1, 1, 100, 0).is_none());
+                assert!(entries.expired(1, 1, 100, 0).is_none());
                 assert_eq!(entries.0.len(), 1);
                 assert_eq!(entries.server_id(&pending.id), replacement);
             }
             assert_eq!(entries.remove(&pending.id), Some(replacement));
             assert!(entries.0.is_empty());
-            assert!(entries.expired(replacement, 1, 100).is_none());
+            assert!(entries.expired(replacement, 1, 100, 0).is_none());
         }
+    }
+
+    #[test]
+    fn native_mute_blocks_expiry_without_replay() {
+        let mut pending = notification();
+        pending.expires_at = Some(500);
+        assert!(!should_repost(1, &pending, 100, 200));
+        assert!(should_repost(1, &pending, 200, 200));
+        assert!(should_repost(1, &pending, 201, 200));
+        assert!(should_repost(1, &pending, 100, 0));
+        let mut entries = Entries::default();
+        entries.replace(pending.clone(), 1, actions(&pending, true));
+        assert!(entries.expired(1, 1, 100, 200).is_none());
+        assert!(entries.0.is_empty());
+        assert!(entries.expired(1, 1, 201, 200).is_none());
+        assert!(entries.expired(1, 1, 201, 0).is_none());
     }
 
     #[test]
@@ -510,7 +764,7 @@ mod tests {
                 );
                 if replacement != first {
                     assert!(entries.response(first, "task").is_none());
-                    assert!(entries.expired(first, 1, now_ms()).is_none());
+                    assert!(entries.expired(first, 1, now_ms(), 0).is_none());
                 }
                 println!("early expiry re-presented: {first} -> {replacement}");
                 break;
