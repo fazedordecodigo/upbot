@@ -11,10 +11,18 @@
 - Improved chat streaming performance and rendered bot replies as Markdown.
 
 ### Fixed
+- Keep already delivered interrupted-approval notifications in Notification Center until
+  reviewed, so clicking them after a restart opens the specific interrupted notice.
 - OpenCode turns waiting on bridge tools or user approvals no longer fail with a spurious
   sign-in error after 30 seconds.
+- More reliable provider session recovery, gateway shutdown/reconnection and team delivery status.
+- Surface chat, library and host configuration errors instead of silently dropping failures.
+- Gemini bots start with `gemini --acp` (the old `--experimental-acp` flag is deprecated). When
+  Gemini is signed out, the error now says to run `gemini` and choose Sign in with Google, a
+  Gemini API key or Vertex AI, including when a cached Google sign-in fails.
 
 ### Added
+- Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases.
 - Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
   Authenticode signing; releases reject incomplete signing secrets and verify signatures.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
@@ -24,10 +32,9 @@
 - Native approval notifications on macOS and Windows, with one-hour mute, and a macOS
   menu-bar mini window for pending decisions and running bots.
 - A dedicated bot configuration screen and a persistent approval audit trail.
-
-### Fixed
-- More reliable provider session recovery, gateway shutdown/reconnection and team delivery status.
-- Surface chat, library and host configuration errors instead of silently dropping failures.
+- Approvals left pending when the daemon stops now appear in Settings → Approvals as
+  "Interrompido pelo reinício" (no actions; the blocked action was not executed), and
+  clicking their notification explains that instead of a generic unavailable notice.
 
 ## 0.4.0 — 2026-10-26
 

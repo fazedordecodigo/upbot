@@ -469,7 +469,8 @@ acp
   .onRequest("session/new", async (ctx) => {
     logRequest("session/new", ctx.params);
     if (process.env.FAKE_ACP_NEW_ERROR) {
-      throw new acp.RequestError(-32603, process.env.FAKE_ACP_NEW_ERROR);
+      const code = Number.parseInt(process.env.FAKE_ACP_NEW_ERROR_CODE ?? "", 10) || -32603;
+      throw new acp.RequestError(code, process.env.FAKE_ACP_NEW_ERROR);
     }
     const delay = Number.parseInt(process.env.FAKE_ACP_NEW_DELAY_MS ?? "", 10) || 0;
     if (delay > 0) await sleep(delay);
