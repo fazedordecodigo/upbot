@@ -9,7 +9,6 @@ const updaterAssets = {
   "linux-x86_64": "Boto_0.3.0_amd64.AppImage",
   "linux-aarch64": "Boto_0.3.0_aarch64.AppImage",
   "windows-x86_64": "Boto_0.3.0_x64-setup.exe",
-  "windows-aarch64": "Boto_0.3.0_arm64-setup.exe",
 };
 
 test.each(["complete", "missing", "empty", "duplicate"])(
@@ -20,7 +19,7 @@ test.each(["complete", "missing", "empty", "duplicate"])(
       let names = Object.values(updaterAssets);
       if (scenario === "missing") names = names.slice(0, -1);
       if (scenario === "empty") names = [];
-      if (scenario === "duplicate") names.push("Boto_other_arm64-setup.exe");
+      if (scenario === "duplicate") names.push("Boto_other_x64-setup.exe");
       const assets = names.flatMap((name) => [{ name }, { name: `${name}.sig` }]);
       assets.push({ name: "Boto_0.3.0_arm64.deb" }, { name: "Boto-0.3.0-1.aarch64.rpm" });
       writeFileSync(join(dir, "assets.json"), JSON.stringify({ assets }));

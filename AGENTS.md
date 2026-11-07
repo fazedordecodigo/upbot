@@ -447,12 +447,12 @@ with periodic `relay.audit_suppressed` summaries (`RELAY_AUDIT_WINDOW_MS`).
 ## CI, releases, updates, branding
 
 - `.github/workflows/ci.yml`: lint/typecheck on Ubuntu; tests, daemon build, Rust check and
-  desktop build on macOS ARM64 and Linux/Windows x64 and ARM64.
+  desktop build on macOS ARM64, Linux x64/ARM64 and Windows x64.
 - `.github/workflows/release.yml`: on `v*` tags, tauri-action builds macOS `.app`/`.dmg`,
-  Linux x64/ARM64 `.AppImage`/`.deb`/`.rpm` and unsigned per-user Windows x64/ARM64 NSIS
+  Linux x64/ARM64 `.AppImage`/`.deb`/`.rpm` and unsigned per-user Windows x64 NSIS
   `.exe` into a draft release. Linux uses Ubuntu 22.04 on both architectures for the same
   glibc baseline. Native Bun host detection in `beforeBuildCommand` builds the matching sidecar.
-  It composes `latest.json` from five architecture-specific updater assets and signatures
+  It composes `latest.json` from four architecture-specific updater assets and signatures
   before publishing (macOS `.app.tar.gz`, Linux AppImage, Windows NSIS; not deb/rpm).
   RPM and deb packages do not self-update.
   Updater signing uses the `TAURI_SIGNING_PRIVATE_KEY` repo secret (pubkey in `tauri.conf.json`
