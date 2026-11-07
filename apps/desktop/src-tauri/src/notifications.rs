@@ -222,6 +222,17 @@ pub async fn notifications_post(app: AppHandle, notification: Notification) -> R
 }
 
 #[tauri::command]
+pub async fn notifications_retain(app: AppHandle, id: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    return on_main(app, move |done| done(platform::retain(&id))).await;
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, id);
+        Ok(())
+    }
+}
+
+#[tauri::command]
 pub async fn notifications_remove(app: AppHandle, id: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     let native_app = app.clone();

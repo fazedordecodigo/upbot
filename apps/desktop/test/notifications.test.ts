@@ -183,8 +183,10 @@ test("mute is a persisted finite timestamp with exactly one hour duration", () =
 function harness(initial: Approval[] = [pending], store = preferences(), result?: ApprovalResult) {
   let approvals = initial;
   let handler: ((approval: Approval) => void) | undefined;
+  let reconnect: (() => void) | undefined;
   const posts: DecisionNotification[] = [];
   const removals: string[] = [];
+  const retentions: string[] = [];
   const calls: { method: string; params: unknown }[] = [];
   const errors: string[] = [];
   const views: string[] = [];
@@ -215,10 +217,18 @@ function harness(initial: Approval[] = [pending], store = preferences(), result?
         handler = undefined;
       };
     },
-    onReconnect: () => () => {},
+    onReconnect: (fn: () => void) => {
+      reconnect = fn;
+      return () => {
+        reconnect = undefined;
+      };
+    },
   } as unknown as Pick<DaemonClient, "request" | "on" | "onReconnect">;
   const bridge: NotificationBridge = {
     initialize: async () => true,
+    retain: async (id) => {
+      retentions.push(id);
+    },
     setMute: async (until) => {
       muteDeadlines.push(until);
     },
@@ -250,12 +260,18 @@ function harness(initial: Approval[] = [pending], store = preferences(), result?
     controller,
     posts,
     removals,
+    retentions,
     calls,
     errors,
     views,
     muteDeadlines,
     notices,
     bridge,
+    reconnect: async (items: Approval[]) => {
+      approvals = items;
+      reconnect?.();
+      await Bun.sleep(0);
+    },
     update: async (a: Approval) => {
       approvals = [a];
       handler?.(a);
@@ -411,6 +427,7 @@ test("restart preserves a delivered interrupted toast until its real callback op
     expect(after.posts).toEqual([]);
     expect(after.removals).toEqual([]);
     await after.update(interrupted);
+    expect(after.retentions).toEqual([interrupted.id]);
     expect(after.removals).toEqual([]);
     await after.controller.respond({ id: interrupted.id, action: "review" });
     expect(after.notices).toEqual([INTERRUPTED_NOTICE]);
@@ -426,6 +443,45 @@ test("restart preserves a delivered interrupted toast until its real callback op
     expect(missing.posts).toEqual([]);
   } finally {
     missing.controller.stop();
+  }
+});
+
+test("interruption retains only delivered nonlocal notices and absorbs native failures", async () => {
+  const interrupted: Approval = { ...pending, status: "interrupted", interruptedAt: 500 };
+  const undelivered = harness([interrupted]);
+  const local = harness();
+  const failing = harness();
+  try {
+    await undelivered.controller.start();
+    expect(undelivered.retentions).toEqual([]);
+    await local.controller.start();
+    await local.controller.respond({ id: pending.id, action: "deny" });
+    await local.update(interrupted);
+    expect(local.retentions).toEqual([]);
+    await failing.controller.start();
+    failing.bridge.retain = async () => {
+      throw new Error("sensitive transport detail");
+    };
+    await failing.update(interrupted);
+    expect(failing.errors).toEqual([]);
+  } finally {
+    undelivered.controller.stop();
+    local.controller.stop();
+    failing.controller.stop();
+  }
+});
+
+test("pruning an interrupted retained notice still removes it", async () => {
+  const h = harness();
+  try {
+    await h.controller.start();
+    await h.update({ ...pending, status: "interrupted", interruptedAt: 500 });
+    await h.update({ ...pending, status: "interrupted", interruptedAt: 500 });
+    expect(h.retentions).toEqual([pending.id]);
+    await h.reconnect([]);
+    expect(h.removals).toEqual([pending.id]);
+  } finally {
+    h.controller.stop();
   }
 });
 

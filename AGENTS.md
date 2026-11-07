@@ -106,7 +106,8 @@ per-user COM activation registration; mute uses SuppressPopup plus silent audio 
 is also in the toast context menu. General settings expose mute on every platform.
 Mute changes and the persisted startup deadline sync to native on every platform. Linux
 skips expiry re-presentation while muted, dropping the entry without replay on unmute.
-Linux uses freedesktop D-Bus notifications with replacement by approval id. Pending requests
+Linux uses freedesktop D-Bus notifications with replacement by approval id.
+Interrupted notices are kept without a deadline and only offer review. Pending requests
 use a timeout until expiresAt and are re-presented on early server expiry; closing never
 decides. Muted posts close the previous notification without delivery or replay.
 Buttons and click callbacks require

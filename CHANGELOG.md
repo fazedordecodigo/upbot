@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- Keep Linux interrupted-approval notices without a deadline until reviewed.
 - Linux approval notifications no longer reappear on server expiry while Boto is muted.
 - Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
   DPAPI scripts load System.Security without `Add-Type`, a timed-out call is retried, and a

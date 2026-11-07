@@ -211,6 +211,7 @@ fn main() {
             notifications::notifications_set_mute,
             notifications::notifications_post,
             notifications::notifications_remove,
+            notifications::notifications_retain,
             notifications::notifications_take_actions,
             notifications::notifications_open
         ])

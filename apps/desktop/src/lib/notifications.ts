@@ -19,6 +19,7 @@ export type NotificationResponse = { id: string; action: string };
 export interface NotificationBridge {
   initialize(): Promise<boolean>;
   setMute(until: number): Promise<void>;
+  retain(id: string): Promise<void>;
   post(notification: DecisionNotification): Promise<void>;
   remove(id: string): Promise<void>;
   listen(handler: (response: NotificationResponse) => void): Promise<() => void>;
@@ -177,6 +178,7 @@ export function decisionNotification(
 
 export class ApprovalNotifications {
   private seen = new Set<string>();
+  private retained = new Set<string>();
   private active = new Map<string, Approval>();
   private local = new Set<string>();
   private busy = new Set<string>();
@@ -263,6 +265,18 @@ export class ApprovalNotifications {
       const timer = this.timers.get(approval.id);
       if (timer !== undefined) clearTimeout(timer);
       this.timers.delete(approval.id);
+      if (
+        this.seen.has(approval.id) &&
+        !this.local.has(approval.id) &&
+        !this.retained.has(approval.id)
+      ) {
+        try {
+          await this.bridge.retain(approval.id);
+          this.retained.add(approval.id);
+        } catch (e) {
+          logWarn("notifications.retain_failed", errorFields(e));
+        }
+      }
       return;
     }
     const notification = decisionNotification(

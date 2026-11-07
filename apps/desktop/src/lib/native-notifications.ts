@@ -28,6 +28,7 @@ export function useNativeNotifications(
       setMute: setNativeMute,
       post: (notification) => invoke("notifications_post", { notification }),
       remove: (id) => invoke("notifications_remove", { id }),
+      retain: (id) => invoke("notifications_retain", { id }),
       open: () => invoke("notifications_open"),
       listen: async (handler) => {
         let stopped = false;
