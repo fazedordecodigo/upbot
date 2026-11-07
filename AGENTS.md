@@ -113,9 +113,22 @@ Buttons and click callbacks require
 the server's actions capability; without it notifications show but clicks cannot be reported.
 Native callbacks queue actions until the main frontend can drain them; the daemon
 remains authoritative. Optional dock/taskbar badges are not implemented.
-Pending approvals and their blocked calls are memory-only: after daemon shutdown,
-toast decisions cannot recover them. Missing IDs open Settings → Approvals with an
-unavailable notice and remove the toast, without retrying or fabricating approval.
+Blocked calls are memory-only and die with the daemon. Pending approvals are mirrored in
+`approval_records` (migration 22) with only the audit fields (kind, tool, secretName, app
+id/name, permission, background, expiresAt — never args, detail, bot-written titles or secret
+values); a decision or expiry deletes the row. `ApprovalService.suspend()` runs first on
+shutdown so closing runtimes do not expire them. On start, `interruptLeftovers()` marks leftover
+rows `interrupted` (`interruptedAt`) and writes `approval.interrupted` (reason `daemon_restart`)
+in one transaction per approval (a failed audit write keeps the row pending for the next
+start), and keeps the latest 50. `approvals.list` returns them with `detail: ""` and a title
+rebuilt from the tool/secret name; `approvals.respond` rejects them with `not_found`
+("interrupted by a daemon restart"); nothing is resumed or re-run. UI: "Interrompido pelo
+reinício", no actions. Toast clicks for those IDs open Settings → Approvals with
+`INTERRUPTED_NOTICE` and remove the toast; unknown IDs keep the generic unavailable notice.
+Startup/reconnect preserves delivered interrupted toasts without posting them again;
+they are removed on review or when the retained interrupted record is pruned.
+Tests: `test/approvals-restart.e2e.test.ts` (SIGKILL and SIGTERM restarts),
+`test/approval-audit.test.ts`, desktop `test/notifications.test.ts`.
 Windows registers its COM activator before spawning the daemon; `-ToastActivated`
 payloads and COM callbacks share the native queue. The single-instance plugin forwards
 second-launch arguments and focuses the existing window before another daemon starts.
@@ -394,10 +407,15 @@ returning them: `connector.github` -> `github_api` (REST proxy, token redacted,
 `BOTO_GITHUB_API` for tests); `connector.1password` -> `onepassword_read` (`op read`,
 optional service-account token); `connector.bitwarden` -> `bitwarden_get` (`bw get`,
 BW_SESSION). `BOTO_OP_COMMAND`/`BOTO_BW_COMMAND` override the CLIs.
-Computer Use (`src/computer.ts`, macOS): off per agent until `computer.setAccess`; bridge
+Computer Use (`src/computer.ts`, `src/computer-platform.ts`): off per agent until `computer.setAccess`; bridge
 `computer_screenshot` (screencapture), `computer_click` (CoreGraphics via JXA),
 `computer_type`, `computer_key` (System Events, whitelisted keys/modifiers);
-`BOTO_COMPUTER_DRYRUN=<file>` logs commands instead (tests).
+Windows uses PowerShell/.NET System.Drawing, user32 mouse input and Unicode SendInput.
+Linux requires X11, xdotool and import (ImageMagick), scrot or gnome-screenshot.
+`computer.access` includes an unavailable reason for Wayland/missing tools/display; the UI shows it.
+Command/option map to Win/Super and Alt outside macOS; whitelist and approval gating are unchanged.
+`BOTO_COMPUTER_DRYRUN=<file>` logs platform commands instead (tests); Windows typing payload
+is passed only in the child environment to avoid command-line limits. Tests: `test/computer-platform.test.ts`.
 Voice (`src/voice.ts`): `voice.speak` (`say`, or `BOTO_TTS_COMMAND` with text on
 stdin), `voice.transcribe` (`BOTO_STT_COMMAND` with `{file}`, or `whisper` on PATH),
 `voice.status`. UI: Vault view, Computer Use toggle, composer mic, read-aloud button;
@@ -577,7 +595,7 @@ in `default` when the user settings set `auto_edit` or `yolo`. Settings cannot s
 - `bun run build:app` — build the debug desktop bundle for the host platform (macOS app,
   Linux AppImage/deb, or Windows NSIS).
 - `bun run test` — `bun test packages/daemon packages/host apps/desktop/test` (daemon e2e and desktop browser tests).
-- Computer Use and built-in `say` voice are macOS-only; Linux uses Secret Service for the
+- Computer Use supports macOS, Windows and Linux X11; built-in `say` voice is macOS-only; Linux uses Secret Service for the
   vault key when available, while Windows uses DPAPI.
 - `bun run lint` — `biome check .`
 - `bun run typecheck` — `tsc -p` for protocol, daemon, relay, host, desktop (sequential).
