@@ -58,6 +58,7 @@ mod tests {
             title: "A & B".into(),
             body: "<Anexo>".into(),
             muted: true,
+            expires_at: None,
             actions: vec![NotificationButton {
                 id: "task".into(),
                 label: "Só nesta tarefa".into(),
@@ -79,6 +80,7 @@ mod tests {
             title: "Concluído.".into(),
             body: String::new(),
             muted: false,
+            expires_at: None,
             actions: vec![],
         });
         assert!(!xml.contains("scenario="));

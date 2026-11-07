@@ -15,6 +15,9 @@
   Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
 ### Fixed
+- Keep Linux interrupted-approval notices until reviewed without presenting replacements
+  during mute or replaying them on unmute.
+- Linux approval notifications no longer reappear on server expiry while Boto is muted.
 - macOS Computer Use types Unicode text via paste instead of layout-dependent keystrokes,
   preserving accents and emoji and restoring the previous clipboard contents.
 - Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
@@ -37,6 +40,7 @@
   Gemini API key or Vertex AI, including when a cached Google sign-in fails.
 
 ### Added
+- Native Linux approval notifications via freedesktop D-Bus, with actions when supported.
 - Versões anteriores das habilidades, com leitura de Markdown ou texto bruto e retorno à versão atual.
 - Histórico de execuções das rotinas em Agendadas e nas configurações do bot, com estado da fila e do turno.
 - Detalhes de habilidades com Markdown e texto bruto; pedidos de permissão antigos ficam sem ações quando não estão mais pendentes no daemon.
