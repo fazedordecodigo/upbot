@@ -145,9 +145,12 @@ claude (OAuth token or API key), codex (`OPENAI_API_KEY`), gemini (`GEMINI_API_K
 under `/opt/cursor-agent-home` because `/root` is bind-mounted from persistent storage.
 Signed-out behavior: Gemini reports `gemini`, OpenCode `opencode auth login`, and Cursor
 `agent login`. OpenCode alone has a 30-second first-activity watchdog: message/thought chunks,
-tool calls/updates, plans, or agent requests count as progress; session metadata updates such as
-available commands do not. Without progress after a prompt, it reports `opencode auth login` and
-tears down its child; after the first progress, the prompt is unbounded. Fake Gemini/Cursor credentials reach only
+tool calls/updates, plans, agent requests, or bridge tool calls for the agent's current turn count
+as progress; bridge calls count before approval gating, so waiting for approval cannot trigger
+the watchdog. Session metadata updates such as available commands do not count. Without progress
+after a prompt, it reports `opencode auth login` and tears down its child; after the first
+progress (including a completed or rejected bridge call), the prompt is unbounded.
+`BOTO_ACP_FIRST_ACTIVITY_MS` overrides the timeout for tests. Fake Gemini/Cursor credentials reach only
 Firecracker provider env. Gemini invalid-key errors are explicit; Cursor's
 `Failed to initialize session services` mapping is inferred from `proxy.log` showing a request
 to `api2.cursor.sh` with a microVM credential set, since Cursor returns no explicit invalid-key
