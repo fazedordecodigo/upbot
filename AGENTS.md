@@ -215,8 +215,24 @@ Env vars (daemon):
   (`0` kills immediately).
 
 Sign-in commands surfaced on auth errors: `devin auth login`, `agent login`,
-`grok login`, `opencode auth login`, `claude auth login`, `codex login` (all verified via --help). Gemini: `gemini`
-interactive sign-in — UNVERIFIED, CLI not installed.
+`grok login`, `opencode auth login`, `claude auth login`, `codex login` (all verified via --help).
+Gemini has no login subcommand: the message says to run `gemini` and pick Sign in with Google,
+Use Gemini API Key or Vertex AI (`LOGIN_HINTS`).
+
+Gemini CLI (verified 0.65.0 and 0.67.0 with `spikes/acp-probe.ts`, plus the daemon with the real
+binary): Boto runs `gemini --acp`; `--experimental-acp` still works but `--help` marks it
+deprecated. `initialize` returns authMethods oauth-personal, gemini-api-key, vertex-ai and gateway.
+`session/new` reads `security.auth.selectedType` from settings and falls back to gemini-api-key.
+With no method and no `GEMINI_API_KEY`, it fails with -32000 `Gemini API key is missing or not
+configured.`, which maps to `auth_required`. Interactive `gemini` shows the auth picker and saves the
+choice to `~/.gemini/settings.json`. An API key entered there is stored by the CLI (on a host with
+no keychain: `~/.gemini/gemini-credentials.json`), and `--acp` uses it without env. If
+oauth-personal is selected without cached creds, the CLI exits 41 before `initialize`. Its stderr
+then shows `Failed to authenticate with user code.` (AUTH_RE). `classifyStartupError` quotes only
+the stderr line that matched, not the stack. A bad key fails at `session/prompt` with HTTP 400
+`API key not valid`.
+Gemini exposes legacy ACP `modes` (default, autoEdit, yolo, plan; `currentModeId` default), not
+`configOptions`, so `DEFAULT_MODE` does not apply. Its approval level comes from its own settings.
 
 `bun run smoke:ui` — real-Chrome UI smoke (playwright-core, dev-only
 `location.hash` connect path in daemon.ts — dead code in prod builds).
@@ -452,10 +468,14 @@ with periodic `relay.audit_suppressed` summaries (`RELAY_AUDIT_WINDOW_MS`).
 ## CI, releases, updates, branding
 
 - `.github/workflows/ci.yml`: lint/typecheck on Ubuntu; tests, daemon build, Rust check and
-  desktop build on macOS, Linux and Windows.
+  desktop build on macOS ARM64, Linux x64/ARM64 and Windows x64.
 - `.github/workflows/release.yml`: on `v*` tags, tauri-action builds macOS `.app`/`.dmg`,
-  Linux `.AppImage`/`.deb` and a per-user Windows NSIS `.exe` into a draft release.
-  It composes `latest.json` from each platform's updater asset and signature before publishing.
+  Linux x64/ARM64 `.AppImage`/`.deb`/`.rpm` and per-user Windows x64 NSIS
+  `.exe` into a draft release. Linux uses Ubuntu 22.04 on both architectures for the same
+  glibc baseline. Native Bun host detection in `beforeBuildCommand` builds the matching sidecar.
+  It composes `latest.json` from four architecture-specific updater assets and signatures
+  before publishing (macOS `.app.tar.gz`, Linux AppImage, Windows NSIS; not deb/rpm).
+  RPM and deb packages do not self-update.
   Updater signing uses the `TAURI_SIGNING_PRIVATE_KEY` repo secret (pubkey in `tauri.conf.json`
   `plugins.updater`); Apple signing/notarization turn on when `APPLE_CERTIFICATE`,
   `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` (+ `APPLE_ID`, `APPLE_PASSWORD`,
@@ -541,7 +561,12 @@ Provider agents ask for approval only when THEIR OWN config says so
 (`PROVIDER_PERMISSION_CONFIG` in `packages/protocol` maps provider -> config path).
 The UI shows this as a notice; we never change or sandbox those configs.
 Note: `spikes/out/mode-probe.json` was measured with the user's permissive global
-configs, so it does not reflect stock defaults. Gemini's config path is unverified.
+configs, so it does not reflect stock defaults. Gemini (verified 0.65.0/0.67.0) reads user
+`~/.gemini/settings.json` (`$GEMINI_CLI_HOME/.gemini` when set), workspace `.gemini/settings.json`
+and a system file such as `/etc/gemini-cli/settings.json`. `general.defaultApprovalMode` defaults
+to `default` (prompts) and also accepts auto_edit or plan. Under `--acp`, the session still started
+in `default` when the user settings set `auto_edit` or `yolo`. Settings cannot select yolo; only
+`--yolo` or `--approval-mode` can.
 
 ## Verified commands (run from repo root)
 
