@@ -42,9 +42,15 @@ impl Entries {
         self.0.retain(|_, entry| entry.0 != server);
     }
 
-    fn expired(&mut self, server: u32, reason: u32, now: u64) -> Option<Notification> {
+    fn expired(
+        &mut self,
+        server: u32,
+        reason: u32,
+        now: u64,
+        mute_until: u64,
+    ) -> Option<Notification> {
         let entry = self.0.values().find(|entry| entry.0 == server)?;
-        if should_repost(reason, &entry.2, now) {
+        if should_repost(reason, &entry.2, now, mute_until) {
             Some(entry.2.clone())
         } else {
             self.close(server);
@@ -79,8 +85,9 @@ fn timeout(expires_at: Option<u64>, now: u64) -> i32 {
     })
 }
 
-fn should_repost(reason: u32, notification: &Notification, now: u64) -> bool {
+fn should_repost(reason: u32, notification: &Notification, now: u64, mute_until: u64) -> bool {
     reason == 1
+        && mute_until <= now
         && !notification.muted
         && notification.expires_at.is_some_and(|expires| expires > now)
 }
@@ -188,7 +195,12 @@ impl Backend {
 
     fn closed(&self, server: u32, reason: u32) -> Result<Option<u32>, String> {
         let mut entries = self.entries.lock().unwrap();
-        if let Some(notification) = entries.expired(server, reason, now_ms()) {
+        if let Some(notification) = entries.expired(
+            server,
+            reason,
+            now_ms(),
+            super::MUTE_UNTIL.load(super::Ordering::SeqCst),
+        ) {
             let result = self.notify(&mut entries, notification, server);
             if result.is_err() {
                 entries.close(server);
@@ -311,38 +323,38 @@ mod tests {
     fn notification_expiry_and_muted_removal() {
         let mut pending = notification();
         pending.expires_at = Some(200);
-        assert!(should_repost(1, &pending, 100));
-        assert!(!should_repost(1, &pending, 200));
-        assert!(!should_repost(1, &pending, 201));
+        assert!(should_repost(1, &pending, 100, 0));
+        assert!(!should_repost(1, &pending, 200, 0));
+        assert!(!should_repost(1, &pending, 201, 0));
         for reason in [0, 2, 3, 4] {
-            assert!(!should_repost(reason, &pending, 100));
+            assert!(!should_repost(reason, &pending, 100, 0));
         }
-        assert!(!should_repost(1, &notification(), 100));
+        assert!(!should_repost(1, &notification(), 100, 0));
         let mut muted = pending.clone();
         muted.muted = true;
-        assert!(!should_repost(1, &muted, 100));
+        assert!(!should_repost(1, &muted, 100, 0));
 
         let mut entries = Entries::default();
-        assert!(entries.expired(1, 1, 100).is_none());
+        assert!(entries.expired(1, 1, 100, 0).is_none());
         entries.replace(pending.clone(), 1, actions(&pending, true));
-        let repost = entries.expired(1, 1, 100).unwrap();
+        let repost = entries.expired(1, 1, 100, 0).unwrap();
         assert_eq!(repost.expires_at, pending.expires_at);
         assert_eq!(repost.body, pending.body);
         assert_eq!(entries.server_id(&pending.id), 1);
         entries.replace(repost, 2, actions(&pending, true));
-        assert!(entries.expired(1, 1, 100).is_none());
+        assert!(entries.expired(1, 1, 100, 0).is_none());
         assert_eq!(entries.server_id(&pending.id), 2);
         entries.replace(notification(), 2, vec![]);
-        assert!(entries.expired(2, 1, 100).is_none());
+        assert!(entries.expired(2, 1, 100, 0).is_none());
         assert!(entries.0.is_empty());
         for reason in [1, 2, 3, 4] {
             entries.replace(pending.clone(), 1, vec![]);
-            assert!(entries.expired(1, reason, 200).is_none());
+            assert!(entries.expired(1, reason, 200, 0).is_none());
             assert!(entries.0.is_empty());
         }
         entries.replace(pending.clone(), 1, vec![]);
         assert_eq!(entries.remove(&muted.id), Some(1));
-        assert!(entries.expired(1, 1, 100).is_none());
+        assert!(entries.expired(1, 1, 100, 0).is_none());
         assert_eq!(entries.remove(&muted.id), None);
     }
 
@@ -353,7 +365,7 @@ mod tests {
             pending.expires_at = Some(200);
             let mut entries = Entries::default();
             entries.replace(pending.clone(), 1, actions(&pending, true));
-            let repost = entries.expired(1, 1, 100).unwrap();
+            let repost = entries.expired(1, 1, 100, 0).unwrap();
             entries.replace(repost, replacement, actions(&pending, true));
             assert_eq!(entries.0.len(), 1);
             assert_eq!(entries.server_id(&pending.id), replacement);
@@ -363,15 +375,31 @@ mod tests {
             );
             if replacement != 1 {
                 assert!(entries.response(1, "task").is_none());
-                assert!(entries.expired(1, 1, 100).is_none());
-                assert!(entries.expired(1, 1, 100).is_none());
+                assert!(entries.expired(1, 1, 100, 0).is_none());
+                assert!(entries.expired(1, 1, 100, 0).is_none());
                 assert_eq!(entries.0.len(), 1);
                 assert_eq!(entries.server_id(&pending.id), replacement);
             }
             assert_eq!(entries.remove(&pending.id), Some(replacement));
             assert!(entries.0.is_empty());
-            assert!(entries.expired(replacement, 1, 100).is_none());
+            assert!(entries.expired(replacement, 1, 100, 0).is_none());
         }
+    }
+
+    #[test]
+    fn native_mute_blocks_expiry_without_replay() {
+        let mut pending = notification();
+        pending.expires_at = Some(500);
+        assert!(!should_repost(1, &pending, 100, 200));
+        assert!(should_repost(1, &pending, 200, 200));
+        assert!(should_repost(1, &pending, 201, 200));
+        assert!(should_repost(1, &pending, 100, 0));
+        let mut entries = Entries::default();
+        entries.replace(pending.clone(), 1, actions(&pending, true));
+        assert!(entries.expired(1, 1, 100, 200).is_none());
+        assert!(entries.0.is_empty());
+        assert!(entries.expired(1, 1, 201, 200).is_none());
+        assert!(entries.expired(1, 1, 201, 0).is_none());
     }
 
     #[test]
@@ -510,7 +538,7 @@ mod tests {
                 );
                 if replacement != first {
                     assert!(entries.response(first, "task").is_none());
-                    assert!(entries.expired(first, 1, now_ms()).is_none());
+                    assert!(entries.expired(first, 1, now_ms(), 0).is_none());
                 }
                 println!("early expiry re-presented: {first} -> {replacement}");
                 break;

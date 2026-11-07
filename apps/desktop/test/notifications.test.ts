@@ -10,6 +10,7 @@ import {
   muteForHour,
   muteUntil,
   type NotificationBridge,
+  setMuteUntil,
 } from "../src/lib/notifications";
 
 const pending: Approval = {
@@ -186,6 +187,7 @@ function harness(initial: Approval[] = [pending], store = preferences(), result?
   const calls: { method: string; params: unknown }[] = [];
   const errors: string[] = [];
   const views: string[] = [];
+  const muteDeadlines: number[] = [];
   let failure: Error | null = null;
   const notices: string[] = [];
   let now = 1000;
@@ -216,6 +218,9 @@ function harness(initial: Approval[] = [pending], store = preferences(), result?
   } as unknown as Pick<DaemonClient, "request" | "on" | "onReconnect">;
   const bridge: NotificationBridge = {
     initialize: async () => true,
+    setMute: async (until) => {
+      muteDeadlines.push(until);
+    },
     post: async (item) => {
       posts.push(item);
     },
@@ -247,6 +252,7 @@ function harness(initial: Approval[] = [pending], store = preferences(), result?
     calls,
     errors,
     views,
+    muteDeadlines,
     notices,
     bridge,
     update: async (a: Approval) => {
@@ -315,11 +321,46 @@ test("forged or stale actions never respond; mute and review never resolve", asy
     await h.controller.respond({ id: pending.id, action: "undo" });
     await h.controller.respond({ id: pending.id, action: "review" });
     await h.controller.respond({ id: pending.id, action: "mute" });
+    expect(h.muteDeadlines).toEqual([0, 3601000]);
     expect(h.views).toEqual(["bot", "open"]);
     expect(muteUntil(h.store)).toBe(3601000);
     await h.update({ ...pending, status: "approved" });
     await h.controller.respond({ id: pending.id, action: "task" });
     expect(h.calls.filter((c) => c.method === "approvals.respond")).toEqual([]);
+  } finally {
+    h.controller.stop();
+  }
+});
+
+test("startup syncs persisted mute and the settings helpers sync mute and unmute", async () => {
+  const h = harness([]);
+  const setMute = (until: number) => h.bridge.setMute(until);
+  muteForHour(h.store, 1000, setMute);
+  expect(h.muteDeadlines).toEqual([3601000]);
+  try {
+    await h.controller.start();
+    expect(h.muteDeadlines).toEqual([3601000, 3601000]);
+    setMuteUntil(h.store, 0, setMute);
+    expect(muteUntil(h.store)).toBe(0);
+    expect(h.muteDeadlines).toEqual([3601000, 3601000, 0]);
+    expect(h.posts).toEqual([]);
+  } finally {
+    h.controller.stop();
+  }
+});
+
+test("mute sync failures do not escape startup, settings helpers or notification actions", async () => {
+  const h = harness([]);
+  h.bridge.setMute = async () => {
+    throw new Error("sensitive transport detail");
+  };
+  try {
+    await h.controller.start();
+    await h.controller.respond({ id: "", action: "mute" });
+    setMuteUntil(h.store, 0, (until) => h.bridge.setMute(until));
+    await Bun.sleep(0);
+    expect(h.errors).toEqual([]);
+    expect(muteUntil(h.store)).toBe(0);
   } finally {
     h.controller.stop();
   }

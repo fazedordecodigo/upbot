@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Fixed
+- Linux approval notifications no longer reappear on server expiry while Boto is muted.
 - OpenCode turns waiting on bridge tools or user approvals no longer fail with a spurious
   sign-in error after 30 seconds.
 

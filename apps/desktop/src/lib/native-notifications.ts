@@ -9,6 +9,7 @@ import {
   ApprovalNotifications,
   type NotificationBridge,
   type NotificationResponse,
+  setNativeMute,
 } from "./notifications";
 
 export function useNativeNotifications(
@@ -24,6 +25,7 @@ export function useNativeNotifications(
     if (!ready || !("__TAURI_INTERNALS__" in window)) return;
     const bridge: NotificationBridge = {
       initialize: () => invoke<boolean>("notifications_initialize"),
+      setMute: setNativeMute,
       post: (notification) => invoke("notifications_post", { notification }),
       remove: (id) => invoke("notifications_remove", { id }),
       open: () => invoke("notifications_open"),

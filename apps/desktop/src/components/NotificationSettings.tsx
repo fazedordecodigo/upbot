@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MUTE_KEY, muteForHour, muteUntil } from "../lib/notifications";
+import { muteForHour, muteUntil, setMuteUntil } from "../lib/notifications";
 import { Button } from "./ds/controls";
 
 export function NotificationSettings() {
@@ -32,8 +32,7 @@ export function NotificationSettings() {
       <Button
         onClick={() => {
           if (muted) {
-            localStorage.setItem(MUTE_KEY, "0");
-            setUntil(0);
+            setUntil(setMuteUntil(localStorage, 0));
           } else setUntil(muteForHour(localStorage));
         }}
       >

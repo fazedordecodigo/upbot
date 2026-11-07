@@ -206,6 +206,7 @@ fn main() {
             menubar::main_ready,
             menubar::quit_app,
             notifications::notifications_initialize,
+            notifications::notifications_set_mute,
             notifications::notifications_post,
             notifications::notifications_remove,
             notifications::notifications_take_actions,
