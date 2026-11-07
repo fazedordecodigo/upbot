@@ -32,6 +32,9 @@
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.
 - Linux and Windows CI checks and multi-platform updater releases.
+- Built-in read-aloud on Windows (System.Speech via Windows PowerShell) and Linux (espeak-ng,
+  espeak, or Speech Dispatcher over its socket, so the text never appears in process arguments);
+  `voice.status` now reports only commands that are found.
 - Approvals left pending when the daemon stops now appear in Settings → Approvals as
   "Interrompido pelo reinício" (no actions; the blocked action was not executed), and
   clicking their notification explains that instead of a generic unavailable notice.

@@ -102,8 +102,10 @@ On Linux install `xdotool` and one of ImageMagick (`import`), `scrot` or `gnome-
 Wayland and missing tools/display are reported as unavailable in bot settings. Windows uses
 Windows PowerShell/.NET and cannot control elevated windows or UAC prompts. macOS requires
 Screen Recording and Accessibility permission. Coordinates are screen points on macOS and
-screen pixels on Windows/Linux (Linux captures the X11 desktop). The built-in `say` voice
-remains macOS-only.
+screen pixels on Windows/Linux (Linux captures the X11 desktop).
+Read-aloud works out of the box with `say` on macOS and System.Speech (Windows PowerShell) on
+Windows; on Linux install `espeak-ng` (or `espeak`, or use a running `speech-dispatcher`). Voice
+input needs `whisper` on PATH or `BOTO_STT_COMMAND`; `BOTO_TTS_COMMAND` overrides read-aloud.
 
 Boto was called BobAgent until 0.3.0; updating moves `~/BobAgent` to `~/Boto` and keeps
 your bots, chats and vault.

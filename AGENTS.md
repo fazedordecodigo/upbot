@@ -423,9 +423,22 @@ Linux requires X11, xdotool and import (ImageMagick), scrot or gnome-screenshot.
 Command/option map to Win/Super and Alt outside macOS; whitelist and approval gating are unchanged.
 `BOTO_COMPUTER_DRYRUN=<file>` logs platform commands instead (tests); Windows typing payload
 is passed only in the child environment to avoid command-line limits. Tests: `test/computer-platform.test.ts`.
-Voice (`src/voice.ts`): `voice.speak` (`say`, or `BOTO_TTS_COMMAND` with text on
-stdin), `voice.transcribe` (`BOTO_STT_COMMAND` with `{file}`, or `whisper` on PATH),
-`voice.status`. UI: Vault view, Computer Use toggle, composer mic, read-aloud button;
+Voice (`src/voice.ts`): `voice.speak` uses `BOTO_TTS_COMMAND` (text on stdin) or the
+built-in default from `ttsCommand`: macOS `say`; Windows `powershell` (Windows PowerShell 5.1,
+then `%SystemRoot%` path; pwsh lacks System.Speech) running the fixed `WINDOWS_SPEECH_SCRIPT`
+that reads UTF-8 text from stdin; Linux `espeak-ng --stdin`, `espeak --stdin`, then Speech
+Dispatcher over its SSIP unix socket (`src/voice-ssip.ts`; `SPEECHD_ADDRESS` or
+`$XDG_RUNTIME_DIR/speech-dispatcher/speechd.sock`; runs `speech-dispatcher --spawn` when the
+default socket is missing or refuses connections, e.g. left by a crashed server). Spoken text
+never goes into argv (other local users can read it), so `spd-say` itself is never run. A new
+`voice.speak` stops the previous one, and a 15-minute cap ends long speech, both with
+`CANCEL SELF` before `QUIT` (the server keeps speaking after a client disconnects).
+`voice.transcribe` uses `BOTO_STT_COMMAND` with `{file}`, or `whisper` on PATH (`sttCommand`).
+An override always wins; if its binary is missing the feature is unavailable (no fallback).
+`voice.status` reports only commands whose binary resolves on the merged PATH.
+Tests: `test/voice.test.ts` (per-platform selection, SSIP escaping, Windows script on Windows
+CI) and `test/voice.e2e.test.ts` (RPC with built-in defaults: fake programs as the only PATH
+via a fake login shell, `fixtures/fake-tts.ts`, `fixtures/fake-speechd.ts`). UI: Vault view, Computer Use toggle, composer mic, read-aloud button;
 `src-tauri/Info.plist` has the microphone usage string. Tests: `test/phase11.e2e.test.ts`.
 
 ## Messaging gateways (Phase 12a)
@@ -602,8 +615,9 @@ in `default` when the user settings set `auto_edit` or `yolo`. Settings cannot s
 - `bun run build:app` — build the debug desktop bundle for the host platform (macOS app,
   Linux AppImage/deb, or Windows NSIS).
 - `bun run test` — `bun test packages/daemon packages/host apps/desktop/test` (daemon e2e and desktop browser tests).
-- Computer Use supports macOS, Windows and Linux X11; built-in `say` voice is macOS-only; Linux uses Secret Service for the
-  vault key when available, while Windows uses DPAPI.
+- Computer Use supports macOS, Windows and Linux X11. Built-in read-aloud uses `say` (macOS),
+  System.Speech via Windows PowerShell (Windows) or espeak-ng/espeak/Speech Dispatcher (Linux).
+  Linux uses Secret Service for the vault key when available, while Windows uses DPAPI.
 - `bun run lint` — `biome check .`
 - `bun run typecheck` — `tsc -p` for protocol, daemon, relay, host, desktop (sequential).
 - `cd apps/desktop/src-tauri && cargo check` — Rust side.
