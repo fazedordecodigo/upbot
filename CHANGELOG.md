@@ -3,10 +3,16 @@
 ## Unreleased
 
 ### Fixed
+- Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
+  DPAPI scripts load System.Security without `Add-Type`, a timed-out call is retried, and a
+  persistent timeout reports an error instead of writing a plaintext key.
 - Keep already delivered interrupted-approval notifications in Notification Center until
   reviewed, so clicking them after a restart opens the specific interrupted notice.
 - OpenCode turns waiting on bridge tools or user approvals no longer fail with a spurious
   sign-in error after 30 seconds.
+- Gemini bots start with `gemini --acp` (the old `--experimental-acp` flag is deprecated). When
+  Gemini is signed out, the error now says to run `gemini` and choose Sign in with Google, a
+  Gemini API key or Vertex AI, including when a cached Google sign-in fails.
 
 ### Added
 - Opt-in Computer Use on Windows and Linux X11, with unavailable reasons for Wayland or missing tools.
@@ -21,13 +27,9 @@
   "Interrompido pelo reinício" (no actions; the blocked action was not executed), and
   clicking their notification explains that instead of a generic unavailable notice.
 
-### Fixed
-- Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
-  DPAPI scripts load System.Security without `Add-Type`, a timed-out call is retried, and a
-  persistent timeout reports an error instead of writing a plaintext key.
-- Gemini bots start with `gemini --acp` (the old `--experimental-acp` flag is deprecated). When
-  Gemini is signed out, the error now says to run `gemini` and choose Sign in with Google, a
-  Gemini API key or Vertex AI, including when a cached Google sign-in fails.
+### Changed
+- Updated remote host and email settings to Eco design-system controls and layouts, with
+  Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
 ## 0.3.0
 
