@@ -5,7 +5,7 @@ import { VERSION } from "../../src/version";
 
 const provider = process.argv[2] as "gemini" | "opencode" | "cursor" | "devin" | "grok";
 const commands = {
-  gemini: ["gemini", "--experimental-acp"],
+  gemini: ["gemini", "--acp"],
   opencode: ["opencode", "acp"],
   cursor: ["agent", "acp"],
   devin: ["devin", "acp"],
