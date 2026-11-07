@@ -1,8 +1,9 @@
 name: Release
 
 # Push a v* tag (matching apps/desktop/src-tauri/tauri.conf.json "version") to build the
-# macOS app/dmg, Linux AppImage/deb, and Windows NSIS installer. The release remains
-# a draft until updater metadata has been composed from every platform's assets.
+# macOS app/dmg, Linux x64/ARM64 AppImage/deb/rpm, and a Windows x64 NSIS installer.
+# The release remains a draft until updater metadata has been composed from every
+# platform's assets.
 # Dispatch requires a tag.
 # APPLE_* secrets enable macOS signing and app/DMG notarization; WINDOWS_CERTIFICATE
 # and WINDOWS_CERTIFICATE_PASSWORD enable Windows PFX signing. Partial sets fail.
@@ -72,7 +73,9 @@ jobs:
           - os: macos-14
             bundles: app,dmg
           - os: ubuntu-22.04
-            bundles: appimage,deb
+            bundles: appimage,deb,rpm
+          - os: ubuntu-22.04-arm
+            bundles: appimage,deb,rpm
           - os: windows-latest
             bundles: nsis
     runs-on: ${{ matrix.os }}
@@ -99,6 +102,11 @@ jobs:
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libssl-dev build-essential zip unzip
       - run: bun install --frozen-lockfile
+      - name: Install ARM64 Linux test browser
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        run: |
+          bunx --no-install playwright-core install --with-deps chromium
+          bun -e 'import { chromium } from "playwright-core"; console.log(`CHROME_PATH=${chromium.executablePath()}`)' >> "$GITHUB_ENV"
       - run: bun run test
       - name: Enable Apple signing when configured
         id: apple-signing
