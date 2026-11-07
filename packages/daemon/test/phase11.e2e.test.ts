@@ -175,6 +175,12 @@ describe("vault, connectors, computer use, voice e2e", () => {
       "tool-ok:double-clicked at 10,20",
     );
     expect(await tool(a, "computer_type", { text: 'say "hi"' })).toBe("tool-ok:typed 8 characters");
+    const unicode = ["ação é ç 😀", "ação é ç".normalize("NFD")];
+    for (const text of unicode) {
+      expect(await tool(a, "computer_type", { text })).toBe(
+        `tool-ok:typed ${text.length} characters`,
+      );
+    }
     expect(await tool(a, "computer_key", { key: "s", modifiers: ["command"] })).toBe(
       "tool-ok:pressed command+s",
     );
@@ -188,7 +194,17 @@ describe("vault, connectors, computer use, voice e2e", () => {
       .trim()
       .split("\n")
       .map((l) => JSON.parse(l));
-    expect(log).toHaveLength(4);
+    expect(log).toHaveLength(6);
+    for (const [index, text] of unicode.entries()) {
+      const cmd = log[index + 2];
+      expect(cmd.at(-1)).toBe(text);
+      if (process.platform === "darwin") {
+        expect(cmd.slice(0, 4)).toEqual(["osascript", "-l", "JavaScript", "-e"]);
+        expect(cmd[4]).toContain("NSPasteboard");
+      } else {
+        expect(cmd[0]).toBe("xdotool");
+      }
+    }
     const command =
       process.platform === "win32"
         ? "powershell.exe"

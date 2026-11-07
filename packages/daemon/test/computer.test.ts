@@ -1,8 +1,75 @@
 import { Database } from "bun:sqlite";
 import { expect, spyOn, test } from "bun:test";
+import { runInNewContext } from "node:vm";
 import type { Agent } from "@boto/protocol";
 import { ComputerUse } from "../src/computer";
+import { typeCommand } from "../src/computer-platform";
 import { migrations } from "../src/db/migrations";
+
+test("unreadable clipboard types fail before clearing or pasting", () => {
+  const nil = { isNil: () => true };
+  let cleared = false;
+  const item = {
+    types: { count: 1, objectAtIndex: () => "public.file-promise" },
+    dataForType: () => nil,
+    stringForType: () => nil,
+    propertyListForType: () => nil,
+  };
+  const board = {
+    pasteboardItems: { count: 1, objectAtIndex: () => item },
+    clearContents: () => {
+      cleared = true;
+    },
+  };
+  const script = typeCommand({ platform: "darwin" }, "text")[4];
+  expect(() =>
+    runInNewContext(`${script}\nrun(["text"]);`, {
+      ObjC: { import: () => {}, unwrap: (value: unknown) => value },
+      $: {
+        NSPasteboard: { generalPasteboard: board },
+        NSMutableArray: { alloc: { init: {} } },
+        NSPasteboardItem: { alloc: { init: {} } },
+      },
+    }),
+  ).toThrow("Unable to preserve clipboard type: public.file-promise");
+  expect(cleared).toBe(false);
+});
+
+test("queued macOS typing rechecks access before executing", async () => {
+  const db = new Database(":memory:");
+  for (const sql of migrations) db.exec(sql);
+  const computer = new ComputerUse(db, { platform: "darwin" });
+  const agent = { id: "queued" } as Agent;
+  computer.setAccess([agent.id]);
+  let release!: () => void;
+  let started!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const exec = spyOn(computer as unknown as { exec(cmd: string[]): Promise<void> }, "exec");
+  exec.mockImplementation(async () => {
+    started();
+    await blocked;
+  });
+  try {
+    const first = computer.type(agent, "A");
+    await entered;
+    const second = computer.type(agent, "B").catch((error: Error) => error);
+    computer.setAccess([]);
+    release();
+    await first;
+    expect(await second).toBeInstanceOf(Error);
+    expect(((await second) as Error).message).toContain("Computer Use is not enabled for you");
+    expect(exec).toHaveBeenCalledTimes(1);
+  } finally {
+    release();
+    exec.mockRestore();
+    db.close();
+  }
+});
 
 test("Unicode typing preserves text as data and serializes clipboard access, including after errors", async () => {
   const db = new Database(":memory:");

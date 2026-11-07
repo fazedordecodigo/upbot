@@ -111,7 +111,7 @@ export class ComputerUse {
     if (!text || text.length > 5000 || text.includes("\0"))
       throw new Error("`text` must be 1-5000 characters without NUL");
     if (backend.platform === "darwin") {
-      const typing = this.typing.then(() => this.exec(typeCommand(backend, text)));
+      const typing = this.typing.then(() => this.exec(typeCommand(this.check(agent), text)));
       this.typing = typing.catch(() => {});
       await typing;
     } else {

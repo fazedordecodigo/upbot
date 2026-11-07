@@ -67,7 +67,16 @@ function run(argv) {
     for (let j = 0; j < types.count; j++) {
       const type = types.objectAtIndex(j);
       const data = item.dataForType(type);
-      if (data) copy.setDataForType(data, type);
+      if (data && !data.isNil()) {
+        if (!copy.setDataForType(data, type)) throw new Error("Unable to save clipboard data");
+      } else {
+        const string = item.stringForType(type);
+        if (string && !string.isNil() && copy.setStringForType(string, type)) continue;
+        const property = item.propertyListForType(type);
+        if (property && !property.isNil() && copy.setPropertyListForType(property, type)) continue;
+        // Unreadable file promises cannot be recreated; leave the clipboard untouched.
+        throw new Error("Unable to preserve clipboard type: " + ObjC.unwrap(type));
+      }
     }
     saved.addObject(copy);
   }
