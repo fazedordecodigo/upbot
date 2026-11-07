@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   createReadStream,
@@ -20,6 +20,8 @@ import {
   removeFirecrackerHostRoot,
 } from "./firecracker-ssh.fixtures";
 import { DaemonClient, type DaemonHandle, startDaemon, stopTestChildren, tmp } from "./helpers";
+
+setDefaultTimeout(30000);
 
 const enabled = process.env.BOTO_REAL_FIRECRACKER === "1" && existsSync("/usr/sbin/sshd");
 const providersRequested =

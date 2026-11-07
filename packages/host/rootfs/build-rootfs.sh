@@ -6,7 +6,8 @@
 # Requires: docker, curl, mkfs.ext4, sudo (for loop mounts). No credentials go into the
 # image; sign in to provider CLIs inside a microVM or pass API keys via the Boto vault.
 #
-# usage: build-rootfs.sh [--size-mib 8192] [--providers "claude codex gemini opencode cursor devin grok"] [--base image]
+# usage: build-rootfs.sh [--size-mib 4096] [--providers "claude codex gemini opencode cursor devin grok"] [--base image]
+# Use --size-mib 8192 when installing all seven providers.
 set -euo pipefail
 FC_VERSION="${FC_VERSION:-v1.12.1}"
 DEVIN_CLI_VERSION="${DEVIN_CLI_VERSION:-3000.12.17}"
