@@ -445,3 +445,46 @@ test("interrupted records are capped to the most recent 50", async () => {
     expect(listed.some((a) => a.id === "old-0")).toBe(false);
   });
 });
+
+test("an interruption whose audit write fails stays pending and is retried on the next start", async () => {
+  await withApprovals(async ({ approvals, apps, vault, db }) => {
+    void approvals.gate("bot", "notes-create_note", {}, true);
+    const id = approvals.list()[0]!.id;
+    approvals.suspend();
+    db.exec(
+      "CREATE TRIGGER fail_interrupt_audit BEFORE INSERT ON approval_audit WHEN NEW.event = 'approval.interrupted' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END",
+    );
+    const runtimes = { currentTurn: () => undefined } as unknown as RuntimeManager;
+    const logged = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const first = new ApprovalService(
+        db,
+        vault,
+        () => runtimes,
+        () => {},
+        apps,
+      );
+      expect(first.interruptLeftovers()).toBe(0);
+      expect(records(db).map((r) => [r.id, r.status, r.interrupted_at])).toEqual([
+        [id, "pending", null],
+      ]);
+      expect(rows(db, "approval.interrupted")).toEqual([]);
+      expect(first.list()).toEqual([]);
+      expect(logged.mock.calls.map((c) => c[0])).toContain("[botod] approval.interrupt_failed");
+      expect(JSON.stringify(logged.mock.calls)).not.toContain("audit unavailable");
+    } finally {
+      logged.mockRestore();
+    }
+    db.exec("DROP TRIGGER fail_interrupt_audit");
+    const next = new ApprovalService(
+      db,
+      vault,
+      () => runtimes,
+      () => {},
+      apps,
+    );
+    expect(next.interruptLeftovers()).toBe(1);
+    expect(records(db).map((r) => [r.id, r.status])).toEqual([[id, "interrupted"]]);
+    expect(rows(db, "approval.interrupted").map((r) => r.approval_id)).toEqual([id]);
+  });
+});

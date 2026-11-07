@@ -111,8 +111,9 @@ Blocked calls are memory-only and die with the daemon. Pending approvals are mir
 id/name, permission, background, expiresAt — never args, detail, bot-written titles or secret
 values); a decision or expiry deletes the row. `ApprovalService.suspend()` runs first on
 shutdown so closing runtimes do not expire them. On start, `interruptLeftovers()` marks leftover
-rows `interrupted` (`interruptedAt`), writes `approval.interrupted` (reason `daemon_restart`)
-once each and keeps the latest 50. `approvals.list` returns them with `detail: ""` and a title
+rows `interrupted` (`interruptedAt`) and writes `approval.interrupted` (reason `daemon_restart`)
+in one transaction per approval (a failed audit write keeps the row pending for the next
+start), and keeps the latest 50. `approvals.list` returns them with `detail: ""` and a title
 rebuilt from the tool/secret name; `approvals.respond` rejects them with `not_found`
 ("interrupted by a daemon restart"); nothing is resumed or re-run. UI: "Interrompido pelo
 reinício", no actions. Toast clicks for those IDs open Settings → Approvals with

@@ -149,21 +149,26 @@ export class ApprovalService {
   /** Persistent audit trail (approval_audit). Never stores args, details or secret values. */
   private audit(event: string, data: Record<string, unknown>, a?: Approval): void {
     try {
-      this.db
-        .query(
-          "INSERT INTO approval_audit (event, approval_id, agent_id, turn_id, data_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-          event,
-          a?.id ?? (typeof data.approvalId === "string" ? data.approvalId : null),
-          a?.agentId ?? (typeof data.agentId === "string" ? data.agentId : null),
-          a?.turnId ?? null,
-          JSON.stringify(data),
-          Date.now(),
-        );
+      this.insertAudit(event, data, a);
     } catch (error) {
       console.error("[botod] approval.audit_write_failed", (error as Error).message);
     }
+  }
+
+  /** Throwing variant of audit(), for writes that must share a transaction. */
+  private insertAudit(event: string, data: Record<string, unknown>, a?: Approval): void {
+    this.db
+      .query(
+        "INSERT INTO approval_audit (event, approval_id, agent_id, turn_id, data_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        event,
+        a?.id ?? (typeof data.approvalId === "string" ? data.approvalId : null),
+        a?.agentId ?? (typeof data.agentId === "string" ? data.agentId : null),
+        a?.turnId ?? null,
+        JSON.stringify(data),
+        Date.now(),
+      );
   }
 
   private persist(a: Approval): void {
@@ -226,20 +231,22 @@ export class ApprovalService {
   /**
    * Run once on daemon start: approvals left pending by the previous process lost their
    * blocked tool call, so they become "interrupted" (audited, listed, never decidable).
+   * The status change and its audit event commit together; a failed write leaves the
+   * record pending so the next start retries it. Returns how many were interrupted.
    */
   interruptLeftovers(): number {
     const now = Date.now();
     const rows = this.db
       .query("SELECT * FROM approval_records WHERE status = 'pending'")
       .all() as RecordRow[];
-    for (const r of rows) {
+    const interrupt = this.db.transaction((r: RecordRow) => {
       this.db
         .query(
-          "UPDATE approval_records SET status = 'interrupted', interrupted_at = ? WHERE id = ?",
+          "UPDATE approval_records SET status = 'interrupted', interrupted_at = ? WHERE id = ? AND status = 'pending'",
         )
         .run(now, r.id);
       const a = this.fromRecord({ ...r, status: "interrupted", interrupted_at: now });
-      this.audit(
+      this.insertAudit(
         "approval.interrupted",
         {
           approvalId: r.id,
@@ -257,13 +264,29 @@ export class ApprovalService {
         },
         a ?? undefined,
       );
+    });
+    let interrupted = 0;
+    for (const r of rows) {
+      try {
+        interrupt(r);
+        interrupted++;
+      } catch (error) {
+        console.error("[botod] approval.interrupt_failed", {
+          approvalId: r.id,
+          ...errorDiagnostics(error),
+        });
+      }
     }
-    this.db
-      .query(
-        "DELETE FROM approval_records WHERE status = 'interrupted' AND id NOT IN (SELECT id FROM approval_records WHERE status = 'interrupted' ORDER BY interrupted_at DESC, created_at DESC LIMIT ?)",
-      )
-      .run(MAX_INTERRUPTED);
-    return rows.length;
+    try {
+      this.db
+        .query(
+          "DELETE FROM approval_records WHERE status = 'interrupted' AND id NOT IN (SELECT id FROM approval_records WHERE status = 'interrupted' ORDER BY interrupted_at DESC, created_at DESC LIMIT ?)",
+        )
+        .run(MAX_INTERRUPTED);
+    } catch (error) {
+      console.error("[botod] approval.record_write_failed", errorDiagnostics(error));
+    }
+    return interrupted;
   }
 
   /**
