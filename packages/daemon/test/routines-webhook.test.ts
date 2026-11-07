@@ -3,7 +3,43 @@ import { rmSync } from "node:fs";
 import { AgentStore } from "../src/agents";
 import { openDatabase } from "../src/db";
 import { RoutineService } from "../src/routines";
-import { tmp } from "./helpers";
+import { DaemonClient, FAKE_AGENT, startDaemon, stopDaemon, tmp } from "./helpers";
+
+test("manual routine history exposes the completed turn and timestamps", async () => {
+  const data = tmp("routine-history-data-");
+  const root = tmp("routine-history-bots-");
+  const fake = tmp("routine-history-fake-");
+  const token = crypto.randomUUID();
+  const daemon = await startDaemon(data, root, token, {
+    BOTO_ACP_COMMAND_DEVIN: JSON.stringify(["bun", FAKE_AGENT]),
+    FAKE_ACP_STATE_DIR: fake,
+  });
+  const client = await DaemonClient.connect(daemon.port, token);
+  try {
+    const bot = await client.request("agents.create", {
+      name: "History bot",
+      provider: "devin",
+      instructions: "",
+    });
+    const routine = await client.request("routines.create", {
+      agentId: bot.id,
+      name: "History",
+      prompt: "echo:history",
+    });
+    expect(await client.request("routines.runs", { id: routine.id })).toEqual([]);
+    await client.request("routines.run", { id: routine.id });
+    await client.waitForEventWhere("turn.ended", (event) => event.agentId === bot.id);
+    const [run] = await client.request("routines.runs", { id: routine.id });
+    expect(run?.trigger).toBe("manual");
+    expect(run?.queueStatus).toBe("started");
+    expect(run?.turn?.status).toBe("completed");
+    expect(run?.turn?.startedAt).toBeNumber();
+    expect(run?.turn?.endedAt).toBeNumber();
+  } finally {
+    await stopDaemon(daemon, client, fake);
+    for (const path of [data, root, fake]) rmSync(path, { recursive: true, force: true });
+  }
+}, 20000);
 
 describe("routine webhook authentication", () => {
   let dataDir: string;

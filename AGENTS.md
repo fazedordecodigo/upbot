@@ -364,7 +364,13 @@ and emits `agent.created` so clients add it back to their lists. `agents.draft
 form. Memories: `memories` table, `MemoryStore` (`src/memories.ts`), RPC
 `memories.list/add/update/delete`, event `memories.changed`. Skills library:
 `<shared>/Skills/<name>/SKILL.md` with name/description/author frontmatter, previous versions
-in `.history/` (`src/skills.ts`), RPC `skills.list/get/save/delete`, event `skills.changed`.
+in `.history/` (`src/skills.ts`), RPC `skills.list/get/save/delete/versions`, event `skills.changed`.
+`skills.versions` reads only numeric `.md` history files, newest first (50 max), with
+1-based ordinals across the full history and filename-derived `savedAt`. Unknown skills
+return not_found. Desktop skill details offer read-only previous Markdown/raw versions,
+metadata and return to current; no restore action or mobile access is exposed.
+`skills.get` and `skills.versions` expose exact file contents as `raw` (including
+frontmatter) for raw viewing; Markdown uses parsed `body`. `skills.list` omits raw.
 Bridge tools: `remember`, `forget`, `list_memories`, `list_skills`, `read_skill`,
 `create_skill`, `revise_skill`, `create_agent`. The first prompt of every fresh session is
 prefixed with `<agent_memories>` and `<skills_library>` (index only). UI:
@@ -605,6 +611,14 @@ children are then deleted (stopping their process/VM). `list_subagents`, `stop_s
 Tests: `test/remote.e2e.test.ts`, `packages/host/test/host.test.ts`.
 
 ## Permissions
+
+Desktop ChatView loads `permissions.list` and refreshes on permission events and reconnects.
+Persisted unresolved permission cards absent from a successfully loaded live list are
+non-actionable; a failed list keeps cards actionable rather than inventing a resolution.
+Routine history is available in Agendadas and saved routine dialogs. `routines.runs`
+joins the queue for nullable `queueStatus` and the latest linked turn for nullable
+`turn {id,status,startedAt,endedAt}`. Skill details load `skills.get`, refresh on
+`skills.changed`, and offer Markdown or raw SKILL.md text plus `skills.versions` history.
 
 Provider agents ask for approval only when THEIR OWN config says so
 (`PROVIDER_PERMISSION_CONFIG` in `packages/protocol` maps provider -> config path).

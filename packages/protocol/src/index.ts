@@ -321,6 +321,15 @@ export const Skill = z.object({
   updatedAt: z.number(),
 });
 export type Skill = z.infer<typeof Skill>;
+export const SkillVersion = z.object({
+  raw: z.string(),
+  version: z.number().int().min(1),
+  savedAt: z.number(),
+  description: z.string(),
+  author: z.string().nullable(),
+  body: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
 const MemoryText = z.string().trim().min(1).max(2_000);
 export const SkillSaveParams = z
   .object({
@@ -776,6 +785,15 @@ export const RoutineRun = z.object({
   routineId: z.string(),
   trigger: RoutineTrigger,
   queueId: z.string().nullable(),
+  queueStatus: z.enum(["queued", "started", "removed"]).nullable(),
+  turn: z
+    .object({
+      id: z.string(),
+      status: TurnStatus,
+      startedAt: z.number(),
+      endedAt: z.number().nullable(),
+    })
+    .nullable(),
   error: z.string().nullable(),
   createdAt: z.number(),
 });
@@ -1216,7 +1234,14 @@ export const methodMap = {
     result: z.object({ ok: z.literal(true) }),
   },
   "skills.list": { params: z.object({}).strict(), result: z.array(Skill) },
-  "skills.get": { params: z.object({ name: z.string() }).strict(), result: Skill },
+  "skills.get": {
+    params: z.object({ name: z.string() }).strict(),
+    result: Skill.extend({ raw: z.string() }),
+  },
+  "skills.versions": {
+    params: z.object({ name: z.string() }).strict(),
+    result: z.array(SkillVersion),
+  },
   "skills.save": { params: SkillSaveParams, result: Skill },
   "skills.delete": {
     params: z.object({ name: z.string() }).strict(),

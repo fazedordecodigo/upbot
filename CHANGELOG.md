@@ -22,6 +22,9 @@
   Gemini API key or Vertex AI, including when a cached Google sign-in fails.
 
 ### Added
+- Versões anteriores das habilidades, com leitura de Markdown ou texto bruto e retorno à versão atual.
+- Histórico de execuções das rotinas em Agendadas e nas configurações do bot, com estado da fila e do turno.
+- Detalhes de habilidades com Markdown e texto bruto; pedidos de permissão antigos ficam sem ações quando não estão mais pendentes no daemon.
 - Devin and Grok in the Firecracker guest image, with vault-backed microVM API keys
   and headless Grok ACP authentication.
 - Pending-approval badges on the macOS Dock, Windows taskbar and supported Linux launchers,
