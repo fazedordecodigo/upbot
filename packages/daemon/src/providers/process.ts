@@ -12,7 +12,7 @@ export const DEFAULT_COMMANDS: Record<ProviderId, string[] | null> = {
   cursor: ["agent", "acp"],
   grok: ["grok", "agent", "stdio"],
   opencode: ["opencode", "acp"],
-  gemini: ["gemini", "--experimental-acp"],
+  gemini: ["gemini", "--acp"],
   claude: ["claude"],
   codex: ["codex", "app-server", "--listen", "stdio://"],
   "openai-compatible": null,
@@ -28,15 +28,21 @@ export const LOGIN_COMMANDS: Partial<Record<ProviderId, string>> = {
   codex: "codex login",
 };
 
+/** Extra guidance after the login command, for CLIs whose sign-in is an interactive picker. */
+const LOGIN_HINTS: Partial<Record<ProviderId, string>> = {
+  gemini: "and choose Sign in with Google, Use Gemini API Key or Vertex AI",
+};
+
 export const AUTH_RE =
-  /\b(auth(entication)?[ _-]?(required|failed)|unauthori[sz]ed|not (logged|signed) in|log ?in required|sign ?in required|please run \/login)\b/i;
+  /\b(auth(entication)?[ _-]?(required|failed)|failed to authenticate|unauthori[sz]ed|not (logged|signed) in|log ?in required|sign ?in required|please run \/login)\b/i;
 
 const VM_CREDENTIAL_REJECTION_RE =
   /\b(?:401\b|(?:invalid|incorrect|rejected|expired|revoked)\s+(?:(?:x-)?api\s+)?key\b|(?:api|x-api)[ _-]?key.{0,32}(?:invalid|incorrect|rejected|expired|not valid)|(?:not valid|not a valid)\s+(?:(?:google|gemini)\s+)?(?:api\s+)?key\b|(?:invalid|incorrect|rejected|expired)\s+(?:authentication|credential|token)\b|authentication[ _-]?(?:error|failed|rejected)\b)/i;
 
 export function authMessage(provider: ProviderId, detail = ""): string {
   const loginCmd = LOGIN_COMMANDS[provider] ?? "its login command";
-  return `${provider} requires sign-in. Run \`${loginCmd}\` in a terminal.${detail ? ` (${detail})` : ""}`;
+  const hint = LOGIN_HINTS[provider];
+  return `${provider} requires sign-in. Run \`${loginCmd}\` in a terminal${hint ? ` ${hint}` : ""}.${detail ? ` (${detail})` : ""}`;
 }
 
 export function redactSecrets(s: string): string {
@@ -110,7 +116,7 @@ export function startupAuthError(
 
 /** Translates a provider startup failure into a ProviderError the same way for
  * every driver: a rejected microVM credential or a sign-in hint in the detail
- * or the stderr tail becomes `auth_required`; anything else becomes
+ * or a stderr tail line becomes `auth_required` (quoting only that line); anything else becomes
  * `fallbackCode` with the detail plus a truncated tail, always redacted. */
 export function classifyStartupError(
   provider: ProviderId,
@@ -119,8 +125,13 @@ export function classifyStartupError(
   credential: string | null,
   fallbackCode: "provider_unavailable" | "internal" = "provider_unavailable",
 ): ProviderError {
+  const authLine = tail
+    .split("\n")
+    .map((line) => line.trim())
+    .findLast((line) => isVmCredentialRejection(line));
   const auth =
-    startupAuthError(provider, detail, credential) ?? startupAuthError(provider, tail, credential);
+    startupAuthError(provider, detail, credential) ??
+    (authLine ? startupAuthError(provider, authLine, credential) : null);
   if (auth) return auth;
   const safeDetail = redactCredential(detail, credential).trim();
   const safeTail = redactCredential(tail, credential)

@@ -8,6 +8,11 @@
   and platform-secure vault key storage.
 - Linux and Windows CI checks and multi-platform updater releases.
 
+### Fixed
+- Gemini bots start with `gemini --acp` (the old `--experimental-acp` flag is deprecated). When
+  Gemini is signed out, the error now says to run `gemini` and choose Sign in with Google, a
+  Gemini API key or Vertex AI, including when a cached Google sign-in fails.
+
 ## 0.3.0
 
 ### Changed

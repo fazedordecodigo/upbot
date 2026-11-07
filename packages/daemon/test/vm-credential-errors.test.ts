@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mapAcpAuthError } from "../src/providers/acp";
 import {
   classifyStartupError,
+  DEFAULT_COMMANDS,
   isVmCredentialRejection,
   redactSecrets,
   vmCredentialRejectedMessage,
@@ -106,6 +107,24 @@ describe("classifyStartupError", () => {
     expect(error.message).not.toContain(credential);
   });
 
+  test("maps Gemini's failed cached Google sign-in (exit 41) to sign-in guidance", () => {
+    const error = classifyStartupError(
+      "gemini",
+      "ACP connection closed",
+      [
+        "Error authenticating: FatalAuthenticationError: Failed to authenticate with user code.",
+        "    at initOauthClient (file:///home/user/gemini/bundle/chunk.js:1:1)",
+        "  exitCode: 41",
+        "}",
+      ].join("\n"),
+      null,
+    );
+    expect(error.code).toBe("auth_required");
+    expect(error.message).toBe(
+      "gemini requires sign-in. Run `gemini` in a terminal and choose Sign in with Google, Use Gemini API Key or Vertex AI. (Error authenticating: FatalAuthenticationError: Failed to authenticate with user code.)",
+    );
+  });
+
   test("honors the internal fallback code for resume attempts", () => {
     const error = classifyStartupError("claude", "boom", "", null, "internal");
     expect(error.code).toBe("internal");
@@ -153,6 +172,22 @@ describe("ACP microVM authentication errors", () => {
     const error = mapAcpAuthError("cursor", new Error("Authentication required"), null);
     expect(error?.code).toBe("auth_required");
     expect(error?.message).toContain("Run `agent login` in a terminal.");
+  });
+
+  test("maps Gemini's signed-out session/new error to its sign-in picker", () => {
+    const error = mapAcpAuthError(
+      "gemini",
+      Object.assign(new Error("Gemini API key is missing or not configured."), { code: -32000 }),
+      null,
+    );
+    expect(error?.code).toBe("auth_required");
+    expect(error?.message).toBe(
+      "gemini requires sign-in. Run `gemini` in a terminal and choose Sign in with Google, Use Gemini API Key or Vertex AI. (Gemini API key is missing or not configured.)",
+    );
+  });
+
+  test("launches Gemini with the non-deprecated ACP flag", () => {
+    expect(DEFAULT_COMMANDS.gemini).toEqual(["gemini", "--acp"]);
   });
 
   test("maps OpenCode's unexpected ACP disconnect to sign-in guidance before progress", () => {
