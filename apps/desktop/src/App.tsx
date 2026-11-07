@@ -25,6 +25,7 @@ import { DaemonClient } from "./lib/daemon";
 import { errorMessage } from "./lib/errors";
 import { errorFields, logWarn } from "./lib/log";
 import { nativeCommand } from "./lib/native";
+import { useApprovalBadge } from "./lib/native-approval-badge";
 import { useNativeNotifications } from "./lib/native-notifications";
 import { mod } from "./lib/platform";
 import { readStorage, writeStorage } from "./lib/storage";
@@ -186,6 +187,7 @@ export default function App() {
     [navigate, openAgent],
   );
   useNativeNotifications(client, clientReady, agents, reviewNotification, setError);
+  useApprovalBadge(client, clientReady);
 
   useEffect(() => {
     if (!clientReady || !("__TAURI_INTERNALS__" in window)) return;
