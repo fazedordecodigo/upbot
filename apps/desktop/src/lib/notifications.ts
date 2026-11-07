@@ -24,6 +24,8 @@ export interface NotificationBridge {
 type Preferences = Pick<Storage, "getItem" | "setItem">;
 export const MUTE_KEY = "boto.notifications.muteUntil";
 const SEEN_KEY = "boto.notifications.seen";
+export const INTERRUPTED_NOTICE =
+  "Esse pedido foi interrompido pelo reinício do Boto. A ação não foi executada.";
 const oneLine = (value: string) => value.replace(/\s+/g, " ").trim();
 const limits = { title: 110, body: 180 };
 
@@ -210,13 +212,16 @@ export class ApprovalNotifications {
     const sync = async () => {
       const approvals = await this.client.request("approvals.list", {});
       if (this.stopped) return;
-      const pending = new Set(
+      const retained = new Set(
         approvals
-          .filter((a) => a.status === "pending" && a.expiresAt > this.now())
+          .filter(
+            (a) =>
+              a.status === "interrupted" || (a.status === "pending" && a.expiresAt > this.now()),
+          )
           .map((a) => a.id),
       );
       for (const id of this.seen)
-        if (!pending.has(id) && !this.local.has(id)) await this.bridge.remove(id);
+        if (!retained.has(id) && !this.local.has(id)) await this.bridge.remove(id);
       for (const approval of approvals) update(approval);
       await this.events;
     };
@@ -230,6 +235,13 @@ export class ApprovalNotifications {
 
   private async update(approval: Approval) {
     if (this.stopped) return;
+    if (approval.status === "interrupted") {
+      this.active.delete(approval.id);
+      const timer = this.timers.get(approval.id);
+      if (timer !== undefined) clearTimeout(timer);
+      this.timers.delete(approval.id);
+      return;
+    }
     const notification = decisionNotification(
       approval,
       this.botName(approval.agentId),
@@ -285,7 +297,9 @@ export class ApprovalNotifications {
         const saved = this.results.get(id);
         if (!saved) {
           const approvals = await this.client.request("approvals.list", {});
-          if (!approvals.some((approval) => approval.id === id)) await this.showUnavailable(id);
+          const known = approvals.find((approval) => approval.id === id);
+          if (!known) await this.showUnavailable(id);
+          else if (known.status === "interrupted") await this.showInterrupted(id);
           return;
         }
         if (!saved?.result.undo || this.now() >= saved.until) return;
@@ -303,6 +317,10 @@ export class ApprovalNotifications {
       const approval = (await this.client.request("approvals.list", {})).find((a) => a.id === id);
       if (!approval) {
         await this.showUnavailable(id);
+        return;
+      }
+      if (approval.status === "interrupted") {
+        await this.showInterrupted(id);
         return;
       }
       if (approval.status !== "pending" || approval.expiresAt <= this.now()) {
@@ -363,6 +381,12 @@ export class ApprovalNotifications {
       "approvals",
       "Esse pedido não está mais disponível. O Boto foi fechado antes da decisão.",
     );
+    await Promise.all([this.bridge.open(), this.bridge.remove(id)]);
+  }
+
+  private async showInterrupted(id: string) {
+    this.unavailable.add(id);
+    this.review("approvals", INTERRUPTED_NOTICE);
     await Promise.all([this.bridge.open(), this.bridge.remove(id)]);
   }
 
