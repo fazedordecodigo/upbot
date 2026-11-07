@@ -54,6 +54,29 @@ jobs:
         run: |
           bunx --no-install playwright-core install --with-deps chromium
           bun -e 'import { chromium } from "playwright-core"; console.log(`CHROME_PATH=${chromium.executablePath()}`)' >> "$GITHUB_ENV"
+      # ARM64 Windows assembly/crypto cold starts can exceed the vault subprocess timeout.
+      - name: Warm up Windows ARM64 DPAPI
+        if: matrix.os == 'windows-11-arm'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = @'
+          $ErrorActionPreference = 'Stop'
+          try {
+            Add-Type -AssemblyName System.Security
+            $bytes = [byte[]]::new(32)
+            $protected = [Security.Cryptography.ProtectedData]::Protect($bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+            $plain = [Security.Cryptography.ProtectedData]::Unprotect($protected, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+            if ([Convert]::ToBase64String($bytes) -ne [Convert]::ToBase64String($plain)) { exit 2 }
+            exit 0
+          } catch {
+            Write-Output ($_.Exception.GetType().FullName)
+            exit 1
+          }
+          '@
+          & powershell.exe -NoProfile -NonInteractive -Command $script
+          exit $LASTEXITCODE
       - run: bun run test
       - run: bun run build:daemon
       - run: cargo check --locked
