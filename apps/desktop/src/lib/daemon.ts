@@ -26,6 +26,7 @@ export class DaemonClient {
   private connection: DaemonConnection | null = null;
   private everConnected = false;
   private reconnectCbs = new Set<() => void>();
+  private disconnectCbs = new Set<() => void>();
   private failureCbs = new Set<(error: Error) => void>();
   private connecting: Promise<void> | null = null;
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -71,6 +72,15 @@ export class DaemonClient {
     return () => this.failureCbs.delete(cb);
   }
 
+  onDisconnect(cb: () => void): () => void {
+    this.disconnectCbs.add(cb);
+    return () => this.disconnectCbs.delete(cb);
+  }
+
+  private disconnected() {
+    for (const cb of this.disconnectCbs) cb();
+  }
+
   private openSocket(retry = false): Promise<void> {
     const { port, token } = this.connection!;
     return new Promise((resolve, reject) => {
@@ -93,6 +103,7 @@ export class DaemonClient {
         resolve();
       };
       ws.onerror = () => {
+        this.disconnected();
         reject(new Error(DAEMON_SOCKET_ERROR));
       };
       ws.onmessage = (ev) => {
@@ -114,6 +125,7 @@ export class DaemonClient {
       };
       ws.onclose = (ev) => {
         this.ws = null;
+        this.disconnected();
         for (const [, p] of this.pending) p.reject(new Error(DAEMON_SOCKET_CLOSED));
         this.pending.clear();
         if (!this.closed) {
@@ -135,14 +147,16 @@ export class DaemonClient {
                 },
                 (e: unknown) => {
                   if (this.closed) return;
+                  this.disconnected();
                   logWarn("daemon.reconnect_failed", { attempt, ...errorFields(e) });
                   const err = e instanceof Error ? e : new Error(String(e));
                   for (const cb of this.failureCbs) cb(err);
                 },
               )
-              .catch((e: unknown) =>
-                logWarn("daemon.reconnect_failed", { attempt, ...errorFields(e) }),
-              );
+              .catch((e: unknown) => {
+                this.disconnected();
+                logWarn("daemon.reconnect_failed", { attempt, ...errorFields(e) });
+              });
           }, nextDelayMs);
           this.reconnectDelay = Math.min(this.reconnectDelay * 2, 5000);
         }
