@@ -1,16 +1,20 @@
-import type { ChildProcess } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join, win32 } from "node:path";
 import { resolveCommandIn, spawnEnv } from "./env/login-path";
 import { spawnChild } from "./env/spawn";
 import { envOverride } from "./env/vars";
+import { type SsipSpeech, ssipAddress, ssipConnect, ssipSpeak } from "./voice-ssip";
 
 // Voice: text-to-speech with BOTO_TTS_COMMAND (text on stdin) or a built-in default
-// (macOS `say`, Windows System.Speech via Windows PowerShell, Linux espeak-ng/espeak/spd-say)
-// and speech-to-text with BOTO_STT_COMMAND (JSON array, "{file}" = recorded audio path,
-// transcript on stdout) or the `whisper` CLI when it is on PATH.
+// (macOS `say`, Windows System.Speech via Windows PowerShell, Linux espeak-ng/espeak or
+// Speech Dispatcher over its SSIP socket) and speech-to-text with BOTO_STT_COMMAND (JSON
+// array, "{file}" = recorded audio path, transcript on stdout) or the `whisper` CLI on PATH.
+// The text never goes into a process argument list, where other local users could read it.
 
-export type TtsCommand = { bin: string; args: string[]; input: "stdin" | "arg" };
+export type TtsCommand =
+  | { kind: "stdin"; bin: string; args: string[] }
+  /** Speech Dispatcher; `spawn` starts it (as spd-say would) when the socket is missing. */
+  | { kind: "ssip"; socket: string; spawn: string | null };
 
 type Resolve = (cmd: string) => string | null;
 
@@ -33,15 +37,15 @@ export function ttsCommand(
   resolve: Resolve,
   env: NodeJS.ProcessEnv = process.env,
   override: string[] | null = envOverride("BOTO_TTS_COMMAND"),
+  exists: (path: string) => boolean = existsSync,
 ): TtsCommand | null {
+  const stdin = (bin: string | null, args: string[] = []): TtsCommand | null =>
+    bin ? { kind: "stdin", bin, args } : null;
   if (override) {
-    const bin = resolve(override[0]!);
-    return bin ? { bin, args: override.slice(1), input: "stdin" } : null;
+    const [cmd = "", ...args] = override;
+    return stdin(resolve(cmd), args);
   }
-  if (platform === "darwin") {
-    const bin = resolve("say");
-    return bin ? { bin, args: [], input: "stdin" } : null;
-  }
+  if (platform === "darwin") return stdin(resolve("say"));
   if (platform === "win32") {
     // Windows PowerShell 5.1 (.NET Framework) ships System.Speech; pwsh (PowerShell 7) does not.
     const root = Object.entries(env).find(([k]) => k.toLowerCase() === "systemroot")?.[1];
@@ -50,22 +54,19 @@ export function ttsCommand(
       (root
         ? resolve(win32.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
         : null);
-    return bin
-      ? {
-          bin,
-          args: ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_SPEECH_SCRIPT],
-          input: "stdin",
-        }
-      : null;
+    return stdin(bin, ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_SPEECH_SCRIPT]);
   }
   for (const name of ["espeak-ng", "espeak"]) {
     const bin = resolve(name);
-    if (bin) return { bin, args: ["--stdin"], input: "stdin" };
+    if (bin) return stdin(bin, ["--stdin"]);
   }
-  // spd-say has no whole-text stdin mode (pipe mode speaks line by line), so the text is
-  // passed as a single argv entry after "--" (no shell is involved).
-  const spd = resolve("spd-say");
-  return spd ? { bin: spd, args: ["-w", "--"], input: "arg" } : null;
+  // spd-say would need the text in argv (or line-by-line stdin, where `!-!` lines are SSIP
+  // commands), so Boto talks to Speech Dispatcher's socket itself.
+  const address = ssipAddress(env);
+  if (!address) return null;
+  if (exists(address.socket)) return { kind: "ssip", socket: address.socket, spawn: null };
+  const spawn = address.custom ? null : resolve("speech-dispatcher");
+  return spawn ? { kind: "ssip", socket: address.socket, spawn } : null;
 }
 
 /** Picks the STT command: BOTO_STT_COMMAND first, then `whisper` on PATH. */
@@ -74,8 +75,9 @@ export function sttCommand(
   override: string[] | null = envOverride("BOTO_STT_COMMAND"),
 ): { bin: string; args: string[]; custom: boolean } | null {
   if (override) {
-    const bin = resolve(override[0]!);
-    return bin ? { bin, args: override.slice(1), custom: true } : null;
+    const [cmd = "", ...args] = override;
+    const bin = resolve(cmd);
+    return bin ? { bin, args, custom: true } : null;
   }
   const whisper = resolve("whisper");
   return whisper ? { bin: whisper, args: [], custom: false } : null;
@@ -90,7 +92,7 @@ const EXT: Record<string, string> = {
 };
 
 export class Voice {
-  private speaking: ChildProcess | null = null;
+  private speaking: { stop(): void } | null = null;
 
   constructor(
     private dir: string,
@@ -120,18 +122,19 @@ export class Voice {
     }
     this.stop();
     const input = text.slice(0, 20_000);
-    const p = spawnChild(cmd.bin, cmd.input === "arg" ? [...cmd.args, input] : cmd.args, {
-      stdio: [cmd.input === "stdin" ? "pipe" : "ignore", "ignore", "ignore"],
+    if (cmd.kind === "ssip") return this.speakSsip(cmd.socket, cmd.spawn, input);
+    const p = spawnChild(cmd.bin, cmd.args, {
+      stdio: ["pipe", "ignore", "ignore"],
       env: spawnEnv(undefined, this.platform, this.pathEnv()),
     });
-    this.speaking = p;
+    const handle = { stop: () => p.kill() };
+    this.speaking = handle;
+    const done = () => {
+      if (this.speaking === handle) this.speaking = null;
+    };
     p.stdin?.on("error", () => {});
-    p.on("error", () => {
-      if (this.speaking === p) this.speaking = null;
-    });
-    p.once("close", () => {
-      if (this.speaking === p) this.speaking = null;
-    });
+    p.on("error", done);
+    p.once("close", done);
     const spawned = new Promise<void>((resolve, reject) => {
       p.once("spawn", resolve);
       p.once("error", reject);
@@ -140,8 +143,51 @@ export class Voice {
     await spawned;
   }
 
+  private async speakSsip(socket: string, spawn: string | null, text: string): Promise<void> {
+    const pending = { stop: () => {} };
+    let stopped = false;
+    pending.stop = () => {
+      stopped = true;
+    };
+    this.speaking = pending;
+    const connection = await ssipConnect(socket).catch(async (error) => {
+      if (!spawn) throw error;
+      await this.spawnSpeechDispatcher(spawn);
+      return ssipConnect(socket);
+    });
+    if (stopped || this.speaking !== pending) {
+      connection.destroy();
+      return;
+    }
+    const speech: SsipSpeech = await ssipSpeak(connection, text);
+    if (stopped || this.speaking !== pending) return speech.stop();
+    const handle = { stop: () => speech.stop() };
+    this.speaking = handle;
+    void speech.done.then(() => {
+      if (this.speaking === handle) this.speaking = null;
+    });
+  }
+
+  /** `speech-dispatcher --spawn` (what libspeechd runs): starts the user's server unless one
+   * is already running, then exits. */
+  private spawnSpeechDispatcher(bin: string): Promise<void> {
+    return new Promise((resolve) => {
+      const p = spawnChild(bin, ["--spawn"], {
+        stdio: ["ignore", "ignore", "ignore"],
+        env: spawnEnv(undefined, this.platform, this.pathEnv()),
+      });
+      const timer = setTimeout(() => p.kill(), 10_000);
+      const done = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      p.once("error", done);
+      p.once("close", done);
+    });
+  }
+
   stop(): void {
-    this.speaking?.kill();
+    this.speaking?.stop();
     this.speaking = null;
   }
 
@@ -149,7 +195,7 @@ export class Voice {
     const id = crypto.randomUUID();
     const work = join(this.dir, id);
     mkdirSync(work, { recursive: true });
-    const file = join(work, `audio.${EXT[mime.split(";")[0]!.trim()] ?? "webm"}`);
+    const file = join(work, `audio.${EXT[(mime.split(";")[0] ?? "").trim()] ?? "webm"}`);
     writeFileSync(file, Buffer.from(audioBase64, "base64"));
     try {
       const override = envOverride("BOTO_STT_COMMAND");

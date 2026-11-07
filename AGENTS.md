@@ -375,12 +375,17 @@ Computer Use (`src/computer.ts`, macOS): off per agent until `computer.setAccess
 Voice (`src/voice.ts`): `voice.speak` uses `BOTO_TTS_COMMAND` (text on stdin) or the
 built-in default from `ttsCommand`: macOS `say`; Windows `powershell` (Windows PowerShell 5.1,
 then `%SystemRoot%` path; pwsh lacks System.Speech) running the fixed `WINDOWS_SPEECH_SCRIPT`
-that reads UTF-8 text from stdin; Linux `espeak-ng --stdin`, `espeak --stdin`, then
-`spd-say -w -- <text>` (one argv entry, no shell; pipe mode would speak line by line).
+that reads UTF-8 text from stdin; Linux `espeak-ng --stdin`, `espeak --stdin`, then Speech
+Dispatcher over its SSIP unix socket (`src/voice-ssip.ts`; `SPEECHD_ADDRESS` or
+`$XDG_RUNTIME_DIR/speech-dispatcher/speechd.sock`; runs `speech-dispatcher --spawn` when the
+default socket is missing). Spoken text never goes into argv (other local users can read it),
+so `spd-say` itself is never run. A new `voice.speak` stops the previous one (`CANCEL SELF`).
 `voice.transcribe` uses `BOTO_STT_COMMAND` with `{file}`, or `whisper` on PATH (`sttCommand`).
 An override always wins; if its binary is missing the feature is unavailable (no fallback).
 `voice.status` reports only commands whose binary resolves on the merged PATH.
-Tests: `test/voice.test.ts` (per-platform selection, Windows script on Windows CI). UI: Vault view, Computer Use toggle, composer mic, read-aloud button;
+Tests: `test/voice.test.ts` (per-platform selection, SSIP escaping, Windows script on Windows
+CI) and `test/voice.e2e.test.ts` (RPC with built-in defaults: fake programs as the only PATH
+via a fake login shell, `fixtures/fake-tts.ts`, `fixtures/fake-speechd.ts`). UI: Vault view, Computer Use toggle, composer mic, read-aloud button;
 `src-tauri/Info.plist` has the microphone usage string. Tests: `test/phase11.e2e.test.ts`.
 
 ## Messaging gateways (Phase 12a)
@@ -542,7 +547,7 @@ configs, so it does not reflect stock defaults. Gemini's config path is unverifi
   Linux AppImage/deb, or Windows NSIS).
 - `bun run test` — `bun test packages/daemon packages/host apps/desktop/test` (daemon e2e and desktop browser tests).
 - Computer Use is macOS-only. Built-in read-aloud uses `say` (macOS), System.Speech via
-  Windows PowerShell (Windows) or espeak-ng/espeak/spd-say on PATH (Linux). Linux uses Secret
+  Windows PowerShell (Windows) or espeak-ng/espeak/Speech Dispatcher (Linux). Linux uses Secret
   Service for the vault key when available, while Windows uses DPAPI.
 - `bun run lint` — `biome check .`
 - `bun run typecheck` — `tsc -p` for protocol, daemon, relay, host, desktop (sequential).

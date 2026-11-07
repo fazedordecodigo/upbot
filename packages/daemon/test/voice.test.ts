@@ -1,21 +1,22 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { sttCommand, ttsCommand, Voice, WINDOWS_SPEECH_SCRIPT } from "../src/voice";
+import { sttCommand, ttsCommand, WINDOWS_SPEECH_SCRIPT } from "../src/voice";
+import { ssipAddress, ssipEscape } from "../src/voice-ssip";
 
 const only =
   (...found: string[]) =>
   (cmd: string) =>
     found.includes(cmd) ? `/bin/${cmd}` : null;
 
+const none = () => false;
+const all = () => true;
+
 describe("ttsCommand", () => {
   test("macOS uses say with text on stdin", () => {
     expect(ttsCommand("darwin", only("say"), {}, null)).toEqual({
+      kind: "stdin",
       bin: "/bin/say",
       args: [],
-      input: "stdin",
     });
     expect(ttsCommand("darwin", only(), {}, null)).toBeNull();
   });
@@ -23,9 +24,9 @@ describe("ttsCommand", () => {
   test("Windows uses Windows PowerShell System.Speech with text on stdin", () => {
     const cmd = ttsCommand("win32", only("powershell"), {}, null);
     expect(cmd).toEqual({
+      kind: "stdin",
       bin: "/bin/powershell",
       args: ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_SPEECH_SCRIPT],
-      input: "stdin",
     });
     expect(WINDOWS_SPEECH_SCRIPT).toContain("System.Speech");
     expect(WINDOWS_SPEECH_SCRIPT).toContain("OpenStandardInput");
@@ -35,31 +36,61 @@ describe("ttsCommand", () => {
   test("Windows falls back to the SystemRoot PowerShell path", () => {
     const exe = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
     const resolve = (cmd: string) => (cmd === exe ? exe : null);
-    expect(ttsCommand("win32", resolve, { SystemRoot: "C:\\Windows" }, null)?.bin).toBe(exe);
+    expect(ttsCommand("win32", resolve, { SystemRoot: "C:\\Windows" }, null)).toMatchObject({
+      bin: exe,
+    });
     expect(ttsCommand("win32", resolve, {}, null)).toBeNull();
   });
 
-  test("Linux prefers espeak-ng, then espeak, then spd-say", () => {
-    expect(ttsCommand("linux", only("espeak-ng", "espeak", "spd-say"), {}, null)).toEqual({
+  test("Linux prefers espeak-ng, then espeak, then Speech Dispatcher", () => {
+    const env = { XDG_RUNTIME_DIR: "/run/user/1000" };
+    const socket = "/run/user/1000/speech-dispatcher/speechd.sock";
+    const all = only("espeak-ng", "espeak", "spd-say", "speech-dispatcher");
+    expect(ttsCommand("linux", all, env, null, none)).toEqual({
+      kind: "stdin",
       bin: "/bin/espeak-ng",
       args: ["--stdin"],
-      input: "stdin",
     });
-    expect(ttsCommand("linux", only("espeak", "spd-say"), {}, null)?.bin).toBe("/bin/espeak");
-    expect(ttsCommand("linux", only("spd-say"), {}, null)).toEqual({
-      bin: "/bin/spd-say",
-      args: ["-w", "--"],
-      input: "arg",
+    expect(ttsCommand("linux", only("espeak", "spd-say"), env, null, none)).toEqual({
+      kind: "stdin",
+      bin: "/bin/espeak",
+      args: ["--stdin"],
     });
-    expect(ttsCommand("linux", only(), {}, null)).toBeNull();
-    expect(ttsCommand("linux", only("say"), {}, null)).toBeNull();
+    expect(ttsCommand("linux", only("spd-say"), env, null, (p) => p === socket)).toEqual({
+      kind: "ssip",
+      socket,
+      spawn: null,
+    });
+    expect(ttsCommand("linux", only("speech-dispatcher"), env, null, none)).toEqual({
+      kind: "ssip",
+      socket,
+      spawn: "/bin/speech-dispatcher",
+    });
+    // spd-say alone is never run: it would carry the text in argv.
+    expect(ttsCommand("linux", only("spd-say"), env, null, none)).toBeNull();
+    expect(ttsCommand("linux", only(), env, null, none)).toBeNull();
+    expect(ttsCommand("linux", only("say"), env, null, none)).toBeNull();
+  });
+
+  test("a custom SPEECHD_ADDRESS socket is used but never autospawned", () => {
+    const env = { SPEECHD_ADDRESS: "unix_socket:/tmp/sd.sock" };
+    const sd = only("speech-dispatcher");
+    expect(ttsCommand("linux", sd, env, null, (p) => p === "/tmp/sd.sock")).toEqual({
+      kind: "ssip",
+      socket: "/tmp/sd.sock",
+      spawn: null,
+    });
+    expect(ttsCommand("linux", sd, env, null, none)).toBeNull();
+    expect(
+      ttsCommand("linux", sd, { SPEECHD_ADDRESS: "inet_socket:localhost:6560" }, null, all),
+    ).toBeNull();
   });
 
   test("BOTO_TTS_COMMAND wins on every platform and is not replaced when missing", () => {
     for (const platform of ["darwin", "win32", "linux"] as const) {
       expect(
         ttsCommand(platform, only("say", "powershell", "espeak-ng", "mytts"), {}, ["mytts", "-x"]),
-      ).toEqual({ bin: "/bin/mytts", args: ["-x"], input: "stdin" });
+      ).toEqual({ kind: "stdin", bin: "/bin/mytts", args: ["-x"] });
       expect(
         ttsCommand(platform, only("say", "powershell", "espeak-ng"), {}, ["mytts"]),
       ).toBeNull();
@@ -84,69 +115,26 @@ describe("sttCommand", () => {
   });
 });
 
-describe.skipIf(process.platform === "win32")("Voice with Linux defaults", () => {
-  const dirs: string[] = [];
-  const saved = { tts: process.env.BOTO_TTS_COMMAND, stt: process.env.BOTO_STT_COMMAND };
-  afterEach(() => {
-    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-    if (saved.tts === undefined) delete process.env.BOTO_TTS_COMMAND;
-    else process.env.BOTO_TTS_COMMAND = saved.tts;
-    if (saved.stt === undefined) delete process.env.BOTO_STT_COMMAND;
-    else process.env.BOTO_STT_COMMAND = saved.stt;
-  });
-
-  const setup = (bins: Record<string, string>) => {
-    delete process.env.BOTO_TTS_COMMAND;
-    delete process.env.BOTO_STT_COMMAND;
-    const dir = mkdtempSync(join(tmpdir(), "boto-voice-"));
-    dirs.push(dir);
-    for (const [name, script] of Object.entries(bins)) {
-      writeFileSync(join(dir, name), `#!/bin/sh\n${script}\n`);
-      chmodSync(join(dir, name), 0o755);
-    }
-    const path = `${dir}:/usr/bin:/bin`;
-    return { dir, voice: new Voice(join(dir, "work"), () => path, "linux") };
-  };
-
-  const waitFor = async (file: string) => {
-    for (let i = 0; i < 250 && !existsSync(file); i++) await Bun.sleep(20);
-    return readFileSync(file, "utf8");
-  };
-
-  test("status is false when nothing is installed", () => {
-    expect(setup({}).voice.status()).toEqual({ tts: false, stt: false });
-  });
-
-  test("espeak-ng reads the text from stdin", async () => {
-    const { dir, voice } = setup({
-      "espeak-ng": `printf '%s|' "$@" > "$0.args"; cat > "$0.tmp"; mv "$0.tmp" "$0.txt"`,
+describe("SSIP", () => {
+  test("ssipAddress follows libspeechd's default socket and SPEECHD_ADDRESS", () => {
+    expect(ssipAddress({ XDG_RUNTIME_DIR: "/run/user/7" })).toEqual({
+      socket: "/run/user/7/speech-dispatcher/speechd.sock",
+      custom: false,
     });
-    expect(voice.status()).toEqual({ tts: true, stt: false });
-    await voice.speak("Olá; $(rm -rf /) `id`");
-    expect(await waitFor(join(dir, "espeak-ng.txt"))).toBe("Olá; $(rm -rf /) `id`");
-    expect(readFileSync(join(dir, "espeak-ng.args"), "utf8")).toBe("--stdin|");
-  });
-
-  test("spd-say gets the text as one argument after --", async () => {
-    const { dir, voice } = setup({
-      "spd-say": `printf '%s|' "$@" > "$0.tmp"; mv "$0.tmp" "$0.args"`,
+    expect(ssipAddress({ XDG_CACHE_HOME: "/c" })?.socket).toBe("/c/speech-dispatcher/speechd.sock");
+    expect(ssipAddress({ HOME: "/h" })?.socket).toBe("/h/.cache/speech-dispatcher/speechd.sock");
+    expect(ssipAddress({ HOME: "/h", SPEECHD_ADDRESS: "unix_socket" })?.custom).toBe(false);
+    expect(ssipAddress({ SPEECHD_ADDRESS: "unix_socket:/s" })).toEqual({
+      socket: "/s",
+      custom: true,
     });
-    expect(voice.status().tts).toBe(true);
-    await voice.speak("-h linha 1\nlinha 2");
-    expect(await waitFor(join(dir, "spd-say.args"))).toBe("-w|--|-h linha 1\nlinha 2|");
+    expect(ssipAddress({ SPEECHD_ADDRESS: "inet_socket:127.0.0.1:6560" })).toBeNull();
   });
 
-  test("a missing BOTO_TTS_COMMAND binary is reported, not replaced by the default", async () => {
-    const { voice } = setup({ "espeak-ng": "cat > /dev/null" });
-    process.env.BOTO_TTS_COMMAND = JSON.stringify(["definitely-missing-boto-tts"]);
-    expect(voice.status().tts).toBe(false);
-    await expect(voice.speak("oi")).rejects.toThrow(
-      "text-to-speech command not found: definitely-missing-boto-tts",
-    );
-  });
-
-  test("whisper on PATH enables speech-to-text", () => {
-    expect(setup({ whisper: "exit 0" }).voice.status()).toEqual({ tts: false, stt: true });
+  test("ssipEscape uses CRLF, doubles leading dots and ends with a lone dot", () => {
+    expect(ssipEscape("oi")).toBe("oi\r\n.\r\n");
+    expect(ssipEscape(".\n..a\r\nb.\rc\n")).toBe("..\r\n...a\r\nb.\r\nc\r\n\r\n.\r\n");
+    expect(ssipEscape("!-!QUIT\nSPEAK")).toBe("!-!QUIT\r\nSPEAK\r\n.\r\n");
   });
 });
 
