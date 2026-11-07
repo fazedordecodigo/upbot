@@ -415,8 +415,10 @@ then `%SystemRoot%` path; pwsh lacks System.Speech) running the fixed `WINDOWS_S
 that reads UTF-8 text from stdin; Linux `espeak-ng --stdin`, `espeak --stdin`, then Speech
 Dispatcher over its SSIP unix socket (`src/voice-ssip.ts`; `SPEECHD_ADDRESS` or
 `$XDG_RUNTIME_DIR/speech-dispatcher/speechd.sock`; runs `speech-dispatcher --spawn` when the
-default socket is missing). Spoken text never goes into argv (other local users can read it),
-so `spd-say` itself is never run. A new `voice.speak` stops the previous one (`CANCEL SELF`).
+default socket is missing or refuses connections, e.g. left by a crashed server). Spoken text
+never goes into argv (other local users can read it), so `spd-say` itself is never run. A new
+`voice.speak` stops the previous one, and a 15-minute cap ends long speech, both with
+`CANCEL SELF` before `QUIT` (the server keeps speaking after a client disconnects).
 `voice.transcribe` uses `BOTO_STT_COMMAND` with `{file}`, or `whisper` on PATH (`sttCommand`).
 An override always wins; if its binary is missing the feature is unavailable (no fallback).
 `voice.status` reports only commands whose binary resolves on the merged PATH.

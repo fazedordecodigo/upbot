@@ -64,9 +64,10 @@ export function ttsCommand(
   // commands), so Boto talks to Speech Dispatcher's socket itself.
   const address = ssipAddress(env);
   if (!address) return null;
-  if (exists(address.socket)) return { kind: "ssip", socket: address.socket, spawn: null };
+  // The socket file can outlive a crashed server, so keep `spawn` to restart it on a failed
+  // connect. Custom addresses are never autospawned (libspeechd does the same).
   const spawn = address.custom ? null : resolve("speech-dispatcher");
-  return spawn ? { kind: "ssip", socket: address.socket, spawn } : null;
+  return spawn || exists(address.socket) ? { kind: "ssip", socket: address.socket, spawn } : null;
 }
 
 /** Picks the STT command: BOTO_STT_COMMAND first, then `whisper` on PATH. */

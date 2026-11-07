@@ -163,7 +163,15 @@ export async function ssipSpeak(
   } finally {
     clearTimeout(setup);
   }
-  const cap = setTimeout(quit, opts.maxSpeechMs ?? 15 * 60_000);
+  // Speech Dispatcher keeps speaking after a client disconnects, so the cap cancels first;
+  // `done` resolves on the 703 notification or when the socket closes.
+  const cap = setTimeout(
+    () => {
+      conn.write("CANCEL SELF\r\n");
+      quit();
+    },
+    opts.maxSpeechMs ?? 15 * 60_000,
+  );
   cap.unref?.();
   void done.then(() => clearTimeout(cap));
   return {

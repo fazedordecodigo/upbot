@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { WINDOWS_SPEECH_SCRIPT } from "../src/voice";
 import {
@@ -174,6 +174,30 @@ describe.skipIf(process.platform !== "linux")("voice defaults on Linux (daemon R
   test("Speech Dispatcher is started with --spawn when its socket is missing", async () => {
     const s = await setup(["speech-dispatcher"]);
     servers.push(join(s.out, "speechd.pid"));
+    expect((await s.client.request("voice.status", {})).tts).toBe(true);
+    await s.client.request("voice.speak", { text: "oi" });
+    expect(await waitFor(join(s.out, "ssip.log"), (t) => t.includes("QUIT\r\n"))).toContain(
+      "SPEAK\r\noi\r\n.\r\n",
+    );
+    expect(readFileSync(join(s.out, "spawn.log"), "utf8")).toBe('["--spawn"]\n');
+  });
+
+  test("a socket left by a crashed Speech Dispatcher is recovered with --spawn", async () => {
+    const s = await setup(["speech-dispatcher"], {}, async ({ out, runtime }) => {
+      await startSpeechd(out, runtime);
+      const pid = Number(readFileSync(join(out, "speechd.pid"), "utf8"));
+      process.kill(pid, "SIGKILL");
+      for (let i = 0; i < 250; i++) {
+        try {
+          process.kill(pid, 0);
+        } catch {
+          break;
+        }
+        await Bun.sleep(20);
+      }
+      rmSync(join(out, "ssip.log"), { force: true });
+    });
+    expect(existsSync(join(s.runtime, "speech-dispatcher", "speechd.sock"))).toBe(true);
     expect((await s.client.request("voice.status", {})).tts).toBe(true);
     await s.client.request("voice.speak", { text: "oi" });
     expect(await waitFor(join(s.out, "ssip.log"), (t) => t.includes("QUIT\r\n"))).toContain(

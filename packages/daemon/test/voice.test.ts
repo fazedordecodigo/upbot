@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createServer } from "node:net";
+import { join } from "node:path";
 import { sttCommand, ttsCommand, WINDOWS_SPEECH_SCRIPT } from "../src/voice";
-import { ssipAddress, ssipEscape } from "../src/voice-ssip";
+import { ssipAddress, ssipConnect, ssipEscape, ssipSpeak } from "../src/voice-ssip";
+import { removeDir, tmp } from "./helpers";
 
 const only =
   (...found: string[]) =>
@@ -60,6 +63,12 @@ describe("ttsCommand", () => {
       kind: "ssip",
       socket,
       spawn: null,
+    });
+    // A socket file left by a crashed server must not disable the restart.
+    expect(ttsCommand("linux", only("speech-dispatcher"), env, null, () => true)).toEqual({
+      kind: "ssip",
+      socket,
+      spawn: "/bin/speech-dispatcher",
     });
     expect(ttsCommand("linux", only("speech-dispatcher"), env, null, none)).toEqual({
       kind: "ssip",
@@ -163,5 +172,47 @@ describe.skipIf(process.platform !== "win32")("Windows PowerShell speech script"
       "Olá",
     );
     expect(r.status).toBe(0);
+  });
+});
+
+describe.skipIf(process.platform === "win32")("ssipSpeak", () => {
+  test("the speech cap cancels the message before disconnecting", async () => {
+    const dir = tmp("boto-ssip-");
+    const path = join(dir, "speechd.sock");
+    let log = "";
+    const server = createServer((c) => {
+      let buffer = "";
+      let data = false;
+      c.on("data", (chunk) => {
+        log += chunk.toString();
+        buffer += chunk.toString();
+        for (let i = buffer.indexOf("\r\n"); i >= 0; i = buffer.indexOf("\r\n")) {
+          const line = buffer.slice(0, i);
+          buffer = buffer.slice(i + 2);
+          if (data) {
+            if (line === ".") {
+              data = false;
+              c.write("225-1\r\n225 OK MESSAGE QUEUED\r\n");
+            }
+          } else if (line === "SPEAK") {
+            data = true;
+            c.write("230 OK RECEIVING DATA\r\n");
+          } else if (line === "QUIT") {
+            c.end("231 HAPPY HACKING\r\n");
+          } else c.write("200 OK\r\n");
+        }
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(path, resolve));
+    try {
+      const socket = await ssipConnect(path);
+      const speech = await ssipSpeak(socket, "longa", { maxSpeechMs: 100 });
+      await speech.done;
+      expect(socket.destroyed).toBe(true);
+      expect(log.endsWith("longa\r\n.\r\nCANCEL SELF\r\nQUIT\r\n")).toBe(true);
+    } finally {
+      server.close();
+      await removeDir(dir);
+    }
   });
 });
