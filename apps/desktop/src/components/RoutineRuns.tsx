@@ -2,7 +2,8 @@ import type { RoutineRun } from "@boto/protocol";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { DaemonClient } from "../lib/daemon";
 import { errorFields, logWarn } from "../lib/log";
-import { Button } from "./ds/controls";
+import { Button, Tag } from "./ds/controls";
+import s from "./RoutineRuns.module.css";
 
 function status(run: RoutineRun) {
   if (run.error) return "Falhou ao enfileirar";
@@ -53,16 +54,21 @@ export function RoutineRuns({
   if (!data) return <p role="status">Carregando histórico…</p>;
   if (!data.length) return <p>Nenhuma execução ainda.</p>;
   return (
-    <ul>
+    <ul className={s.list}>
       {data.map((run) => (
-        <li key={run.id}>
-          <p>
-            {{ schedule: "Agendada", webhook: "Webhook", manual: "Manual" }[run.trigger]} ·{" "}
-            {time(run.createdAt)} · {status(run)}
-          </p>
+        <li key={run.id} className={s.run}>
+          <div className={s.summary}>
+            <p>
+              {{ schedule: "Agendada", webhook: "Webhook", manual: "Manual" }[run.trigger]} ·{" "}
+              <time className={s.meta} dateTime={new Date(run.createdAt).toISOString()}>
+                {time(run.createdAt)}
+              </time>
+            </p>
+            <Tag>{status(run)}</Tag>
+          </div>
           {run.error && <p>{run.error}</p>}
           {run.turn && (
-            <p>
+            <p className={s.meta}>
               Início: {time(run.turn.startedAt)}
               {run.turn.endedAt !== null ? ` · Fim: ${time(run.turn.endedAt)}` : ""}
             </p>

@@ -959,14 +959,17 @@ test("routine history opens chat and appears in the saved routine dialog", async
       .locator("li")
       .filter({ has: target.getByRole("button", { name: /Histórico manual/ }) });
     await row.getByRole("button", { name: "Histórico", exact: true }).click();
-    await row.getByText(/Manual.*Concluída/).waitFor();
+    await row.getByText(/Manual ·/).waitFor();
+    await row.getByText("Concluída", { exact: true }).waitFor();
     await row.getByRole("button", { name: "Abrir conversa" }).click();
     await target.locator(".main-head").getByRole("heading", { name: bot.name }).waitFor();
     await target.getByRole("button", { name: "Configurar bot", exact: true }).click();
     await target.getByRole("button", { name: /Histórico manual/ }).click();
     const dialog = target.getByRole("dialog", { name: "Editar rotina", exact: true });
     await dialog.getByRole("heading", { name: "Histórico de execuções" }).waitFor();
-    await dialog.getByText(/Manual.*Concluída/).waitFor();
+    await dialog.getByText(/Manual ·/).waitFor();
+    await dialog.getByText("Concluída", { exact: true }).waitFor();
+    await dialog.getByText(/Início:/).scrollIntoViewIfNeeded();
     await capture("routine-history", target);
   } finally {
     await target.close();

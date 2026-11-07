@@ -6,6 +6,7 @@ import { errorMessage } from "../lib/errors";
 import { errorFields, type LogFields, logWarn } from "../lib/log";
 import { btnCls, inputCls, PROVIDERS } from "./AgentSettings";
 import { Button } from "./ds/controls";
+import detailStyles from "./LibraryDetail.module.css";
 import { Markdown } from "./Markdown";
 
 function SkillDetail({
@@ -30,7 +31,7 @@ function SkillDetail({
     },
   );
   return (
-    <section className="mx-auto max-w-2xl space-y-3 p-6">
+    <section className={`mx-auto max-w-2xl p-6 ${detailStyles.detail}`}>
       <Button onClick={onBack}>Voltar</Button>
       {error ? (
         <div role="alert">
@@ -41,16 +42,22 @@ function SkillDetail({
         <p role="status">Carregando habilidade…</p>
       ) : (
         <>
-          <h2>{data.name}</h2>
-          {data.author && <p>Autor: {data.author}</p>}
-          <p>{data.description}</p>
-          <p>Atualizada em {new Date(data.updatedAt).toLocaleString("pt-BR")}</p>
-          <Button onClick={() => onEdit(data)}>Editar</Button>
-          <Button aria-pressed={raw} onClick={() => setRaw(!raw)}>
-            {raw ? "Ver formatado" : "Ver texto bruto"}
-          </Button>
+          <header className={detailStyles.heading}>
+            <h2>{data.name}</h2>
+            <p>{data.description}</p>
+            <div className={detailStyles.meta}>
+              {data.author && <span>Autor: {data.author}</span>}
+              <span>Atualizada em {new Date(data.updatedAt).toLocaleString("pt-BR")}</span>
+            </div>
+          </header>
+          <div className={detailStyles.actions}>
+            <Button onClick={() => onEdit(data)}>Editar</Button>
+            <Button aria-pressed={raw} onClick={() => setRaw(!raw)}>
+              {raw ? "Ver formatado" : "Ver texto bruto"}
+            </Button>
+          </div>
           {raw ? (
-            <pre style={{ whiteSpace: "pre-wrap" }}>{data.body}</pre>
+            <pre className={detailStyles.raw}>{data.body}</pre>
           ) : (
             <Markdown text={data.body} />
           )}
