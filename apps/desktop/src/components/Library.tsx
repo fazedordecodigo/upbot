@@ -1,10 +1,12 @@
 import type { Agent, Gateway, GatewayKind, MarketplaceItem, ProviderId } from "@boto/protocol";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { DaemonClient } from "../lib/daemon";
 import { errorMessage } from "../lib/errors";
 import { errorFields, type LogFields, logWarn } from "../lib/log";
-import { btnCls, inputCls, PROVIDERS } from "./AgentSettings";
+import { PROVIDERS } from "./AgentSettings";
+import { Button, Field, Select, Switch, Tag } from "./ds/controls";
+import styles from "./Library.module.css";
 import { Markdown } from "./Markdown";
 
 export function SkillsView({ client }: { client: DaemonClient }) {
@@ -29,7 +31,7 @@ export function SkillsView({ client }: { client: DaemonClient }) {
   if (edit) {
     return (
       <form
-        className="mx-auto max-w-2xl space-y-3 p-6"
+        className={styles.page}
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
@@ -39,82 +41,89 @@ export function SkillsView({ client }: { client: DaemonClient }) {
             .catch(fail("skills.save_failed"));
         }}
       >
-        <h2 className="text-lg font-semibold">Skill</h2>
-        <input
-          className={inputCls}
-          placeholder="name (kebab-case)"
+        <h2 className={styles.title}>Habilidade</h2>
+        <Field
+          label="Nome (kebab-case)"
+          placeholder="Nome (kebab-case)"
           value={edit.name}
           onChange={(e) => setEdit({ ...edit, name: e.target.value })}
           required
         />
-        <input
-          className={inputCls}
-          placeholder="When to use it"
+        <Field
+          label="Quando usar"
+          placeholder="Quando usar"
           value={edit.description}
           onChange={(e) => setEdit({ ...edit, description: e.target.value })}
         />
-        <textarea
-          className={`${inputCls} min-h-64 font-mono`}
+        <Field
+          multiline
+          label="Conteúdo da habilidade"
+          className={styles.editor}
           value={edit.body}
           onChange={(e) => setEdit({ ...edit, body: e.target.value })}
           required
         />
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <div className="flex gap-2">
-          <button type="submit" className={`${btnCls} bg-sky-600 hover:bg-sky-500`}>
-            Save
-          </button>
-          <button
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
+        <div className={styles.formRow}>
+          <Button type="submit" variant="primary">
+            Salvar
+          </Button>
+          <Button
             type="button"
-            className={`${btnCls} bg-zinc-700 hover:bg-zinc-600`}
+            variant="secondary"
             onClick={() => {
               setError(null);
               setEdit(null);
             }}
           >
-            Cancel
-          </button>
+            Cancelar
+          </Button>
         </div>
       </form>
     );
   }
   return (
-    <div className="mx-auto max-w-2xl space-y-3 p-6">
-      <div className="flex items-center">
-        <h2 className="text-lg font-semibold">Skills library</h2>
-        <button
+    <div className={styles.page}>
+      <div className={styles.row}>
+        <h2 className={styles.title}>Biblioteca de habilidades</h2>
+        <Button
           type="button"
-          className={`${btnCls} ml-auto bg-sky-600 hover:bg-sky-500`}
+          variant="primary"
+          className={styles.push}
           onClick={() => {
             setError(null);
             setEdit({ name: "", description: "", body: "" });
           }}
         >
-          New skill
-        </button>
+          Nova habilidade
+        </Button>
       </div>
-      <p className="text-xs text-zinc-500">
-        Shared by all bots. Bots can also create and revise skills themselves.
+      <p className={styles.muted}>
+        Compartilhadas por todos os bots. Os bots também podem criar e revisar habilidades.
       </p>
-      <ul className="space-y-2">
+      <ul className={styles.stack}>
         {skills.map((s) => (
-          <li key={s.name} className="rounded border border-zinc-800 p-3">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{s.name}</span>
-              {s.author && <span className="text-xs text-zinc-500">by {s.author}</span>}
-              <button
+          <li key={s.name} className={styles.card}>
+            <div className={styles.row}>
+              <span className={styles.name}>{s.name}</span>
+              {s.author && <span className={styles.muted}>por {s.author}</span>}
+              <Button
                 type="button"
-                className="ml-auto text-xs text-sky-400 hover:text-sky-300"
+                className={styles.push}
                 onClick={() => {
                   setError(null);
                   setEdit({ name: s.name, description: s.description, body: s.body });
                 }}
               >
-                Edit
-              </button>
-              <button
+                Editar
+              </Button>
+              <Button
                 type="button"
-                className="text-xs text-zinc-500 hover:text-red-400"
+                className={styles.action}
                 onClick={() => {
                   setError(null);
                   client
@@ -122,15 +131,19 @@ export function SkillsView({ client }: { client: DaemonClient }) {
                     .catch(fail("skills.delete_failed"));
                 }}
               >
-                Delete
-              </button>
+                Excluir
+              </Button>
             </div>
-            <p className="text-sm text-zinc-400">{s.description}</p>
+            <p className={styles.muted}>{s.description}</p>
           </li>
         ))}
-        {skills.length === 0 && <li className="text-sm text-zinc-500">No skills yet.</li>}
+        {skills.length === 0 && <li className={styles.muted}>Nenhuma habilidade ainda.</li>}
       </ul>
-      {(error || loadError) && <p className="text-xs text-red-400">{error ?? loadError}</p>}
+      {(error || loadError) && (
+        <p className={styles.error} role="alert">
+          {error ?? loadError}
+        </p>
+      )}
     </div>
   );
 }
@@ -152,48 +165,48 @@ export function BrowserView({ client, agents }: { client: DaemonClient; agents: 
   };
   if (!state) {
     return loadError ? (
-      <div className="mx-auto max-w-2xl p-6">
-        <p className="text-xs text-red-400">{loadError}</p>
+      <div className={styles.page}>
+        <p className={styles.error} role="alert">
+          {loadError}
+        </p>
       </div>
     ) : null;
   }
-  const nameOf = (id: string) => agents.find((a) => a.id === id)?.name ?? "deleted bot";
+  const nameOf = (id: string) => agents.find((a) => a.id === id)?.name ?? "bot excluído";
   return (
-    <div className="mx-auto max-w-2xl space-y-3 p-6">
-      <div className="flex items-center">
-        <h2 className="text-lg font-semibold">Bot browser</h2>
+    <div className={styles.page}>
+      <div className={styles.row}>
+        <h2 className={styles.title}>Navegador dos bots</h2>
         {state.running && (
-          <button
+          <Button
             type="button"
-            className={`${btnCls} ml-auto bg-zinc-700 hover:bg-zinc-600`}
+            variant="secondary"
+            className={styles.push}
             onClick={() => {
               setError(null);
               client.request("browser.close", {}).catch(fail("browser.close_failed"));
             }}
           >
-            Close browser
-          </button>
+            Fechar navegador
+          </Button>
         )}
       </div>
-      <p className="text-xs text-zinc-500">
+      <p className={styles.muted}>
         {state.available
-          ? "Bots drive a separate Chromium window (own profile) with the browser_* tools; each bot gets its own tab. You can watch and use that window directly."
-          : "No Chromium-based browser found. Install Google Chrome or set BOTO_BROWSER_PATH."}
+          ? "Os bots controlam uma janela separada do Chromium (com perfil próprio) pelas ferramentas browser_*; cada bot tem sua aba. Você pode acompanhar e usar essa janela diretamente."
+          : "Nenhum navegador baseado em Chromium encontrado. Instale o Google Chrome ou configure BOTO_BROWSER_PATH."}
       </p>
-      <ul className="space-y-2">
+      <ul className={styles.stack}>
         {state.tabs.map((t) => (
-          <li
-            key={t.agentId}
-            className="flex items-center gap-2 rounded border border-zinc-800 p-3 text-sm"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="font-medium">{nameOf(t.agentId)}</div>
-              <div className="truncate text-xs text-zinc-400">{t.title || t.url}</div>
-              <div className="truncate text-xs text-zinc-500">{t.url}</div>
+          <li key={t.agentId} className={styles.cardRow}>
+            <div className={styles.grow}>
+              <div className={styles.name}>{nameOf(t.agentId)}</div>
+              <div className={styles.truncate}>{t.title || t.url}</div>
+              <div className={styles.truncate}>{t.url}</div>
             </div>
-            <button
+            <Button
               type="button"
-              className="text-xs text-zinc-500 hover:text-red-400"
+              className={styles.action}
               onClick={() => {
                 setError(null);
                 client
@@ -201,24 +214,36 @@ export function BrowserView({ client, agents }: { client: DaemonClient; agents: 
                   .catch(fail("browser.closeTab_failed", { agentId: t.agentId }));
               }}
             >
-              Close tab
-            </button>
+              Fechar aba
+            </Button>
           </li>
         ))}
-        {state.tabs.length === 0 && <li className="text-sm text-zinc-500">No open tabs.</li>}
+        {state.tabs.length === 0 && <li className={styles.muted}>Nenhuma aba aberta.</li>}
       </ul>
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
 
+const gatewayStatus: Record<Gateway["status"], string> = {
+  connected: "Conectado",
+  connecting: "Conectando",
+  stopped: "Parado",
+  error: "Erro",
+};
+const messageStatus = { pending: "Pendente", completed: "Concluída", failed: "Falhou" };
+
 const CONNECTORS = [
-  ["connector.github", "GitHub personal access token (github_api tool)"],
+  ["connector.github", "Token de acesso pessoal do GitHub (ferramenta github_api)"],
   [
     "connector.1password",
-    "1Password service account token, or 'desktop' for the op app integration",
+    "Token de conta de serviço do 1Password, ou 'desktop' para a integração com o app op",
   ],
-  ["connector.bitwarden", "Bitwarden BW_SESSION from `bw unlock --raw`"],
+  ["connector.bitwarden", "BW_SESSION do Bitwarden obtido com `bw unlock --raw`"],
 ] as const;
 
 export function VaultView({ client, agents }: { client: DaemonClient; agents: Agent[] }) {
@@ -240,34 +265,35 @@ export function VaultView({ client, agents }: { client: DaemonClient; agents: Ag
     setError(errorMessage(e));
   };
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-6">
-      <h2 className="text-lg font-semibold">Vault</h2>
-      <p className="text-xs text-zinc-500">
-        Secrets are encrypted with a key kept in the system secure store (macOS Keychain, Windows
-        DPAPI or Linux Secret Service). Bots only see the secrets you share with them (vault_get);
-        connectors use their secret without revealing it.
+    <div className={styles.page}>
+      <h2 className={styles.title}>Cofre</h2>
+      <p className={styles.muted}>
+        Os segredos são criptografados com uma chave no armazenamento seguro do sistema (macOS
+        Keychain, Windows DPAPI ou Linux Secret Service). Os bots só veem os segredos que você
+        compartilha com eles (vault_get); os conectores usam seus segredos sem revelá-los.
       </p>
-      <ul className="space-y-2">
+      <ul className={styles.stack}>
         {entries.map((e) => (
-          <li key={e.name} className="rounded border border-zinc-800 p-3 text-sm">
-            <div className="flex items-center">
-              <span className="font-mono">{e.name}</span>
-              <button
+          <li key={e.name} className={styles.card}>
+            <div className={styles.row}>
+              <span className={styles.mono}>{e.name}</span>
+              <Button
                 type="button"
-                className="ml-auto text-xs text-zinc-500 hover:text-red-400"
+                className={styles.push}
                 onClick={() =>
                   client
                     .request("vault.delete", { name: e.name })
                     .catch(fail("vault.delete_failed"))
                 }
               >
-                Delete
-              </button>
+                Excluir
+              </Button>
             </div>
-            <div className="mt-1 flex flex-wrap gap-3">
+            <div className={styles.wrap}>
               {agents.map((a) => (
-                <label key={a.id} className="flex items-center gap-1 text-xs text-zinc-400">
+                <label key={a.id} className={styles.checkLabel}>
                   <input
+                    className={styles.checkbox}
                     type="checkbox"
                     checked={e.agentIds.includes(a.id)}
                     onChange={() =>
@@ -285,10 +311,10 @@ export function VaultView({ client, agents }: { client: DaemonClient; agents: Ag
             </div>
           </li>
         ))}
-        {entries.length === 0 && <li className="text-sm text-zinc-500">No secrets yet.</li>}
+        {entries.length === 0 && <li className={styles.muted}>Nenhum segredo ainda.</li>}
       </ul>
       <form
-        className="space-y-2 rounded border border-zinc-800 p-3"
+        className={styles.card}
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
@@ -298,20 +324,20 @@ export function VaultView({ client, agents }: { client: DaemonClient; agents: Ag
             .catch(fail("vault.set_failed"));
         }}
       >
-        <h3 className="text-sm font-semibold text-zinc-300">Add or replace a secret</h3>
-        <div className="flex gap-2">
-          <input
-            className={inputCls}
-            placeholder="name"
+        <h3 className={styles.subtitle}>Adicionar ou substituir um segredo</h3>
+        <div className={styles.formRow}>
+          <Field
+            label="Nome"
+            placeholder="Nome"
             value={form.name}
             list="vault-connectors"
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             required
           />
-          <input
-            className={inputCls}
+          <Field
+            label="Valor"
             type="password"
-            placeholder="value"
+            placeholder="Valor"
             value={form.value}
             onChange={(e) => setForm({ ...form, value: e.target.value })}
             required
@@ -324,10 +350,11 @@ export function VaultView({ client, agents }: { client: DaemonClient; agents: Ag
             </option>
           ))}
         </datalist>
-        <div className="flex flex-wrap gap-3">
+        <div className={styles.wrap}>
           {agents.map((a) => (
-            <label key={a.id} className="flex items-center gap-1 text-xs text-zinc-400">
+            <label key={a.id} className={styles.checkLabel}>
               <input
+                className={styles.checkbox}
                 type="checkbox"
                 checked={form.agentIds.includes(a.id)}
                 onChange={() => setForm({ ...form, agentIds: toggle(form.agentIds, a.id) })}
@@ -336,17 +363,21 @@ export function VaultView({ client, agents }: { client: DaemonClient; agents: Ag
             </label>
           ))}
         </div>
-        <ul className="text-xs text-zinc-500">
+        <ul className={styles.muted}>
           {CONNECTORS.map(([n, d]) => (
             <li key={n}>
-              <span className="font-mono">{n}</span>: {d}
+              <span className={styles.mono}>{n}</span>: {d}
             </li>
           ))}
         </ul>
-        {(error || loadError) && <p className="text-xs text-red-400">{error ?? loadError}</p>}
-        <button type="submit" className={`${btnCls} bg-sky-600 hover:bg-sky-500`}>
-          Save secret
-        </button>
+        {(error || loadError) && (
+          <p className={styles.error} role="alert">
+            {error ?? loadError}
+          </p>
+        )}
+        <Button type="submit" variant="primary">
+          Salvar segredo
+        </Button>
       </form>
     </div>
   );
@@ -354,19 +385,19 @@ export function VaultView({ client, agents }: { client: DaemonClient; agents: Ag
 
 const GATEWAY_HELP: Record<GatewayKind, { fields: [string, string][]; help: string }> = {
   telegram: {
-    fields: [["botToken", "Bot token from @BotFather"]],
-    help: "Message the bot directly. User ids are numeric; unknown users get their id in the reply.",
+    fields: [["botToken", "Token do bot fornecido pelo @BotFather"]],
+    help: "Envie uma mensagem diretamente ao bot. Os IDs de usuário são numéricos; usuários desconhecidos recebem seu ID na resposta.",
   },
   slack: {
     fields: [
-      ["botToken", "Bot token (xoxb-…)"],
-      ["appToken", "App-level token with connections:write (xapp-…)"],
+      ["botToken", "Token do bot (xoxb-…)"],
+      ["appToken", "Token do app com connections:write (xapp-…)"],
     ],
-    help: "Enable Socket Mode and subscribe to app_mention and message.im. Mention the app in a channel or DM it.",
+    help: "Ative Socket Mode e assine app_mention e message.im. Mencione o app em um canal ou envie uma mensagem direta.",
   },
   discord: {
-    fields: [["botToken", "Bot token"]],
-    help: "Enable the Message Content intent. Mention the bot in a server or DM it. User ids are Discord snowflakes.",
+    fields: [["botToken", "Token do bot"]],
+    help: "Ative a intent Message Content. Mencione o bot em um servidor ou envie uma mensagem direta. Os IDs de usuário são snowflakes do Discord.",
   },
 };
 
@@ -397,32 +428,24 @@ export function GatewaysView({ client, agents }: { client: DaemonClient; agents:
       .split(/[\s,]+/)
       .map((x) => x.trim())
       .filter(Boolean);
-  const dot = (s: Gateway["status"]) =>
-    s === "connected"
-      ? "bg-emerald-400"
-      : s === "error"
-        ? "bg-red-500"
-        : s === "stopped"
-          ? "bg-zinc-600"
-          : "bg-amber-400";
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-6">
-      <h2 className="text-lg font-semibold">Gateways</h2>
-      <p className="text-xs text-zinc-500">
-        Talk to your bots from Telegram, Slack or Discord. Only allowlisted user ids get through;
-        start a message with @BotName to reach another bot. Tokens are kept in the vault.
+    <div className={styles.page}>
+      <h2 className={styles.title}>Gateways</h2>
+      <p className={styles.muted}>
+        Converse com seus bots pelo Telegram, Slack ou Discord. Apenas IDs de usuário autorizados
+        têm acesso; comece a mensagem com @BotName para falar com outro bot. Os tokens ficam no
+        cofre.
       </p>
-      <ul className="space-y-2">
+      <ul className={styles.stack}>
         {items.map((g) => (
-          <li key={g.id} className="space-y-1 rounded border border-zinc-800 p-3 text-sm">
-            <div className="flex items-center gap-2">
-              <span className={`inline-block h-2 w-2 rounded-full ${dot(g.status)}`} />
-              <span className="font-medium">{g.name}</span>
-              <span className="text-xs text-zinc-500">
-                {g.kind} · {g.status}
-              </span>
-              <select
-                className="ml-auto rounded bg-zinc-900 px-1 text-xs"
+          <li key={g.id} className={styles.card}>
+            <div className={styles.row}>
+              <Tag>{gatewayStatus[g.status]}</Tag>
+              <span className={styles.name}>{g.name}</span>
+              <span className={styles.muted}>{g.kind}</span>
+              <Select
+                aria-label={`Bot do gateway ${g.name}`}
+                className={styles.push}
                 value={g.agentId}
                 onChange={(e) =>
                   client
@@ -435,36 +458,41 @@ export function GatewaysView({ client, agents }: { client: DaemonClient; agents:
                     {a.name}
                   </option>
                 ))}
-              </select>
-              <label className="flex items-center gap-1 text-xs text-zinc-400">
-                <input
-                  type="checkbox"
+              </Select>
+              <label className={styles.checkLabel} htmlFor={`gateway-${g.id}`}>
+                <Switch
+                  id={`gateway-${g.id}`}
+                  aria-label={`Ativar gateway ${g.name}`}
                   checked={g.enabled}
-                  onChange={(e) =>
+                  onCheckedChange={(checked) =>
                     client
-                      .request("gateways.update", { id: g.id, enabled: e.target.checked })
+                      .request("gateways.update", { id: g.id, enabled: checked })
                       .catch(fail("gateways.update_failed", { id: g.id }))
                   }
                 />
-                on
+                Ativo
               </label>
-              <button
+              <Button
                 type="button"
-                className="text-xs text-zinc-500 hover:text-red-400"
+                className={styles.action}
                 onClick={() =>
                   client
                     .request("gateways.delete", { id: g.id })
                     .catch(fail("gateways.delete_failed", { id: g.id }))
                 }
               >
-                Delete
-              </button>
+                Excluir
+              </Button>
             </div>
-            {g.error && <div className="text-xs text-red-400">{g.error}</div>}
-            <input
-              className={`${inputCls} text-xs`}
+            {g.error && (
+              <div className={styles.error} role="alert">
+                {g.error}
+              </div>
+            )}
+            <Field
+              label="IDs de usuário autorizados (separados por vírgula)"
               defaultValue={g.allowedUsers.join(", ")}
-              placeholder="Allowed user ids (comma separated)"
+              placeholder="IDs de usuário autorizados (separados por vírgula)"
               onBlur={(e) =>
                 client
                   .request("gateways.update", { id: g.id, allowedUsers: users(e.target.value) })
@@ -473,11 +501,15 @@ export function GatewaysView({ client, agents }: { client: DaemonClient; agents:
             />
           </li>
         ))}
-        {items.length === 0 && <li className="text-sm text-zinc-500">No gateways yet.</li>}
+        {items.length === 0 && <li className={styles.muted}>Nenhum gateway ainda.</li>}
       </ul>
-      {loadError && <p className="text-xs text-red-400">{loadError}</p>}
+      {loadError && (
+        <p className={styles.error} role="alert">
+          {loadError}
+        </p>
+      )}
       <form
-        className="space-y-2 rounded border border-zinc-800 p-3"
+        className={styles.card}
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
@@ -493,26 +525,26 @@ export function GatewaysView({ client, agents }: { client: DaemonClient; agents:
             .catch(fail("gateways.create_failed"));
         }}
       >
-        <h3 className="text-sm font-semibold text-zinc-300">New gateway</h3>
-        <div className="flex gap-2">
-          <select
-            className={inputCls}
+        <h3 className={styles.subtitle}>Novo gateway</h3>
+        <div className={styles.formRow}>
+          <Select
+            aria-label="Serviço do gateway"
             value={kind}
             onChange={(e) => setKind(e.target.value as GatewayKind)}
           >
             <option value="telegram">Telegram</option>
             <option value="slack">Slack</option>
             <option value="discord">Discord</option>
-          </select>
-          <input
-            className={inputCls}
-            placeholder="Name"
+          </Select>
+          <Field
+            label="Nome"
+            placeholder="Nome"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             required
           />
-          <select
-            className={inputCls}
+          <Select
+            aria-label="Bot do novo gateway"
             value={form.agentId}
             onChange={(e) => setForm({ ...form, agentId: e.target.value })}
           >
@@ -521,12 +553,12 @@ export function GatewaysView({ client, agents }: { client: DaemonClient; agents:
                 {a.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         {GATEWAY_HELP[kind].fields.map(([field, label]) => (
-          <input
+          <Field
+            label={label}
             key={field}
-            className={inputCls}
             type="password"
             placeholder={label}
             value={form.tokens[field] ?? ""}
@@ -536,27 +568,28 @@ export function GatewaysView({ client, agents }: { client: DaemonClient; agents:
             required
           />
         ))}
-        <input
-          className={inputCls}
-          placeholder="Allowed user ids (comma separated)"
+        <Field
+          label="IDs de usuário autorizados (separados por vírgula)"
+          placeholder="IDs de usuário autorizados (separados por vírgula)"
           value={form.users}
           onChange={(e) => setForm({ ...form, users: e.target.value })}
         />
-        <p className="text-xs text-zinc-500">{GATEWAY_HELP[kind].help}</p>
-        {error && <p className="text-xs text-red-400">{error}</p>}
-        <button
-          type="submit"
-          className={`${btnCls} bg-sky-600 hover:bg-sky-500`}
-          disabled={agents.length === 0}
-        >
-          Connect
-        </button>
+        <p className={styles.muted}>{GATEWAY_HELP[kind].help}</p>
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
+        <Button type="submit" variant="primary" disabled={agents.length === 0}>
+          Conectar
+        </Button>
       </form>
     </div>
   );
 }
 
 export function MarketplaceView({ client }: { client: DaemonClient }) {
+  const providerId = useId();
   const {
     data,
     error: loadError,
@@ -593,13 +626,14 @@ export function MarketplaceView({ client }: { client: DaemonClient }) {
       .finally(() => setBusy(null));
   };
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-6">
-      <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold">Marketplace</h2>
-        <label className="ml-auto text-xs text-zinc-400">
+    <div className={styles.page}>
+      <div className={styles.row}>
+        <h2 className={styles.title}>Marketplace</h2>
+        <label className={styles.provider} htmlFor={providerId}>
           Provedor dos novos bots{" "}
-          <select
-            className="rounded bg-zinc-900 px-1"
+          <Select
+            id={providerId}
+            className={styles.select}
             value={provider}
             onChange={(e) => setProvider(e.target.value as ProviderId)}
           >
@@ -608,48 +642,48 @@ export function MarketplaceView({ client }: { client: DaemonClient }) {
                 {p}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
-      {(error || loadError) && <p className="text-sm text-red-400">{error ?? loadError}</p>}
+      {(error || loadError) && (
+        <p className={styles.error} role="alert">
+          {error ?? loadError}
+        </p>
+      )}
       {data?.errors.map((e) => (
-        <p key={e.source} className="text-xs text-amber-400">
+        <p key={e.source} className={styles.warning}>
           {e.source}: {e.error}
         </p>
       ))}
-      <ul className="grid grid-cols-2 gap-2">
+      <ul className={styles.grid}>
         {data?.items.map((i) => (
-          <li
-            key={`${i.source}#${i.id}`}
-            className="flex flex-col rounded border border-zinc-800 p-3 text-sm"
-          >
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{i.name}</span>
-              <span className="rounded bg-zinc-800 px-1 text-[10px] text-zinc-400 uppercase">
-                {i.kind}
-              </span>
+          <li key={`${i.source}#${i.id}`} className={styles.marketCard}>
+            <div className={styles.row}>
+              <span className={styles.name}>{i.name}</span>
+              <Tag>{i.kind === "agent" ? "Bot" : "Habilidade"}</Tag>
             </div>
-            <p className="mt-1 flex-1 text-xs text-zinc-400">{i.description}</p>
-            <div className="mt-2 flex items-center text-[10px] text-zinc-500">
+            <p className={styles.description}>{i.description}</p>
+            <div className={styles.cardFooter}>
               {i.author} · v{i.version}
-              <button
+              <Button
                 type="button"
-                className={`${btnCls} ml-auto bg-sky-600 py-0.5 text-xs hover:bg-sky-500`}
+                variant="primary"
+                className={styles.push}
                 disabled={busy !== null}
                 onClick={() => install(i)}
               >
                 {busy === `${i.source}#${i.id}`
-                  ? "Installing…"
+                  ? "Instalando…"
                   : i.installed
-                    ? "Reinstall"
-                    : "Install"}
-              </button>
+                    ? "Reinstalar"
+                    : "Instalar"}
+              </Button>
             </div>
           </li>
         ))}
       </ul>
       <form
-        className="space-y-2"
+        className={styles.stack}
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
@@ -667,24 +701,27 @@ export function MarketplaceView({ client }: { client: DaemonClient }) {
             });
         }}
       >
-        <h3 className="text-sm font-semibold text-zinc-300">Registries</h3>
-        <textarea
-          className={`${inputCls} font-mono text-xs`}
+        <h3 className={styles.subtitle}>Registros</h3>
+        <Field
+          multiline
+          label="Registros"
+          className={styles.registry}
           value={sources}
           onChange={(e) => setSources(e.target.value)}
         />
-        <p className="text-xs text-zinc-500">
-          One index.json URL per line (https or file). Files are checked against their sha256.
+        <p className={styles.muted}>
+          Uma URL de index.json por linha (https ou file). Os arquivos são verificados pelo sha256.
         </p>
-        <button type="submit" className={`${btnCls} bg-zinc-700 hover:bg-zinc-600`}>
-          Save registries
-        </button>
+        <Button type="submit" variant="secondary">
+          Salvar registros
+        </Button>
       </form>
     </div>
   );
 }
 
 export function MobileView({ client }: { client: DaemonClient }) {
+  const enabledId = useId();
   const {
     data: st,
     error: loadError,
@@ -709,59 +746,62 @@ export function MobileView({ client }: { client: DaemonClient }) {
   };
   if (!st) {
     return loadError ? (
-      <div className="mx-auto max-w-lg p-6">
-        <p className="text-xs text-red-400">{loadError}</p>
+      <div className={styles.narrow}>
+        <p className={styles.error} role="alert">
+          {loadError}
+        </p>
       </div>
     ) : null;
   }
   return (
-    <div className="mx-auto max-w-lg space-y-4 p-6">
-      <h2 className="text-lg font-semibold">Mobile</h2>
-      <p className="text-xs text-zinc-500">
-        Chat with your bots and answer permission requests from your phone on the same Wi-Fi. Open
-        the address in Safari and use "Add to Home Screen". Traffic is plain HTTP on your local
-        network; only paired devices get in.
+    <div className={styles.narrow}>
+      <h2 className={styles.title}>Celular</h2>
+      <p className={styles.muted}>
+        Converse com seus bots e responda a pedidos de permissão pelo celular na mesma rede Wi-Fi.
+        Abra o endereço no Safari e use "Adicionar à Tela de Início". O tráfego usa HTTP sem
+        criptografia na rede local; apenas dispositivos emparelhados têm acesso.
       </p>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
+      <label className={styles.checkLabel} htmlFor={enabledId}>
+        <Switch
+          id={enabledId}
+          aria-label="Permitir acesso pelo celular nesta rede"
           checked={st.enabled}
-          onChange={(e) => {
+          onCheckedChange={(checked) => {
             setPair(null);
             client
-              .request("mobile.enable", { enabled: e.target.checked })
+              .request("mobile.enable", { enabled: checked })
               .then(reload)
               .catch(fail("mobile.enable_failed"));
           }}
         />
-        Allow mobile access on this network
+        Permitir acesso pelo celular nesta rede
       </label>
       {st.enabled && (
         <>
-          <ul className="space-y-1">
+          <ul className={styles.stack}>
             {st.urls.map((u) => (
-              <li key={u} className="font-mono text-sm text-sky-300 select-all">
+              <li key={u} className={styles.address}>
                 {u}
               </li>
             ))}
             {st.urls.length === 0 && (
-              <li className="text-xs text-amber-400">No network address found.</li>
+              <li className={styles.warning}>Nenhum endereço de rede encontrado.</li>
             )}
           </ul>
-          <div className="flex items-center gap-3">
-            <button
+          <div className={styles.row}>
+            <Button
               type="button"
-              className={`${btnCls} bg-sky-600 hover:bg-sky-500`}
+              variant="primary"
               onClick={() =>
                 client.request("mobile.pair", {}).then(setPair).catch(fail("mobile.pair_failed"))
               }
             >
-              Pair a device
-            </button>
+              Emparelhar dispositivo
+            </Button>
             {pair && (
               <span
-                className="font-mono text-2xl tracking-[0.3em]"
-                title={`expires ${new Date(pair.expiresAt).toLocaleTimeString()}`}
+                className={styles.pairCode}
+                title={`expira às ${new Date(pair.expiresAt).toLocaleTimeString()}`}
               >
                 {pair.code}
               </span>
@@ -769,18 +809,24 @@ export function MobileView({ client }: { client: DaemonClient }) {
           </div>
         </>
       )}
-      {(error || loadError) && <p className="text-xs text-red-400">{error ?? loadError}</p>}
-      <h3 className="text-sm font-semibold text-zinc-300">Paired devices</h3>
-      <ul className="space-y-1">
+      {(error || loadError) && (
+        <p className={styles.error} role="alert">
+          {error ?? loadError}
+        </p>
+      )}
+      <h3 className={styles.subtitle}>Dispositivos emparelhados</h3>
+      <ul className={styles.stack}>
         {st.devices.map((d) => (
-          <li key={d.id} className="flex items-center rounded bg-zinc-900 px-2 py-1 text-sm">
+          <li key={d.id} className={styles.cardRow}>
             <span>{d.name}</span>
-            <span className="ml-2 text-xs text-zinc-500">
-              {d.lastSeenAt ? `seen ${new Date(d.lastSeenAt).toLocaleString()}` : "never connected"}
+            <span className={styles.muted}>
+              {d.lastSeenAt
+                ? `visto em ${new Date(d.lastSeenAt).toLocaleString()}`
+                : "nunca conectado"}
             </span>
-            <button
+            <Button
               type="button"
-              className="ml-auto text-xs text-zinc-500 hover:text-red-400"
+              className={styles.push}
               onClick={() =>
                 client
                   .request("mobile.revoke", { id: d.id })
@@ -788,11 +834,11 @@ export function MobileView({ client }: { client: DaemonClient }) {
                   .catch(fail("mobile.revoke_failed", { id: d.id }))
               }
             >
-              Revoke
-            </button>
+              Revogar
+            </Button>
           </li>
         ))}
-        {st.devices.length === 0 && <li className="text-xs text-zinc-600">None yet.</li>}
+        {st.devices.length === 0 && <li className={styles.muted}>Nenhum ainda.</li>}
       </ul>
     </div>
   );
@@ -832,15 +878,17 @@ export function TeamView({ client, agents }: { client: DaemonClient; agents: Age
   const shownError = error ?? statusError ?? msgsError;
   if (!st) {
     return shownError ? (
-      <div className="mx-auto max-w-lg p-6">
-        <p className="text-xs text-red-400">{shownError}</p>
+      <div className={styles.narrow}>
+        <p className={styles.error} role="alert">
+          {shownError}
+        </p>
       </div>
     ) : null;
   }
   if (!st.configured) {
     return (
       <form
-        className="mx-auto max-w-lg space-y-3 p-6"
+        className={styles.narrow}
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
@@ -850,30 +898,35 @@ export function TeamView({ client, agents }: { client: DaemonClient; agents: Age
             .catch(fail("team.connect_failed"));
         }}
       >
-        <h2 className="text-lg font-semibold">Team</h2>
-        <p className="text-xs text-zinc-500">
-          Join a Boto team relay to share bots with teammates and message theirs. Host one with{" "}
-          <code>bun run relay -- --data ./relay-data</code> and invite members with its admin token.
+        <h2 className={styles.title}>Equipe</h2>
+        <p className={styles.muted}>
+          Conecte-se a um relay de equipe do Boto para compartilhar bots e conversar com os bots da
+          equipe. Hospede um com <code>bun run relay -- --data ./relay-data</code> e convide membros
+          com o token de administrador.
         </p>
-        <input
-          className={inputCls}
-          placeholder="Relay URL (https://relay.example.com)"
+        <Field
+          label="URL do relay (https://relay.example.com)"
+          placeholder="URL do relay (https://relay.example.com)"
           value={join.url}
           onChange={(e) => setJoin({ ...join, url: e.target.value })}
           required
         />
-        <input
-          className={inputCls}
+        <Field
+          label="Token de membro"
           type="password"
-          placeholder="Member token"
+          placeholder="Token de membro"
           value={join.token}
           onChange={(e) => setJoin({ ...join, token: e.target.value })}
           required
         />
-        {shownError && <p className="text-xs text-red-400">{shownError}</p>}
-        <button type="submit" className={`${btnCls} bg-sky-600 hover:bg-sky-500`}>
-          Join team
-        </button>
+        {shownError && (
+          <p className={styles.error} role="alert">
+            {shownError}
+          </p>
+        )}
+        <Button type="submit" variant="primary">
+          Entrar na equipe
+        </Button>
       </form>
     );
   }
@@ -881,15 +934,15 @@ export function TeamView({ client, agents }: { client: DaemonClient; agents: Age
     m.agents.map((a) => ({ key: `${m.id}:${a.id}`, label: `${a.name} (${m.name})` })),
   );
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-6">
-      <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold">Team</h2>
-        <span className={`text-xs ${st.connected ? "text-emerald-400" : "text-amber-400"}`}>
-          {st.connected ? `connected as ${st.me?.name ?? ""}` : (st.error ?? "connecting…")}
+    <div className={styles.page}>
+      <div className={styles.row}>
+        <h2 className={styles.title}>Equipe</h2>
+        <span className={styles.muted}>
+          {st.connected ? `conectado como ${st.me?.name ?? ""}` : (st.error ?? "conectando…")}
         </span>
-        <button
+        <Button
           type="button"
-          className="ml-auto text-xs text-zinc-500 hover:text-red-400"
+          className={styles.push}
           onClick={() =>
             client
               .request("team.disconnect", {})
@@ -897,15 +950,16 @@ export function TeamView({ client, agents }: { client: DaemonClient; agents: Age
               .catch(fail("team.disconnect_failed"))
           }
         >
-          Leave
-        </button>
+          Sair
+        </Button>
       </div>
-      <section className="space-y-1">
-        <h3 className="text-sm font-semibold text-zinc-300">Bots you share</h3>
-        <div className="flex flex-wrap gap-3">
+      <section className={styles.stack}>
+        <h3 className={styles.subtitle}>Bots que você compartilha</h3>
+        <div className={styles.wrap}>
           {agents.map((a) => (
-            <label key={a.id} className="flex items-center gap-1 text-xs text-zinc-400">
+            <label key={a.id} className={styles.checkLabel}>
               <input
+                className={styles.checkbox}
                 type="checkbox"
                 checked={st.sharedAgentIds.includes(a.id)}
                 onChange={() =>
@@ -924,32 +978,34 @@ export function TeamView({ client, agents }: { client: DaemonClient; agents: Age
           ))}
         </div>
       </section>
-      <section className="space-y-1">
-        <h3 className="text-sm font-semibold text-zinc-300">Teammates</h3>
-        <ul className="space-y-1 text-sm">
+      <section className={styles.stack}>
+        <h3 className={styles.subtitle}>Membros da equipe</h3>
+        <ul className={styles.stack}>
           {st.members.map((m) => (
             <li key={m.id}>
-              <span className={m.online ? "text-zinc-200" : "text-zinc-600"}>{m.name}</span>
-              <span className="ml-2 text-xs text-zinc-500">
-                {m.online ? m.agents.map((a) => a.name).join(", ") || "no shared bots" : "offline"}
+              <span className={m.online ? styles.name : styles.muted}>{m.name}</span>
+              <span className={styles.muted}>
+                {m.online
+                  ? m.agents.map((a) => a.name).join(", ") || "nenhum bot compartilhado"
+                  : "desconectado"}
               </span>
             </li>
           ))}
-          {st.members.length === 0 && <li className="text-xs text-zinc-600">No teammates yet.</li>}
+          {st.members.length === 0 && <li className={styles.muted}>Nenhum membro ainda.</li>}
         </ul>
       </section>
-      <ul className="space-y-2">
+      <ul className={styles.stack}>
         {msgs.map((m) => (
-          <li key={m.id} className="rounded border border-zinc-800 p-2 text-sm">
-            <div className="text-xs text-zinc-500">
+          <li key={m.id} className={styles.card}>
+            <div className={styles.muted}>
               {m.direction === "out"
-                ? `You → ${m.agentName} (${m.memberName})`
-                : `${m.memberName} → your ${m.agentName}`}{" "}
-              · {m.status}
+                ? `Você → ${m.agentName} (${m.memberName})`
+                : `${m.memberName} → seu bot ${m.agentName}`}{" "}
+              · {messageStatus[m.status]}
             </div>
-            <div className="whitespace-pre-wrap">{m.text}</div>
+            <div className={styles.message}>{m.text}</div>
             {m.reply && (
-              <div className="mt-1 flex items-start gap-1 text-zinc-300">
+              <div className={styles.reply}>
                 <span>↳</span>
                 <Markdown text={m.reply} />
               </div>
@@ -958,7 +1014,7 @@ export function TeamView({ client, agents }: { client: DaemonClient; agents: Age
         ))}
       </ul>
       <form
-        className="flex gap-2"
+        className={styles.formRow}
         onSubmit={(e) => {
           e.preventDefault();
           const [memberId, agentId] = (target || options[0]?.key || "").split(":");
@@ -970,8 +1026,9 @@ export function TeamView({ client, agents }: { client: DaemonClient; agents: Age
             .catch(fail("team.send_failed"));
         }}
       >
-        <select
-          className={`${inputCls} w-48`}
+        <Select
+          aria-label="Bot destinatário"
+          className={styles.select}
           value={target}
           onChange={(e) => setTarget(e.target.value)}
         >
@@ -980,22 +1037,22 @@ export function TeamView({ client, agents }: { client: DaemonClient; agents: Age
               {o.label}
             </option>
           ))}
-        </select>
-        <input
-          className={inputCls}
-          placeholder="Message a teammate's bot"
+        </Select>
+        <Field
+          label="Mensagem para um bot da equipe"
+          placeholder="Mensagem para um bot da equipe"
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        <button
-          type="submit"
-          className={`${btnCls} bg-sky-600 hover:bg-sky-500`}
-          disabled={options.length === 0}
-        >
-          Send
-        </button>
+        <Button type="submit" variant="primary" disabled={options.length === 0}>
+          Enviar
+        </Button>
       </form>
-      {shownError && <p className="text-xs text-red-400">{shownError}</p>}
+      {shownError && (
+        <p className={styles.error} role="alert">
+          {shownError}
+        </p>
+      )}
     </div>
   );
 }
