@@ -41,7 +41,9 @@ For remote hosts, stop active sessions, use **Install** again in Settings → Ho
 migrate the default `~/.upbot` directory to `~/.boto` and upload the new helper, then
 rebuild the Firecracker rootfs before launching microVMs. Persistent workspace disks
 are retained. Custom host roots require the matching `BOTO_HOST_ROOT` setting.
-The GitHub repository URL is unchanged; updater and marketplace URLs still use it.
+The repository moved to `fazedordecodigo/boto`. Old `upbot` URLs redirect, so installed
+UpBot apps still receive updates; saved UpBot/BobAgent marketplace sources migrate
+automatically without duplicating entries.
 
 ## Why you'll like it
 
@@ -94,8 +96,7 @@ voice are macOS-only.
 
 Boto was previously called UpBot (and originally BobAgent). The next release is 0.5.0;
 0.4.0 was released as UpBot. Updating migrates `~/UpBot` or `~/BobAgent` to `~/Boto`
-and keeps your bots, chats and vault. Installed UpBot clients can still check for updates
-through GitHub's redirect to the Boto repository.
+and keeps your bots, chats and vault.
 
 ## Run bots on your own server
 

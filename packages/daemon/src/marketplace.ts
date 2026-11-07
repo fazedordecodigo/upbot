@@ -66,7 +66,7 @@ export class Marketplace {
   sources(): string[] {
     const saved = getSetting(this.db, "marketplace_sources", sourcesSchema, null);
     if (!saved) return [process.env.BOTO_MARKETPLACE_URL ?? DEFAULT_REGISTRY];
-    return saved.map((u) => (LEGACY_REGISTRIES.includes(u) ? DEFAULT_REGISTRY : u));
+    return [...new Set(saved.map((u) => (LEGACY_REGISTRIES.includes(u) ? DEFAULT_REGISTRY : u)))];
   }
 
   setSources(urls: string[]): void {

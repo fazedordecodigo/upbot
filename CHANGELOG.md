@@ -5,7 +5,7 @@
 ### Changed
 - Renamed UpBot to Boto, with migration of existing UpBot workspaces, app data and vault keys.
 - Updated repository, updater and marketplace URLs to `fazedordecodigo/boto`; saved legacy
-  marketplace sources still migrate automatically.
+  marketplace sources still migrate automatically without duplicating entries.
 - Refreshed the desktop with the Eco palette, packaged Host Grotesk and DM Mono fonts,
   dark theme, responsive navigation and keyboard/accessibility improvements.
 - Improved chat streaming performance and rendered bot replies as Markdown.

@@ -11,3 +11,5 @@ files with `name`/`description` frontmatter; agent templates are JSON
 that are installed together with the agent.
 
 To publish, add the file and run `bun scripts/marketplace-index.ts` to regenerate the index.
+The default URL serves `main`: publish the updated index and files there when releasing;
+changes only on `develop` do not update the live registry.

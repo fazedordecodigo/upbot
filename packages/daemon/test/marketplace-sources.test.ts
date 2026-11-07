@@ -30,14 +30,15 @@ describe("marketplace source migration", () => {
       const custom = "https://example.com/marketplace/index.json";
       marketplace.setSources([
         "https://raw.githubusercontent.com/fazedordecodigo/upbot/main/marketplace/index.json",
+        DEFAULT_REGISTRY,
         "https://raw.githubusercontent.com/fazedordecodigo/bobagent/main/marketplace/index.json",
         custom,
       ]);
-      expect(marketplace.sources()).toEqual([DEFAULT_REGISTRY, DEFAULT_REGISTRY, custom]);
+      expect(marketplace.sources()).toEqual([DEFAULT_REGISTRY, custom]);
       expect(() => marketplace.setSources(["ftp://example.com/index.json"])).toThrow(
         "unsupported URL",
       );
-      expect(marketplace.sources()).toEqual([DEFAULT_REGISTRY, DEFAULT_REGISTRY, custom]);
+      expect(marketplace.sources()).toEqual([DEFAULT_REGISTRY, custom]);
       setSetting(db, "marketplace_sources", { invalid: true });
       expect(() => marketplace.sources()).toThrow("settings.marketplace_sources");
     } finally {

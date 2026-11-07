@@ -405,6 +405,9 @@ sha256 before installing; skills go to the skills library (author `marketplace:<
 agent templates create an agent (chosen provider) and install their listed skills. RPC
 `marketplace.list/install/setSources`; UI `MarketplaceView`. Regenerate the index with
 `bun scripts/marketplace-index.ts`. Tests: `test/marketplace.e2e.test.ts`.
+Saved UpBot/BobAgent registry URLs migrate to Boto and are deduplicated after conversion,
+preserving first-occurrence order. The default registry is served from `main`; publish
+the Boto-branded marketplace there as part of the release, not only on `develop`.
 
 ## Mobile companion (Phase 12c)
 
