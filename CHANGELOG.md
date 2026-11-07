@@ -7,6 +7,8 @@
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.
 - Linux and Windows CI checks and multi-platform updater releases.
+- Built-in read-aloud on Windows (System.Speech via Windows PowerShell) and Linux (espeak-ng,
+  espeak or spd-say when installed); `voice.status` now reports only commands that are found.
 
 ## 0.3.0
 

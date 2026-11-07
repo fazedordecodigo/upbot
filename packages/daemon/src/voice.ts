@@ -1,13 +1,85 @@
 import type { ChildProcess } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { delimiter, join, win32 } from "node:path";
 import { resolveCommandIn, spawnEnv } from "./env/login-path";
 import { spawnChild } from "./env/spawn";
 import { envOverride } from "./env/vars";
 
-// Voice: text-to-speech with macOS `say` (or BOTO_TTS_COMMAND, text on stdin) and
-// speech-to-text with BOTO_STT_COMMAND (JSON array, "{file}" = recorded audio path,
+// Voice: text-to-speech with BOTO_TTS_COMMAND (text on stdin) or a built-in default
+// (macOS `say`, Windows System.Speech via Windows PowerShell, Linux espeak-ng/espeak/spd-say)
+// and speech-to-text with BOTO_STT_COMMAND (JSON array, "{file}" = recorded audio path,
 // transcript on stdout) or the `whisper` CLI when it is on PATH.
+
+export type TtsCommand = { bin: string; args: string[]; input: "stdin" | "arg" };
+
+type Resolve = (cmd: string) => string | null;
+
+// Fixed script: the text is read as UTF-8 bytes from stdin, never interpolated.
+export const WINDOWS_SPEECH_SCRIPT = [
+  "$ErrorActionPreference = 'Stop'",
+  "Add-Type -AssemblyName System.Speech",
+  "$ms = New-Object System.IO.MemoryStream",
+  "[Console]::OpenStandardInput().CopyTo($ms)",
+  "$text = [System.Text.Encoding]::UTF8.GetString($ms.ToArray())",
+  "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer",
+  "$s.SetOutputToDefaultAudioDevice()",
+  "$s.Speak($text)",
+].join("; ");
+
+/** Picks the TTS command: BOTO_TTS_COMMAND first (even when its binary is missing, so a
+ * broken override is reported instead of silently replaced), then the platform default. */
+export function ttsCommand(
+  platform: NodeJS.Platform,
+  resolve: Resolve,
+  env: NodeJS.ProcessEnv = process.env,
+  override: string[] | null = envOverride("BOTO_TTS_COMMAND"),
+): TtsCommand | null {
+  if (override) {
+    const bin = resolve(override[0]!);
+    return bin ? { bin, args: override.slice(1), input: "stdin" } : null;
+  }
+  if (platform === "darwin") {
+    const bin = resolve("say");
+    return bin ? { bin, args: [], input: "stdin" } : null;
+  }
+  if (platform === "win32") {
+    // Windows PowerShell 5.1 (.NET Framework) ships System.Speech; pwsh (PowerShell 7) does not.
+    const root = Object.entries(env).find(([k]) => k.toLowerCase() === "systemroot")?.[1];
+    const bin =
+      resolve("powershell") ??
+      (root
+        ? resolve(win32.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
+        : null);
+    return bin
+      ? {
+          bin,
+          args: ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_SPEECH_SCRIPT],
+          input: "stdin",
+        }
+      : null;
+  }
+  for (const name of ["espeak-ng", "espeak"]) {
+    const bin = resolve(name);
+    if (bin) return { bin, args: ["--stdin"], input: "stdin" };
+  }
+  // spd-say has no whole-text stdin mode (pipe mode speaks line by line), so the text is
+  // passed as a single argv entry after "--" (no shell is involved).
+  const spd = resolve("spd-say");
+  return spd ? { bin: spd, args: ["-w", "--"], input: "arg" } : null;
+}
+
+/** Picks the STT command: BOTO_STT_COMMAND first, then `whisper` on PATH. */
+export function sttCommand(
+  resolve: Resolve,
+  override: string[] | null = envOverride("BOTO_STT_COMMAND"),
+): { bin: string; args: string[]; custom: boolean } | null {
+  if (override) {
+    const bin = resolve(override[0]!);
+    return bin ? { bin, args: override.slice(1), custom: true } : null;
+  }
+  const whisper = resolve("whisper");
+  return whisper ? { bin: whisper, args: [], custom: false } : null;
+}
 
 const EXT: Record<string, string> = {
   "audio/webm": "webm",
@@ -23,39 +95,34 @@ export class Voice {
   constructor(
     private dir: string,
     private pathEnv: () => string,
+    private platform: NodeJS.Platform = process.platform,
   ) {}
 
-  private tts(): string[] | null {
-    return envOverride("BOTO_TTS_COMMAND") ?? (process.platform === "darwin" ? ["say"] : null);
-  }
-
-  private resolve(cmd: string): string | null {
-    return resolveCommandIn(cmd, this.pathEnv().split(delimiter), {
-      platform: process.platform,
+  private resolve = (cmd: string): string | null =>
+    resolveCommandIn(cmd, this.pathEnv().split(this.platform === "win32" ? ";" : delimiter), {
+      platform: this.platform,
       ...(process.env.PATHEXT ? { pathext: process.env.PATHEXT } : {}),
     });
-  }
-
-  private whisper(): string | null {
-    return this.resolve("whisper");
-  }
 
   status() {
     return {
-      tts: this.tts() !== null,
-      stt: envOverride("BOTO_STT_COMMAND") !== null || this.whisper() !== null,
+      tts: ttsCommand(this.platform, this.resolve) !== null,
+      stt: sttCommand(this.resolve) !== null,
     };
   }
 
   async speak(text: string): Promise<void> {
-    const cmd = this.tts();
-    if (!cmd) throw new Error("text-to-speech is not available");
+    const override = envOverride("BOTO_TTS_COMMAND");
+    const cmd = ttsCommand(this.platform, this.resolve, process.env, override);
+    if (!cmd) {
+      if (override) throw new Error(`text-to-speech command not found: ${override[0]}`);
+      throw new Error("text-to-speech is not available");
+    }
     this.stop();
-    const bin = this.resolve(cmd[0]!);
-    if (!bin) throw new Error(`text-to-speech command not found: ${cmd[0]}`);
-    const p = spawnChild(bin, cmd.slice(1), {
-      stdio: ["pipe", "ignore", "ignore"],
-      env: spawnEnv(undefined, process.platform, this.pathEnv()),
+    const input = text.slice(0, 20_000);
+    const p = spawnChild(cmd.bin, cmd.input === "arg" ? [...cmd.args, input] : cmd.args, {
+      stdio: [cmd.input === "stdin" ? "pipe" : "ignore", "ignore", "ignore"],
+      env: spawnEnv(undefined, this.platform, this.pathEnv()),
     });
     this.speaking = p;
     p.stdin?.on("error", () => {});
@@ -69,7 +136,7 @@ export class Voice {
       p.once("spawn", resolve);
       p.once("error", reject);
     });
-    p.stdin?.end(text.slice(0, 20_000));
+    p.stdin?.end(input);
     await spawned;
   }
 
@@ -85,20 +152,21 @@ export class Voice {
     const file = join(work, `audio.${EXT[mime.split(";")[0]!.trim()] ?? "webm"}`);
     writeFileSync(file, Buffer.from(audioBase64, "base64"));
     try {
-      const custom = envOverride("BOTO_STT_COMMAND");
-      const whisper = custom ? null : this.whisper();
-      if (!custom && !whisper)
+      const override = envOverride("BOTO_STT_COMMAND");
+      const cmd = sttCommand(this.resolve, override);
+      if (!cmd) {
+        if (override) throw new Error(`speech-to-text command not found: ${override[0]}`);
         throw new Error(
           "speech-to-text is not available (install whisper or set BOTO_STT_COMMAND)",
         );
-      const cmd = custom
-        ? custom.map((a) => a.replaceAll("{file}", file))
-        : [whisper!, file, "--model", "base", "--output_format", "txt", "--output_dir", work];
-      const bin = this.resolve(cmd[0]!);
-      if (!bin) throw new Error(`speech-to-text command not found: ${cmd[0]}`);
-      const p = spawnChild(bin, cmd.slice(1), {
+      }
+      const custom = cmd.custom;
+      const args = custom
+        ? cmd.args.map((a) => a.replaceAll("{file}", file))
+        : [file, "--model", "base", "--output_format", "txt", "--output_dir", work];
+      const p = spawnChild(cmd.bin, args, {
         stdio: ["ignore", "pipe", "pipe"],
-        env: spawnEnv(undefined, process.platform, this.pathEnv()),
+        env: spawnEnv(undefined, this.platform, this.pathEnv()),
       });
       const timer = setTimeout(() => p.kill(), 120_000);
       try {

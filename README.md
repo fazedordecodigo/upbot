@@ -89,8 +89,10 @@ Download the installer for your OS from [Releases](https://github.com/fazedordec
 
 On Linux, install `libsecret-tools` to store the vault key in Secret Service. Otherwise
 Boto uses a plaintext key file with owner-only permissions and warns at startup. Windows
-stores new keys using DPAPI, and macOS uses Keychain. Computer Use and the built-in `say`
-voice are macOS-only.
+stores new keys using DPAPI, and macOS uses Keychain. Computer Use is macOS-only.
+Read-aloud works out of the box with `say` on macOS and System.Speech (Windows PowerShell) on
+Windows; on Linux install `espeak-ng` (or `espeak`/`speech-dispatcher`'s `spd-say`). Voice
+input needs `whisper` on PATH or `BOTO_STT_COMMAND`; `BOTO_TTS_COMMAND` overrides read-aloud.
 
 Boto was called BobAgent until 0.3.0; updating moves `~/BobAgent` to `~/Boto` and keeps
 your bots, chats and vault.
