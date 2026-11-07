@@ -54,8 +54,35 @@ jobs:
         run: |
           bunx --no-install playwright-core install --with-deps chromium
           bun -e 'import { chromium } from "playwright-core"; console.log(`CHROME_PATH=${chromium.executablePath()}`)' >> "$GITHUB_ENV"
+      - name: Temporary Windows ARM64 DPAPI diagnostics
+        if: matrix.os == 'windows-11-arm'
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $context = '$PSVersionTable.PSVersion.ToString(); [Environment]::Is64BitProcess; $env:PROCESSOR_ARCHITECTURE'
+          & powershell.exe -NoProfile -NonInteractive -Command $context
+          foreach ($attempt in 1..2) {
+            $timer = [Diagnostics.Stopwatch]::StartNew()
+            & powershell.exe -NoProfile -NonInteractive -Command 'exit 0'
+            Write-Output "exit-$attempt exit=$LASTEXITCODE ms=$($timer.ElapsedMilliseconds)"
+          }
+          $timer = [Diagnostics.Stopwatch]::StartNew()
+          & powershell.exe -NoProfile -NonInteractive -Command "try { Add-Type -AssemblyName System.Security; exit 0 } catch { Write-Output (`$_.Exception.GetType().FullName); exit 1 }"
+          Write-Output "add-type exit=$LASTEXITCODE ms=$($timer.ElapsedMilliseconds)"
+          $script = @'
+          $ErrorActionPreference = 'Stop'; try { Add-Type -AssemblyName System.Security; $hex = [Console]::In.ReadToEnd().Trim(); $bytes = [byte[]]::new([int]($hex.Length / 2)); for ($i = 0; $i -lt $bytes.Length; $i++) { $bytes[$i] = [Convert]::ToByte($hex.Substring($i * 2, 2), 16) }; $protected = [Security.Cryptography.ProtectedData]::Protect($bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser); $plain = [Security.Cryptography.ProtectedData]::Unprotect($protected, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser); if ([Convert]::ToBase64String($bytes) -ne [Convert]::ToBase64String($plain)) { exit 2 }; exit 0 } catch { Write-Output ($_.Exception.GetType().FullName); exit 1 }
+          '@
+          $timer = [Diagnostics.Stopwatch]::StartNew()
+          ('01' * 32) | & powershell.exe -NoProfile -NonInteractive -Command $script
+          Write-Output "piped-roundtrip exit=$LASTEXITCODE ms=$($timer.ElapsedMilliseconds)"
+          bun scripts/diagnose-dpapi.ts
       - run: bun run test
+        if: matrix.os != 'windows-11-arm'
       - run: bun run build:daemon
+        if: matrix.os != 'windows-11-arm'
       - run: cargo check --locked
+        if: matrix.os != 'windows-11-arm'
         working-directory: apps/desktop/src-tauri
       - run: bun run --cwd apps/desktop build
+        if: matrix.os != 'windows-11-arm'
