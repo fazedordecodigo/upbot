@@ -9,6 +9,8 @@
 - Refreshed the desktop with the Eco palette, packaged Host Grotesk and DM Mono fonts,
   dark theme, responsive navigation and keyboard/accessibility improvements.
 - Improved chat streaming performance and rendered bot replies as Markdown.
+- Updated Skills, Browser, Vault, Gateways, Marketplace, Mobile and Team settings to the Eco
+  design-system controls and layout, with Brazilian Portuguese labels and help text.
 - Updated remote host and email settings to Eco design-system controls and layouts, with
   Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
