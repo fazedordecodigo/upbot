@@ -22,6 +22,8 @@
   Gemini API key or Vertex AI, including when a cached Google sign-in fails.
 
 ### Added
+- Devin and Grok in the Firecracker guest image, with vault-backed microVM API keys
+  and headless Grok ACP authentication.
 - Pending-approval badges on the macOS Dock, Windows taskbar and supported Linux launchers,
   independent of popup notification mute.
 - Opt-in Computer Use on Windows and Linux X11, with unavailable reasons for Wayland or missing tools.

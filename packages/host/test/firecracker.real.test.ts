@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
 import {
   assertGuestInitExecutable,
   firecrackerPids,
@@ -11,6 +12,8 @@ import {
   recordedFirecrackerPid,
   removeFirecrackerHostRoot,
 } from "./firecracker-fixtures";
+
+setDefaultTimeout(30000);
 
 const enabled = process.env.BOTO_REAL_FIRECRACKER === "1";
 const hostProcesses: ReturnType<typeof Bun.spawn>[] = [];

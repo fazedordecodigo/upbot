@@ -466,6 +466,13 @@ acp
       authMethods: [],
     } as never;
   })
+  .onRequest("authenticate", async (ctx) => {
+    logRequest("authenticate", ctx.params);
+    if (process.env.FAKE_ACP_AUTH_ERROR) {
+      throw new acp.RequestError(-32603, process.env.FAKE_ACP_AUTH_ERROR);
+    }
+    return {};
+  })
   .onRequest("session/new", async (ctx) => {
     logRequest("session/new", ctx.params);
     if (process.env.FAKE_ACP_NEW_ERROR) {

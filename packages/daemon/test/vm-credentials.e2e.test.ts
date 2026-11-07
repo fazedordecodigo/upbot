@@ -58,6 +58,18 @@ test.each([
     expect(await client.request("vmCredentials.list")).toEqual([saved]);
     expect(saved).toMatchObject({ provider: "claude", kind: "api_key" });
     expect(JSON.stringify(saved)).not.toContain("CorruptSecretSentinel");
+    for (const provider of ["devin", "grok"] as const) {
+      const result = await client.request("vmCredentials.set", {
+        provider,
+        kind: "api_key",
+        value: "CorruptSecretSentinelProviderKey",
+      });
+      expect(result).toMatchObject({ provider, kind: "api_key" });
+      expect(JSON.stringify(await client.request("vmCredentials.list"))).not.toContain(
+        "CorruptSecretSentinel",
+      );
+      await client.request("vmCredentials.delete", { provider });
+    }
     await client.request("vmCredentials.delete", { provider: "codex" });
     expect(await client.request("vmCredentials.list")).toEqual([saved]);
     client.close();

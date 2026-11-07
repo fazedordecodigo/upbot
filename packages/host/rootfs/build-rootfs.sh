@@ -6,9 +6,12 @@
 # Requires: docker, curl, mkfs.ext4, sudo (for loop mounts). No credentials go into the
 # image; sign in to provider CLIs inside a microVM or pass API keys via the Boto vault.
 #
-# usage: build-rootfs.sh [--size-mib 4096] [--providers "claude codex gemini opencode cursor"] [--base image]
+# usage: build-rootfs.sh [--size-mib 4096] [--providers "claude codex gemini opencode cursor devin grok"] [--base image]
+# Use --size-mib 8192 when installing all seven providers.
 set -euo pipefail
 FC_VERSION="${FC_VERSION:-v1.12.1}"
+DEVIN_CLI_VERSION="${DEVIN_CLI_VERSION:-3000.12.17}"
+GROK_CLI_VERSION="${GROK_CLI_VERSION:-1.0.77}"
 KERNEL_URL="${KERNEL_URL:-https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.12/$(uname -m)/vmlinux-6.1.128}"
 SIZE_MIB=4096
 PROVIDERS="claude codex"
@@ -115,6 +118,8 @@ RUN for p in ${PROVIDERS}; do case "\$p" in \
       gemini) npm install -g @google/gemini-cli ;; \
       opencode) npm install -g opencode-ai ;; \
       cursor) HOME=/opt/cursor-agent-home bash -c 'curl -fsS https://cursor.com/install | bash' && ln -sf /opt/cursor-agent-home/.local/bin/agent /usr/local/bin/agent ;; \
+      devin) mkdir -p /opt/devin-home; curl -fsSL https://static.devin.ai/cli/${DEVIN_CLI_VERSION}/setup.sh -o /tmp/devin-setup.sh && (HOME=/opt/devin-home bash /tmp/devin-setup.sh || true) && ln -sf "\$(readlink -f /opt/devin-home/.local/bin/devin)" /usr/local/bin/devin && devin --version | grep -F 'devin ${DEVIN_CLI_VERSION} (' || exit 1 ;; \
+      grok) mkdir -p /opt/grok-home; if [ -e /usr/local/bin/agent ]; then mv /usr/local/bin/agent /tmp/boto-saved-agent; fi; curl -fsSL https://x.ai/cli/install.sh -o /tmp/grok-install.sh && HOME=/opt/grok-home GROK_BIN_DIR=/opt/grok-home/.grok/bin bash /tmp/grok-install.sh ${GROK_CLI_VERSION} && rm -f /usr/local/bin/agent && { [ ! -e /tmp/boto-saved-agent ] || mv /tmp/boto-saved-agent /usr/local/bin/agent; } && ln -sf "\$(readlink -f /opt/grok-home/.grok/bin/grok)" /usr/local/bin/grok && grok --no-auto-update --version | grep -F 'grok ${GROK_CLI_VERSION} (' || exit 1 ;; \
     esac; done
 DOCKER
 docker build -t boto-guest "$work"

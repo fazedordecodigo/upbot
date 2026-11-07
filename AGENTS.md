@@ -161,8 +161,10 @@ Ctrl+Shift+F elsewhere) and shortcuts in `App.tsx` (⌘N new bot, ⌘1–9 switc
 ACP providers run in Firecracker like Claude/Codex (`AcpDriver` spawns via `RemoteLaunch` and
 passes `remote.credentials` as env). MicroVM sign-in (`vmCredentials`, Settings → Hosts):
 claude (OAuth token or API key), codex (`OPENAI_API_KEY`), gemini (`GEMINI_API_KEY`), cursor
-(`CURSOR_API_KEY`). The verified five-provider image contains Claude Code 2.1.310, Codex
-0.164.0, Gemini 0.65.0, OpenCode 1.19.4, and Cursor Agent 2026.10.22-27dcf5f. Cursor installs
+(`CURSOR_API_KEY`), devin (`WINDSURF_API_KEY`), and grok (`XAI_API_KEY`). The seven-provider
+image includes the verified Claude Code 2.1.310, Codex 0.164.0, Gemini 0.65.0,
+OpenCode 1.19.4, Cursor Agent 2026.10.22-27dcf5f, Devin 3000.12.17 and Grok 1.0.77.
+Building all seven providers needs `--size-mib 8192`. Cursor installs
 under `/opt/cursor-agent-home` because `/root` is bind-mounted from persistent storage.
 Signed-out behavior: Gemini reports `gemini`, OpenCode `opencode auth login`, and Cursor
 `agent login`. OpenCode alone has a 30-second first-activity watchdog: message/thought chunks,
@@ -177,7 +179,17 @@ Firecracker provider env. Gemini invalid-key errors are explicit; Cursor's
 to `api2.cursor.sh` with a microVM credential set, since Cursor returns no explicit invalid-key
 error. `bun run test:firecracker:providers` checks these real ACP flows, credential delivery,
 placement isolation, and plaintext leaks.
-devin/grok need a custom image plus `BOTO_PROVIDER_COMMAND_<PROVIDER>`.
+The image also supports Devin 3000.12.17 (`/opt/devin-home`, `WINDSURF_API_KEY`) and
+Grok 1.0.77 (`/opt/grok-home`, `XAI_API_KEY`), linked as `devin` and `grok` in
+`/usr/local/bin`. Pins can be overridden with `DEVIN_CLI_VERSION` / `GROK_CLI_VERSION`.
+Grok's installer overwrites `/usr/local/bin/agent`; the build preserves and restores
+Cursor's link so only `grok` is exposed there for Grok.
+Remote Grok runs `grok --no-auto-update agent stdio`; with a VM key the client sends
+`authenticate {methodId:"xai.api_key", _meta:{headless:true}}` after initialize, before
+session/new or load, even though initialize advertises only grok.com authentication.
+Devin runs `devin acp`. Both credentials are configured in Settings → Hosts. Signed-out
+sessions report `devin auth login` / `grok login`; fake API keys report a rejected VM
+credential. Real-provider tests cover delivery, placement isolation and plaintext leaks.
 
 ## Layout
 
