@@ -262,6 +262,16 @@ describe("avatars, memories, skills, agent creation e2e", () => {
     expect(versions.map((version) => version.version)).toEqual([2, 1]);
     expect(versions.map((version) => version.body)).toEqual(["Middle body\n", "Old body\n"]);
     expect(versions[0]).toMatchObject({ description: "Middle description", author: "user" });
+    expect(versions[0]?.raw).toBe(
+      `---\nname: ${name}\ndescription: Middle description\nauthor: user\n---\nMiddle body\n`,
+    );
+    const current = await c.request("skills.get", { name });
+    expect(current.raw).toBe(
+      `---\nname: ${name}\ndescription: Current description\nauthor: user\n---\nCurrent body\n`,
+    );
+    expect(
+      (await c.request("skills.list", {})).find((skill) => skill.name === name),
+    ).not.toHaveProperty("raw");
     expect(versions[0]!.savedAt).toBeGreaterThan(versions[1]!.savedAt);
     for (const missing of ["missing-skill", "!!!"]) {
       await expect(c.request("skills.versions", { name: missing })).rejects.toMatchObject({

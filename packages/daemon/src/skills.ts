@@ -58,16 +58,22 @@ export class SkillLibrary {
     return readdirSync(this.root)
       .filter((n) => NAME_RE.test(n) && existsSync(this.file(n)))
       .sort()
-      .map((n) => this.get(n)!)
-      .filter(Boolean);
+      .map((n) => {
+        const skill = this.get(n);
+        if (!skill) return null;
+        const { raw: _, ...summary } = skill;
+        return summary;
+      })
+      .filter((skill) => skill !== null);
   }
 
-  get(name: string): Skill | null {
+  get(name: string): (Skill & { raw: string }) | null {
     const slug = skillSlug(name);
     if (!NAME_RE.test(slug)) return null;
     const f = this.file(slug);
     if (!existsSync(f)) return null;
-    return parse(slug, readFileSync(f, "utf8"), statSync(f).mtimeMs);
+    const raw = readFileSync(f, "utf8");
+    return { ...parse(slug, raw, statSync(f).mtimeMs), raw };
   }
 
   versions(name: string): SkillVersion[] | null {
@@ -82,13 +88,11 @@ export class SkillLibrary {
     return files
       .slice(-50)
       .map((entry, index) => {
-        const skill = parse(
-          current.name,
-          readFileSync(join(history, entry.name), "utf8"),
-          entry.savedAt,
-        );
+        const raw = readFileSync(join(history, entry.name), "utf8");
+        const skill = parse(current.name, raw, entry.savedAt);
         return {
           version: Math.max(0, files.length - 50) + index + 1,
+          raw,
           savedAt: entry.savedAt,
           description: skill.description,
           author: skill.author,

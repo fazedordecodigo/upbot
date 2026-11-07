@@ -322,6 +322,7 @@ export const Skill = z.object({
 });
 export type Skill = z.infer<typeof Skill>;
 export const SkillVersion = z.object({
+  raw: z.string(),
   version: z.number().int().min(1),
   savedAt: z.number(),
   description: z.string(),
@@ -1220,7 +1221,10 @@ export const methodMap = {
     result: z.object({ ok: z.literal(true) }),
   },
   "skills.list": { params: z.object({}).strict(), result: z.array(Skill) },
-  "skills.get": { params: z.object({ name: z.string() }).strict(), result: Skill },
+  "skills.get": {
+    params: z.object({ name: z.string() }).strict(),
+    result: Skill.extend({ raw: z.string() }),
+  },
   "skills.versions": {
     params: z.object({ name: z.string() }).strict(),
     result: z.array(SkillVersion),

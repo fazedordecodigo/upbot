@@ -78,7 +78,7 @@ function SkillDetail({
           </Button>
         </div>
         {raw ? (
-          <pre className={detailStyles.raw}>{version.body}</pre>
+          <pre className={detailStyles.raw}>{version.raw}</pre>
         ) : (
           <Markdown text={version.body} />
         )}
@@ -105,16 +105,18 @@ function SkillDetail({
             </div>
           </header>
           <div className={detailStyles.actions}>
-            <Button onClick={() => onEdit(data)}>Editar</Button>
+            <Button
+              onClick={() =>
+                onEdit({ name: data.name, description: data.description, body: data.body })
+              }
+            >
+              Editar
+            </Button>
             <Button aria-pressed={raw} onClick={() => setRaw(!raw)}>
               {raw ? "Ver formatado" : "Ver texto bruto"}
             </Button>
           </div>
-          {raw ? (
-            <pre className={detailStyles.raw}>{data.body}</pre>
-          ) : (
-            <Markdown text={data.body} />
-          )}
+          {raw ? <pre className={detailStyles.raw}>{data.raw}</pre> : <Markdown text={data.body} />}
           <section className={detailStyles.versions}>
             <h3>Versões anteriores</h3>
             {versionsError ? (
@@ -180,7 +182,10 @@ export function SkillsView({ client }: { client: DaemonClient }) {
           setError(null);
           client
             .request("skills.save", edit)
-            .then(() => setEdit(null))
+            .then((saved) => {
+              if (selected !== null) setSelected(saved.name);
+              setEdit(null);
+            })
             .catch(fail("skills.save_failed"));
         }}
       >

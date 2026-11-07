@@ -993,12 +993,21 @@ test("skill detail renders fresh Markdown and raw text", async () => {
     await target.getByRole("heading", { name: "Conteúdo completo" }).waitFor();
     await target.getByRole("button", { name: "Ver texto bruto" }).click();
     expect(await target.locator("pre").textContent()).toContain("**Texto destacado**");
+    expect(await target.locator("pre").textContent()).toContain("description: Descrição de teste");
     await capture("skill-detail-raw", target);
+    await target.getByRole("button", { name: "Editar", exact: true }).click();
+    await target.getByPlaceholder("name (kebab-case)").fill("Resumo Renomeado");
+    await target.getByRole("button", { name: "Save", exact: true }).click();
+    await target.getByRole("heading", { name: "resumo-renomeado", exact: true }).waitFor();
+    expect((await rpc.request("skills.get", { name: "detail-fixture" })).name).toBe(
+      "detail-fixture",
+    );
     await target.getByRole("button", { name: "Voltar", exact: true }).click();
     await target.getByRole("button", { name: "New skill", exact: true }).waitFor();
   } finally {
     await target.close();
     await rpc.request("skills.delete", { name: "detail-fixture" });
+    await rpc.request("skills.delete", { name: "resumo-renomeado" });
   }
 }, 15000);
 
@@ -1043,6 +1052,8 @@ test("skill previous versions are read-only and return to the current version", 
     await target.getByRole("heading", { name: "Conteúdo anterior", exact: true }).waitFor();
     expect(await target.getByRole("button", { name: "Editar", exact: true }).count()).toBe(0);
     await capture("skill-version", target);
+    await target.getByRole("button", { name: "Ver texto bruto", exact: true }).click();
+    expect(await target.locator("pre").textContent()).toContain("description: Descrição anterior");
     await target.getByRole("button", { name: "Voltar para a versão atual" }).click();
     await target.getByRole("heading", { name: "Conteúdo atual", exact: true }).waitFor();
   } finally {

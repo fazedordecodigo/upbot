@@ -320,6 +320,8 @@ in `.history/` (`src/skills.ts`), RPC `skills.list/get/save/delete/versions`, ev
 1-based ordinals across the full history and filename-derived `savedAt`. Unknown skills
 return not_found. Desktop skill details offer read-only previous Markdown/raw versions,
 metadata and return to current; no restore action or mobile access is exposed.
+`skills.get` and `skills.versions` expose exact file contents as `raw` (including
+frontmatter) for raw viewing; Markdown uses parsed `body`. `skills.list` omits raw.
 Bridge tools: `remember`, `forget`, `list_memories`, `list_skills`, `read_skill`,
 `create_skill`, `revise_skill`, `create_agent`. The first prompt of every fresh session is
 prefixed with `<agent_memories>` and `<skills_library>` (index only). UI:
