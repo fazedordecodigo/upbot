@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+- Updated Skills, Browser, Vault, Gateways, Marketplace, Mobile and Team settings to the Eco
+  design-system controls and layout, with Brazilian Portuguese labels and help text.
+
 ### Added
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,

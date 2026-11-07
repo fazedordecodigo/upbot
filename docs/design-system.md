@@ -23,6 +23,8 @@ O `apps/desktop/src/index.css` importa `tokens.css` e, em seguida, `legacy-bridg
 
 `tailwind.theme.css` (utilitários novos como `bg-surface`) não entra enquanto as telas legadas não usarem essas classes. O `@theme` atual só remapeia `red-*` para a cor de erro.
 
+As telas Habilidades, Navegador, Cofre, Gateways, Marketplace, Celular e Equipe em `Library.tsx` usam os controles de `components/ds/`, `Library.module.css` e tokens `--boto-*`, sem layouts utilitários Tailwind, com textos em pt-BR. Servidores (`HostsView`) e E-mail (`EmailView`) são migrados em um PR separado. Veja [design-system-phase6.md](design-system-phase6.md) para evidências e desvios restantes.
+
 ## Paleta Eco
 
 | Nome | Hex | Papel |
