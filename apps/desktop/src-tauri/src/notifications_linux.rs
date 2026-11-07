@@ -183,17 +183,19 @@ impl Backend {
         let mut entries = self.entries.lock().unwrap();
         let replaces = entries.server_id(&notification.id);
         self.notify(&mut entries, notification, replaces)
+            .map(|_| ())
     }
 
-    fn closed(&self, server: u32, reason: u32) -> Result<(), String> {
+    fn closed(&self, server: u32, reason: u32) -> Result<Option<u32>, String> {
         let mut entries = self.entries.lock().unwrap();
         if let Some(notification) = entries.expired(server, reason, now_ms()) {
-            if let Err(error) = self.notify(&mut entries, notification, server) {
+            let result = self.notify(&mut entries, notification, server);
+            if result.is_err() {
                 entries.close(server);
-                return Err(error);
             }
+            return result.map(Some);
         }
-        Ok(())
+        Ok(None)
     }
 
     fn notify(
@@ -201,7 +203,7 @@ impl Backend {
         entries: &mut Entries,
         notification: Notification,
         replaces: u32,
-    ) -> Result<(), String> {
+    ) -> Result<u32, String> {
         let action_list = actions(&notification, self.actions);
         let hints = HashMap::from([("desktop-entry", Value::from("com.boto.desktop"))]);
         let server: u32 = self
@@ -221,7 +223,7 @@ impl Backend {
             )
             .map_err(dbus_error)?;
         entries.replace(notification, server, action_list);
-        Ok(())
+        Ok(server)
     }
 
     fn remove(&self, id: &str) -> Result<(), String> {
@@ -342,6 +344,34 @@ mod tests {
         assert_eq!(entries.remove(&muted.id), Some(1));
         assert!(entries.expired(1, 1, 100).is_none());
         assert_eq!(entries.remove(&muted.id), None);
+    }
+
+    #[test]
+    fn notification_repost_tracks_reused_or_new_server_id() {
+        for replacement in [1, 2] {
+            let mut pending = notification();
+            pending.expires_at = Some(200);
+            let mut entries = Entries::default();
+            entries.replace(pending.clone(), 1, actions(&pending, true));
+            let repost = entries.expired(1, 1, 100).unwrap();
+            entries.replace(repost, replacement, actions(&pending, true));
+            assert_eq!(entries.0.len(), 1);
+            assert_eq!(entries.server_id(&pending.id), replacement);
+            assert_eq!(
+                entries.response(replacement, "task"),
+                parse_activation("task|linux-test")
+            );
+            if replacement != 1 {
+                assert!(entries.response(1, "task").is_none());
+                assert!(entries.expired(1, 1, 100).is_none());
+                assert!(entries.expired(1, 1, 100).is_none());
+                assert_eq!(entries.0.len(), 1);
+                assert_eq!(entries.server_id(&pending.id), replacement);
+            }
+            assert_eq!(entries.remove(&pending.id), Some(replacement));
+            assert!(entries.0.is_empty());
+            assert!(entries.expired(replacement, 1, 100).is_none());
+        }
     }
 
     #[test]
@@ -470,9 +500,18 @@ mod tests {
                     continue;
                 }
                 assert_eq!(reason, 1);
-                native.closed(server, reason).unwrap();
-                let replacement = native.entries.lock().unwrap().server_id(&pending.id);
-                assert_eq!(replacement, first);
+                let replacement = native.closed(server, reason).unwrap().unwrap();
+                let mut entries = native.entries.lock().unwrap();
+                assert_eq!(entries.server_id(&pending.id), replacement);
+                assert_eq!(entries.0.len(), 1);
+                assert_eq!(
+                    entries.response(replacement, "task"),
+                    parse_activation("task|linux-expiry-test")
+                );
+                if replacement != first {
+                    assert!(entries.response(first, "task").is_none());
+                    assert!(entries.expired(first, 1, now_ms()).is_none());
+                }
                 println!("early expiry re-presented: {first} -> {replacement}");
                 break;
             }
