@@ -8,12 +8,18 @@
 
 ### Added
 - Native Linux approval notifications via freedesktop D-Bus, with actions when supported.
+- Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases.
 - Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
   Authenticode signing; releases reject incomplete signing secrets and verify signatures.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.
 - Linux and Windows CI checks and multi-platform updater releases.
+
+### Fixed
+- Gemini bots start with `gemini --acp` (the old `--experimental-acp` flag is deprecated). When
+  Gemini is signed out, the error now says to run `gemini` and choose Sign in with Google, a
+  Gemini API key or Vertex AI, including when a cached Google sign-in fails.
 
 ## 0.3.0
 
