@@ -12,7 +12,6 @@ PLATFORMS = {
     "linux-x86_64": "_amd64.AppImage",
     "linux-aarch64": "_aarch64.AppImage",
     "windows-x86_64": "_x64-setup.exe",
-    "windows-aarch64": "_arm64-setup.exe",
 }
 
 
