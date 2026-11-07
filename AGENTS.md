@@ -359,7 +359,13 @@ is `BOTO_VAULT_KEY` (64 hex, tests), macOS Keychain (service `Boto`, account `va
 an existing `<data-dir>/vault.key`, then Windows DPAPI or Linux Secret Service. Linux writes
 `vault.key.location` after a successful Secret Service store so a locked/unavailable keyring
 cannot silently orphan secrets; when secure storage is unavailable, a 0600 plaintext key file
-is used with a warning. Fallback diagnostics are covered by `test/vault-platform.test.ts` and
+is used with a warning. Windows DPAPI runs `powershell.exe` with .NET-only scripts and
+`$PSModuleAutoLoadingPreference = 'None'`: `Add-Type` autoloads Microsoft.PowerShell.Utility,
+which took 25-36 s per cold call on `windows-11-arm`. A timed-out call is retried once
+(`DPAPI_TIMEOUTS_MS`, 30 s then 90 s); a persistent timeout throws and never writes a plaintext
+key, while a missing `powershell.exe`, non-zero exit or write failure keeps the warned
+fallback. Warnings and errors name only an error code, exit status or timeout, never
+PowerShell stderr. Fallback diagnostics are covered by `test/vault-platform.test.ts` and
 `test/vault-fallback.e2e.test.ts`. Existing plaintext keys are kept without migration.
 Per-secret agent allowlist. RPC
 `vault.list/set/setAccess/delete` (values never returned), event `vault.changed`; bridge

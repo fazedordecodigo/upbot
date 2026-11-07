@@ -9,6 +9,11 @@
   and platform-secure vault key storage.
 - Linux and Windows CI checks and multi-platform updater releases.
 
+### Fixed
+- Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
+  DPAPI scripts skip PowerShell module autoloading, a timed-out call is retried, and a
+  persistent timeout reports an error instead of writing a plaintext key.
+
 ## 0.3.0
 
 ### Changed
