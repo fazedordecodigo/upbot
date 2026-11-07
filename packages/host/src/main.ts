@@ -51,7 +51,7 @@ const VSOCK_EXEC_PORT = 1024;
 const VSOCK_BRIDGE_PORT = 5000;
 const VSOCK_PROXY_PORT = 3128;
 const PROVIDER_CLIS = ["claude", "codex", "devin", "agent", "grok", "opencode", "gemini"];
-const HOST_VERSION = "0.3.0";
+const HOST_VERSION = "0.5.0";
 
 const die = (msg: string, code = 1): never => {
   process.stderr.write(`boto-host: ${msg}\n`);

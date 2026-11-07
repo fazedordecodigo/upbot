@@ -19,6 +19,8 @@ import { getSetting, setSetting } from "./db/settings";
 const accessSchema = z.array(z.string());
 
 export class ComputerUse {
+  private typing: Promise<void> = Promise.resolve();
+
   constructor(
     private db: Database,
     private environment: ComputerEnvironment = {},
@@ -108,7 +110,13 @@ export class ComputerUse {
     const backend = this.check(agent);
     if (!text || text.length > 5000 || text.includes("\0"))
       throw new Error("`text` must be 1-5000 characters without NUL");
-    await this.exec(typeCommand(backend, text), backend.platform === "win32" ? text : undefined);
+    if (backend.platform === "darwin") {
+      const typing = this.typing.then(() => this.exec(typeCommand(this.check(agent), text)));
+      this.typing = typing.catch(() => {});
+      await typing;
+    } else {
+      await this.exec(typeCommand(backend, text), backend.platform === "win32" ? text : undefined);
+    }
     return `typed ${text.length} characters`;
   }
 

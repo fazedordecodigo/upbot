@@ -55,9 +55,47 @@ function run(argv) {
     }
   }
 }`;
-const TYPE_AS = `on run argv
-  tell application "System Events" to keystroke (item 1 of argv)
-end run`;
+const TYPE_JXA = `ObjC.import("AppKit");
+function run(argv) {
+  const board = $.NSPasteboard.generalPasteboard;
+  const saved = $.NSMutableArray.alloc.init;
+  const items = board.pasteboardItems;
+  for (let i = 0; i < items.count; i++) {
+    const item = items.objectAtIndex(i);
+    const copy = $.NSPasteboardItem.alloc.init;
+    const types = item.types;
+    for (let j = 0; j < types.count; j++) {
+      const type = types.objectAtIndex(j);
+      const data = item.dataForType(type);
+      if (data && !data.isNil()) {
+        if (!copy.setDataForType(data, type)) throw new Error("Unable to save clipboard data");
+      } else {
+        const string = item.stringForType(type);
+        if (string && !string.isNil() && copy.setStringForType(string, type)) continue;
+        const property = item.propertyListForType(type);
+        if (property && !property.isNil() && copy.setPropertyListForType(property, type)) continue;
+        // Unreadable file promises cannot be recreated; leave the clipboard untouched.
+        throw new Error("Unable to preserve clipboard type: " + ObjC.unwrap(type));
+      }
+    }
+    saved.addObject(copy);
+  }
+  board.clearContents;
+  let version = board.changeCount;
+  try {
+    if (!board.setStringForType($(argv[0]), $.NSPasteboardTypeString)) {
+      throw new Error("Unable to prepare text for paste");
+    }
+    version = board.changeCount;
+    Application("System Events").keystroke("v", { using: ["command down"] });
+    delay(0.5);
+  } finally {
+    if (board.changeCount === version) {
+      board.clearContents;
+      if (saved.count) board.writeObjects(saved);
+    }
+  }
+}`;
 
 // INPUT's union includes MOUSEINPUT so its native size/alignment is correct on x64 and x86.
 const WINDOWS_INPUT = String.raw`Add-Type -TypeDefinition @'
@@ -192,7 +230,7 @@ for ($i = 0; $i -lt ${count}; $i++) {
 export function typeCommand(backend: ComputerBackend, text: string) {
   switch (backend.platform) {
     case "darwin":
-      return ["osascript", "-e", TYPE_AS, text];
+      return ["osascript", "-l", "JavaScript", "-e", TYPE_JXA, text];
     case "win32":
       return powershell(backend, `${WINDOWS_INPUT}\n[BotoInput]::Type($env:BOTO_COMPUTER_TEXT)`);
     case "linux":

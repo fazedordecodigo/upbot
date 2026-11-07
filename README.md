@@ -9,8 +9,8 @@
 <h3 align="center">Your own team of AI bots, living on your desktop</h3>
 
 <p align="center">
-  <a href="https://github.com/fazedordecodigo/upbot/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fazedordecodigo/upbot/actions/workflows/ci.yml/badge.svg?branch=develop"></a>
-  <a href="https://github.com/fazedordecodigo/upbot/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/fazedordecodigo/upbot"></a>
+  <a href="https://github.com/fazedordecodigo/boto/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/fazedordecodigo/boto/actions/workflows/ci.yml/badge.svg?branch=develop"></a>
+  <a href="https://github.com/fazedordecodigo/boto/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/fazedordecodigo/boto"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="macOS · Windows · Linux" src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-informational">
 </p>
@@ -47,7 +47,9 @@ For remote hosts, stop active sessions, use **Install** again in Settings → Ho
 migrate the default `~/.upbot` directory to `~/.boto` and upload the new helper, then
 rebuild the Firecracker rootfs before launching microVMs. Persistent workspace disks
 are retained. Custom host roots require the matching `BOTO_HOST_ROOT` setting.
-The GitHub repository URL is unchanged; updater and marketplace URLs still use it.
+The repository moved to `fazedordecodigo/boto`. Old `upbot` URLs redirect, so installed
+UpBot apps still receive updates; saved UpBot/BobAgent marketplace sources migrate
+automatically without duplicating entries.
 
 ## Why you'll like it
 
@@ -80,7 +82,7 @@ See `docs/design-system.md`.
 
 ## Get Boto
 
-Download the installer for your OS from [Releases](https://github.com/fazedordecodigo/upbot/releases):
+Download the installer for your OS from [Releases](https://github.com/fazedordecodigo/boto/releases):
 
 - **macOS:** install the `.dmg`; the app updates itself. Signed and notarized builds open
   normally. For unsigned builds, open System Settings → Privacy & Security and click
@@ -107,8 +109,9 @@ Read-aloud works out of the box with `say` on macOS and System.Speech (Windows P
 Windows; on Linux install `espeak-ng` (or `espeak`, or use a running `speech-dispatcher`). Voice
 input needs `whisper` on PATH or `BOTO_STT_COMMAND`; `BOTO_TTS_COMMAND` overrides read-aloud.
 
-Boto was called BobAgent until 0.3.0; updating moves `~/BobAgent` to `~/Boto` and keeps
-your bots, chats and vault.
+Boto was previously called UpBot (and originally BobAgent). The next release is 0.5.0;
+0.4.0 was released as UpBot. Updating migrates `~/UpBot` or `~/BobAgent` to `~/Boto`
+and keeps your bots, chats and vault.
 
 ## Run bots on your own server
 
@@ -146,11 +149,11 @@ checklist and the few rules that keep the codebase easy to review, and
 
 Meet the people who built it so far:
 
-<a href="https://github.com/fazedordecodigo/upbot/graphs/contributors">
-  <img alt="Boto contributors" src="https://contrib.rocks/image?repo=fazedordecodigo/upbot">
+<a href="https://github.com/fazedordecodigo/boto/graphs/contributors">
+  <img alt="Boto contributors" src="https://contrib.rocks/image?repo=fazedordecodigo/boto">
 </a>
 
-Want to add yourself? Pick an [issue](https://github.com/fazedordecodigo/upbot/issues) or
+Want to add yourself? Pick an [issue](https://github.com/fazedordecodigo/boto/issues) or
 open a small PR — focused changes get reviewed fastest. See the
 [changelog](CHANGELOG.md) for what's shipped.
 
