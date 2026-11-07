@@ -173,6 +173,17 @@ test("kit loads packaged Host Grotesk and DM Mono", async () => {
   expect(loaded.monoFaces).toBeGreaterThan(0);
 });
 
+test("Library screens use the kit and scoped Eco tokens", () => {
+  const source = fileURLToPath(new URL("../src/components", import.meta.url));
+  const component = readFileSync(join(source, "Library.tsx"), "utf8");
+  const css = readFileSync(join(source, "Library.module.css"), "utf8");
+  expect(component).toContain('from "./ds/controls"');
+  expect(component).not.toMatch(/className="|btnCls|inputCls|<(?:button|select|textarea)\b/);
+  for (const match of css.matchAll(/var\((--[\w-]+)/g)) {
+    expect(match[1]?.startsWith("--boto-")).toBe(true);
+  }
+});
+
 test("all authored colors are token-based and dark controls retain visible focus and targets", async () => {
   const source = fileURLToPath(new URL("../src", import.meta.url));
   for (const file of readdirSync(source, { recursive: true })) {

@@ -254,3 +254,187 @@ test("logs the DPAPI failure cause and falls back to a plaintext key", () => {
     error.mockRestore();
   }
 }, 15_000);
+
+// A `powershell.exe` stand-in on PATH. Per-call behavior comes from `$DPAPI_FAKE_STATE/mode-<n>`
+// (ok | hang | fail); "DPAPI" maps hex digits to letters so the stored file never holds the key.
+function fakePowerShell(directory: string, modes: Record<number, "hang" | "fail"> = {}) {
+  const binDir = join(directory, "bin");
+  const state = join(directory, "dpapi-state");
+  mkdirSync(binDir, { recursive: true });
+  mkdirSync(state, { recursive: true });
+  for (const [call, mode] of Object.entries(modes))
+    writeFileSync(join(state, `mode-${call}`), mode);
+  const executable = join(binDir, "powershell.exe");
+  writeFileSync(
+    executable,
+    `#!/bin/sh
+n=$(($(cat "$DPAPI_FAKE_STATE/count" 2>/dev/null || echo 0) + 1))
+echo "$n" > "$DPAPI_FAKE_STATE/count"
+printf '%s' "$4" > "$DPAPI_FAKE_STATE/script-$n"
+mode=$(cat "$DPAPI_FAKE_STATE/mode-$n" 2>/dev/null || echo ok)
+case "$mode" in
+  hang) exec /bin/sleep 30 ;;
+  fail) cat >/dev/null; echo "fake-dpapi-stderr-detail" >&2; exit 7 ;;
+esac
+case "$4" in
+  *"::Unprotect("*) tr 'ghijklmnopqrstuv' '0-9a-f' ;;
+  *) tr '0-9a-f' 'ghijklmnopqrstuv' ;;
+esac
+`,
+    { mode: 0o700 },
+  );
+  chmodSync(executable, 0o700);
+  setEnv("BOTO_VAULT_KEY", undefined);
+  setEnv("DPAPI_FAKE_STATE", state);
+  setEnv("PATH", [binDir, "/usr/bin", "/bin"].join(":"));
+  const calls = () => Number(readFileSync(join(state, "count"), "utf8").trim());
+  const script = (call: number) => readFileSync(join(state, `script-${call}`), "utf8");
+  return {
+    calls,
+    script,
+    setMode: (call: number, mode: string) => writeFileSync(join(state, `mode-${call}`), mode),
+  };
+}
+
+const FAST_TIMEOUTS = [500, 3_000];
+
+describe("Windows DPAPI subprocess handling", () => {
+  test.skipIf(process.platform === "win32")(
+    "retries a timed-out protect call and keeps the key out of plaintext",
+    () => {
+      const directory = testRoot();
+      const dataDir = join(directory, "data");
+      const dpapi = fakePowerShell(directory, { 1: "hang" });
+      const error = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const key = loadVaultKey(dataDir, "win32", FAST_TIMEOUTS);
+        expect(dpapi.calls()).toBe(2);
+        expect(existsSync(join(dataDir, "vault.key"))).toBe(false);
+        expect(existsSync(join(dataDir, "vault.key.dpapi.tmp"))).toBe(false);
+        const stored = readFileSync(join(dataDir, "vault.key.dpapi"), "utf8");
+        expect(stored).not.toContain(key.toString("hex"));
+        expect(error.mock.calls).toEqual([
+          ["[botod] Windows DPAPI timed out after 0.5s; retrying"],
+        ]);
+
+        expect(loadVaultKey(dataDir, "win32", FAST_TIMEOUTS).equals(key)).toBe(true);
+        expect(dpapi.calls()).toBe(3);
+      } finally {
+        error.mockRestore();
+      }
+    },
+    15_000,
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "never falls back to plaintext when every protect attempt times out",
+    () => {
+      const directory = testRoot();
+      const dataDir = join(directory, "data");
+      const dpapi = fakePowerShell(directory, { 1: "hang", 2: "hang" });
+      const error = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        expect(() => loadVaultKey(dataDir, "win32", FAST_TIMEOUTS)).toThrow(
+          "Windows DPAPI timed out after 3s; the Boto vault key was not created. Try again.",
+        );
+        expect(dpapi.calls()).toBe(2);
+        for (const name of ["vault.key", "vault.key.dpapi", "vault.key.dpapi.tmp"]) {
+          expect(existsSync(join(dataDir, name))).toBe(false);
+        }
+        expect(JSON.stringify(error.mock.calls)).not.toContain("plaintext");
+
+        const key = loadVaultKey(dataDir, "win32", FAST_TIMEOUTS);
+        expect(existsSync(join(dataDir, "vault.key.dpapi"))).toBe(true);
+        expect(existsSync(join(dataDir, "vault.key"))).toBe(false);
+        expect(loadVaultKey(dataDir, "win32", FAST_TIMEOUTS).equals(key)).toBe(true);
+      } finally {
+        error.mockRestore();
+      }
+    },
+    15_000,
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "retries a timed-out unprotect call and returns the stored key",
+    () => {
+      const directory = testRoot();
+      const dataDir = join(directory, "data");
+      const dpapi = fakePowerShell(directory);
+      const key = loadVaultKey(dataDir, "win32", FAST_TIMEOUTS);
+      dpapi.setMode(2, "hang");
+      const error = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        expect(loadVaultKey(dataDir, "win32", FAST_TIMEOUTS).equals(key)).toBe(true);
+        expect(dpapi.calls()).toBe(3);
+        expect(error).toHaveBeenCalledTimes(1);
+      } finally {
+        error.mockRestore();
+      }
+    },
+    15_000,
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "fails to decrypt without creating a new key when unprotect keeps timing out",
+    () => {
+      const directory = testRoot();
+      const dataDir = join(directory, "data");
+      const dpapi = fakePowerShell(directory);
+      loadVaultKey(dataDir, "win32", FAST_TIMEOUTS);
+      const stored = readFileSync(join(dataDir, "vault.key.dpapi"), "utf8");
+      dpapi.setMode(2, "hang");
+      dpapi.setMode(3, "hang");
+      const error = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        expect(() => loadVaultKey(dataDir, "win32", FAST_TIMEOUTS)).toThrow(
+          "The Boto vault key could not be decrypted with Windows DPAPI (timed out after 3s).",
+        );
+        expect(readFileSync(join(dataDir, "vault.key.dpapi"), "utf8")).toBe(stored);
+        expect(existsSync(join(dataDir, "vault.key"))).toBe(false);
+      } finally {
+        error.mockRestore();
+      }
+    },
+    15_000,
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "falls back with a warning naming only the exit status when DPAPI fails",
+    () => {
+      const directory = testRoot();
+      const dataDir = join(directory, "data");
+      const dpapi = fakePowerShell(directory, { 1: "fail" });
+      const error = spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const key = loadVaultKey(dataDir, "win32", FAST_TIMEOUTS);
+        expect(dpapi.calls()).toBe(1);
+        expect(error.mock.calls).toEqual([
+          ["Boto could not use Windows DPAPI (exit 7); storing the vault key in a plaintext file."],
+        ]);
+        expect(readFileSync(join(dataDir, "vault.key"), "utf8")).toBe(key.toString("hex"));
+        expect(existsSync(join(dataDir, "vault.key.dpapi"))).toBe(false);
+      } finally {
+        error.mockRestore();
+      }
+    },
+    15_000,
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "DPAPI scripts avoid cmdlets that trigger PowerShell module autoloading",
+    () => {
+      const directory = testRoot();
+      const dataDir = join(directory, "data");
+      const dpapi = fakePowerShell(directory);
+      loadVaultKey(dataDir, "win32", FAST_TIMEOUTS);
+      loadVaultKey(dataDir, "win32", FAST_TIMEOUTS);
+      for (const call of [1, 2]) {
+        const script = dpapi.script(call);
+        expect(script).toStartWith(
+          "$ErrorActionPreference = 'Stop'; $PSModuleAutoLoadingPreference = 'None'; ",
+        );
+        expect(script).not.toMatch(/\b[A-Z][a-z]+-[A-Z][A-Za-z]+\b/);
+      }
+    },
+  );
+});

@@ -117,7 +117,8 @@ foreach ($node in $ast.FindAll({ param($n) $n -is [System.Management.Automation.
         expect(result.exitCode).toBe(0);
       }
     },
-    30_000,
+    // Each fresh powershell.exe pays ~30 s for its first Add-Type on Windows ARM64.
+    process.arch === "arm64" ? 300_000 : 30_000,
   );
   test("availability explains Wayland, missing display and tools", () => {
     for (const [env, reason] of [
