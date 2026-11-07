@@ -167,6 +167,8 @@ describe("daemon target mapping", () => {
   test.each([
     ["darwin", "arm64", "bun-darwin-arm64", "aarch64-apple-darwin"],
     ["linux", "x64", "bun-linux-x64", "x86_64-unknown-linux-gnu"],
+    ["linux", "arm64", "bun-linux-arm64", "aarch64-unknown-linux-gnu"],
+    ["win32", "arm64", "bun-windows-arm64", "aarch64-pc-windows-msvc"],
     ["win32", "x64", "bun-windows-x64", "x86_64-pc-windows-msvc"],
   ])("%s/%s maps to its native bundle target", (platform, arch, bunTarget, rustTriple) => {
     expect(daemonTarget(platform, arch)).toEqual({ bunTarget, rustTriple });
@@ -174,7 +176,7 @@ describe("daemon target mapping", () => {
   });
 
   test("rejects unsupported targets", () => {
-    expect(() => daemonTarget("linux", "arm64")).toThrow("Unsupported daemon build target");
+    expect(() => daemonTarget("linux", "ia32")).toThrow("Unsupported daemon build target");
     expect(() => daemonTargetForTriple("x86_64-pc-windows-gnu")).toThrow(
       "Unsupported Rust target triple",
     );
