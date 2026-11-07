@@ -27,7 +27,7 @@ import { errorFields, logWarn } from "./lib/log";
 import { nativeCommand } from "./lib/native";
 import { useApprovalBadge } from "./lib/native-approval-badge";
 import { useNativeNotifications } from "./lib/native-notifications";
-import { mod } from "./lib/platform";
+import { isMac, mod } from "./lib/platform";
 import { readStorage, writeStorage } from "./lib/storage";
 import { role, statusProvider } from "./lib/ui";
 
@@ -176,6 +176,26 @@ export default function App() {
     [navigate],
   );
 
+  const newBot = useCallback(() => {
+    navigate("chat");
+    setSelectedId(null);
+    setCreating(true);
+  }, [navigate]);
+
+  const newSession = useCallback(async () => {
+    if (!selected) return newBot();
+    openAgent(selected.id);
+    try {
+      await client.request("agents.newSession", { agentId: selected.id });
+    } catch (e) {
+      setNotice(
+        (e as { code?: string }).code === "busy"
+          ? "O bot está ocupado. Aguarde a tarefa atual terminar para iniciar uma nova sessão."
+          : `Não foi possível iniciar uma nova sessão: ${errorMessage(e)}`,
+      );
+    }
+  }, [client, newBot, openAgent, selected]);
+
   const reviewNotification = useCallback(
     (target: string, message?: string) => {
       if (message) setNotice(message);
@@ -248,11 +268,9 @@ export default function App() {
     if (key === "." && view === "chat" && selectedId) togglePanel();
     else if (key === "k") setPalette({});
     else if (key === "f" && e.shiftKey) setPalette({ group: "Bots" });
-    else if (key === "n" && !e.shiftKey) {
-      navigate("chat");
-      setSelectedId(null);
-      setCreating(true);
-    } else if (key === ",") {
+    else if (key === "n" && e.shiftKey) newBot();
+    else if (key === "n") void newSession();
+    else if (key === ",") {
       setSettingsTab("general");
       navigate("settings");
     } else if (key === "p" && !e.shiftKey) navigate("pages");
@@ -324,6 +342,7 @@ export default function App() {
         id: "new-agent",
         group: "Ações",
         label: "Criar bot",
+        hint: `${mod}${isMac ? "⇧" : "Shift+"}N`,
         run: () => {
           navigate("chat");
           setCreating(true);
@@ -442,11 +461,8 @@ export default function App() {
         drawer={sideOpen && narrow}
         sideRef={sideRef}
         onClose={() => setSideOpen(false)}
-        onNew={() => {
-          navigate("chat");
-          setSelectedId(null);
-          setCreating(true);
-        }}
+        onNewSession={() => void newSession()}
+        onNewBot={newBot}
         onSearch={() => setPalette({})}
         onHome={() => navigate("home")}
         onScheduled={() => navigate("scheduled")}

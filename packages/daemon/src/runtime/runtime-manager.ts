@@ -66,6 +66,10 @@ export class RuntimeManager {
     return this.runtimeFor(agentId).compact("manual");
   }
 
+  newSession(agentId: string): Promise<void> {
+    return this.runtimeFor(agentId).newSession();
+  }
+
   cancelChannelTurns(channelId: string): void {
     for (const rt of this.runtimes.values()) {
       if (rt.currentChannelId() === channelId) rt.cancel();

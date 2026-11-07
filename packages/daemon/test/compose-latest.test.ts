@@ -45,7 +45,7 @@ test.each(["complete", "missing", "empty", "duplicate"])(
           "--output",
           join(dir, "latest.json"),
         ],
-        { encoding: "utf8" },
+        { encoding: "utf8", timeout: 30_000 },
       );
       expect(result.error).toBeUndefined();
       if (scenario !== "complete") {
@@ -68,4 +68,6 @@ test.each(["complete", "missing", "empty", "duplicate"])(
       rmSync(dir, { recursive: true, force: true });
     }
   },
+  // Python startup on Windows can exceed Bun's default; leave time for cleanup.
+  35_000,
 );

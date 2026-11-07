@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -16,6 +16,9 @@ import {
 // The daemon runs with its built-in voice defaults (no BOTO_TTS_COMMAND) and a PATH that
 // holds only fake programs: PATH is the fake bin dir, the login shell is a fake that prints
 // that PATH, and HOME is empty, so synthesizers installed on the host are never picked.
+
+// Daemon startup allows 15s, and fixture output polling allows another 10s.
+setDefaultTimeout(30_000);
 
 const TOKEN = `voice-e2e-${crypto.randomUUID()}`;
 const FAKE_TTS = join(ROOT, "packages/daemon/test/fixtures/fake-tts.ts");

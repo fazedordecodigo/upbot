@@ -163,8 +163,8 @@ Channels are "Group chats" in the UI. `ChannelService.post(channelId, text, repl
 message goes to that bot (quoted as `<in_reply_to>`), otherwise the owner. Member replies are
 forwarded to the owner only for bot-originated work (`queue.from_agent_id`). Migration 18 adds
 `channel_messages.reply_to`. UI: `CommandPalette` (⌘K all, ⌘⇧F bots on macOS; Ctrl+K and
-Ctrl+Shift+F elsewhere) and shortcuts in `App.tsx` (⌘N new bot, ⌘1–9 switch bot, ⌘, settings,
-⌘P pages on macOS; Ctrl equivalents elsewhere).
+Ctrl+Shift+F elsewhere) and shortcuts in `App.tsx` (⌘N new session for the selected bot,
+⌘⇧N new bot, ⌘1–9 switch bot, ⌘, settings, ⌘P pages on macOS; Ctrl equivalents elsewhere).
 
 ## ACP providers in microVMs
 
@@ -363,6 +363,10 @@ Claude `result.usage`/`total_cost_usd`/`modelUsage.contextWindow`, Codex
 `BOTO_COMPACT_TIMEOUT_MS`), the provider session is dropped and forgotten, and a
 `compaction` chat item stores the summary. The next fresh session gets
 `<conversation_summary>` plus only the history after it. The queue waits while compacting.
+`agents.newSession` (sidebar "Nova sessão", rejected with `busy` during a turn/compaction)
+drops and forgets the provider session, clears `usedTokens` and adds a `session_reset` item;
+the next session gets no summary or history from before it. Sidebar's small top button
+(`BotPlusIcon`) opens the create-bot dialog.
 Tests: `test/usage.e2e.test.ts`.
 
 ## Avatars, memories, skills, agent creation (Phase 8)
@@ -669,6 +673,9 @@ in `default` when the user settings set `auto_edit` or `yolo`. Settings cannot s
 - `bun run build:app` — build the debug desktop bundle for the host platform (macOS app,
   Linux AppImage/deb, or Windows NSIS).
 - `bun run test` — `bun test packages/daemon packages/host apps/desktop/test` (daemon e2e and desktop browser tests).
+- Process-spawning tests need explicit timeouts beyond their internal startup/polling
+  deadlines: apps and voice e2e use 30s; updater metadata allows Python 30s and the test
+  35s for cleanup. Do not rely on Bun's 5s default for these subprocess tests on Windows.
 - Computer Use supports macOS, Windows and Linux X11. Built-in read-aloud uses `say` (macOS),
   System.Speech via Windows PowerShell (Windows) or espeak-ng/espeak/Speech Dispatcher (Linux).
   Linux uses Secret Service for the vault key when available, while Windows uses DPAPI.
