@@ -1,18 +1,20 @@
 import type { Agent, EmailAccount, EmailDraft, EmailProvider } from "@boto/protocol";
-import { useState } from "react";
+import { type InputHTMLAttributes, type TextareaHTMLAttributes, useId, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { DaemonClient } from "../lib/daemon";
 import { errorMessage } from "../lib/errors";
 import { errorFields, logWarn } from "../lib/log";
 import { btnCls, inputCls } from "./AgentSettings";
+import { Button, Field, Select } from "./ds/controls";
+import styles from "./EmailView.module.css";
 
 const PROVIDER_HINTS: Record<EmailProvider, string> = {
   gmail:
-    "Gmail: turn on 2-Step Verification, then create an app password at myaccount.google.com/apppasswords.",
-  icloud: "iCloud: create an app-specific password at account.apple.com → Sign-In and Security.",
-  outlook:
-    "Outlook / Microsoft 365: use an app password if your account allows IMAP with passwords.",
-  custom: "Any IMAP (TLS, usually 993) + SMTP server.",
+    "Gmail: ative a verificação em duas etapas e crie uma senha de app em myaccount.google.com/apppasswords.",
+  icloud:
+    "iCloud: crie uma senha específica de app em account.apple.com → Início de Sessão e Segurança.",
+  outlook: "Outlook / Microsoft 365: use uma senha de app se sua conta permitir IMAP com senhas.",
+  custom: "Qualquer servidor IMAP (TLS, geralmente porta 993) + SMTP.",
 };
 
 const splitList = (s: string) =>
@@ -33,24 +35,47 @@ function useDrafts(client: DaemonClient, agentId?: string) {
   );
 }
 
+const draftStatus: Record<EmailDraft["status"], string> = {
+  pending: "Pendente",
+  sending: "Enviando",
+  sent: "Enviado",
+  discarded: "Descartado",
+  failed: "Falhou",
+};
+
+function SettingsDraftInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  return <Field {...props} label={props["aria-label"] ?? ""} />;
+}
+
+function SettingsDraftTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <Field {...props} multiline label={props["aria-label"] ?? ""} />;
+}
+
 export function DraftCard({
   client,
   draft,
   accounts,
   botName,
+  settings = false,
 }: {
   client: DaemonClient;
   draft: EmailDraft;
   accounts: EmailAccount[];
   botName?: string;
+  settings?: boolean;
 }) {
+  const Input = settings ? SettingsDraftInput : "input";
+  const Textarea = settings ? SettingsDraftTextarea : "textarea";
+  const Action = settings ? Button : "button";
   const [to, setTo] = useState(draft.to.join(", "));
   const [cc, setCc] = useState(draft.cc.join(", "));
   const [subject, setSubject] = useState(draft.subject);
   const [body, setBody] = useState(draft.body);
   const [error, setError] = useState<string | null>(null);
   const editable = draft.status === "pending" || draft.status === "failed";
-  const from = accounts.find((a) => a.id === draft.accountId)?.address ?? "unknown account";
+  const from =
+    accounts.find((a) => a.id === draft.accountId)?.address ??
+    (settings ? "conta desconhecida" : "unknown account");
   const save = () =>
     client.request("email.drafts.update", {
       id: draft.id,
@@ -65,52 +90,73 @@ export function DraftCard({
   };
   return (
     <div
-      className="space-y-2 rounded-lg border border-sky-800/60 bg-sky-950/20 p-3 text-sm"
+      className={
+        settings
+          ? styles.card
+          : "space-y-2 rounded-lg border border-sky-800/60 bg-sky-950/20 p-3 text-sm"
+      }
       data-testid="email-draft"
     >
-      <div className="flex items-center gap-2 text-xs text-zinc-400">
-        <span className="font-semibold text-sky-300">Email draft</span>
-        {botName && <span>by {botName}</span>}
-        <span>from {from}</span>
-        <span className="ml-auto rounded bg-zinc-800 px-1.5 py-0.5">{draft.status}</span>
+      <div className={settings ? styles.row : "flex items-center gap-2 text-xs text-zinc-400"}>
+        <span className={settings ? styles.name : "font-semibold text-sky-300"}>
+          {settings ? "Rascunho de e-mail" : "Email draft"}
+        </span>
+        {botName && (
+          <span>
+            {settings ? "por" : "by"} {botName}
+          </span>
+        )}
+        <span>
+          {settings ? "de" : "from"} {from}
+        </span>
+        <span className={settings ? styles.status : "ml-auto rounded bg-zinc-800 px-1.5 py-0.5"}>
+          {settings ? draftStatus[draft.status] : draft.status}
+        </span>
       </div>
-      <input
-        className={inputCls}
+      <Input
+        className={settings ? undefined : inputCls}
         value={to}
         disabled={!editable}
         onChange={(e) => setTo(e.target.value)}
-        placeholder="To"
-        aria-label="To"
+        placeholder={settings ? "Para" : "To"}
+        aria-label={settings ? "Para" : "To"}
       />
-      <input
-        className={inputCls}
+      <Input
+        className={settings ? undefined : inputCls}
         value={cc}
         disabled={!editable}
         onChange={(e) => setCc(e.target.value)}
         placeholder="Cc"
         aria-label="Cc"
       />
-      <input
-        className={inputCls}
+      <Input
+        className={settings ? undefined : inputCls}
         value={subject}
         disabled={!editable}
         onChange={(e) => setSubject(e.target.value)}
-        placeholder="Subject"
-        aria-label="Subject"
+        placeholder={settings ? "Assunto" : "Subject"}
+        aria-label={settings ? "Assunto" : "Subject"}
       />
-      <textarea
-        className={`${inputCls} min-h-28`}
+      <Textarea
+        className={settings ? styles.body : `${inputCls} min-h-28`}
         value={body}
         disabled={!editable}
         onChange={(e) => setBody(e.target.value)}
-        aria-label="Body"
+        aria-label={settings ? "Mensagem" : "Body"}
       />
-      {(error || draft.error) && <div className="text-xs text-red-400">{error || draft.error}</div>}
+      {(error || draft.error) && (
+        <div
+          className={settings ? styles.error : "text-xs text-red-400"}
+          role={settings ? "alert" : undefined}
+        >
+          {error || draft.error}
+        </div>
+      )}
       {editable && (
-        <div className="flex gap-2">
-          <button
+        <div className={settings ? styles.row : "flex gap-2"}>
+          <Action
             type="button"
-            className={`${btnCls} bg-sky-600 hover:bg-sky-500`}
+            className={settings ? undefined : `${btnCls} bg-sky-600 hover:bg-sky-500`}
             onClick={() => {
               setError(null);
               save().then(
@@ -122,29 +168,29 @@ export function DraftCard({
               );
             }}
           >
-            Send
-          </button>
-          <button
+            {settings ? "Enviar" : "Send"}
+          </Action>
+          <Action
             type="button"
-            className={`${btnCls} bg-zinc-700 hover:bg-zinc-600`}
+            className={settings ? undefined : `${btnCls} bg-zinc-700 hover:bg-zinc-600`}
             onClick={() => {
               setError(null);
               save().catch(fail("email.drafts.update_failed"));
             }}
           >
-            Save
-          </button>
-          <button
+            {settings ? "Salvar" : "Save"}
+          </Action>
+          <Action
             type="button"
-            className={`${btnCls} ml-auto bg-zinc-800 hover:bg-red-900`}
+            className={settings ? styles.push : `${btnCls} ml-auto bg-zinc-800 hover:bg-red-900`}
             onClick={() =>
               client
                 .request("email.drafts.discard", { id: draft.id })
                 .catch(fail("email.drafts.discard_failed"))
             }
           >
-            Discard
-          </button>
+            {settings ? "Descartar" : "Discard"}
+          </Action>
         </div>
       )}
     </div>
@@ -181,6 +227,7 @@ export function DraftCards({ client, agentId }: { client: DaemonClient; agentId:
 }
 
 export function EmailView({ client, agents }: { client: DaemonClient; agents: Agent[] }) {
+  const providerId = useId();
   const { data: accounts = [], error: accountsError } = useAccounts(client);
   const { data: drafts = [], error: draftsError } = useDrafts(client);
   const [provider, setProvider] = useState<EmailProvider>("gmail");
@@ -199,64 +246,65 @@ export function EmailView({ client, agents }: { client: DaemonClient; agents: Ag
     logWarn(scope, errorFields(e));
     setError(errorMessage(e));
   };
-  const nameOf = (id: string) => agents.find((a) => a.id === id)?.name ?? "deleted bot";
+  const nameOf = (id: string) => agents.find((a) => a.id === id)?.name ?? "bot excluído";
   return (
-    <div className="mx-auto max-w-2xl space-y-4 p-6">
-      <h2 className="text-lg font-semibold">Email</h2>
-      <p className="text-xs text-zinc-500">
-        Bots can search and read connected mailboxes and prepare drafts. Nothing is sent until you
-        review a draft and click Send. App passwords are encrypted in the vault and never shown to
-        bots.
+    <div className={styles.page}>
+      <h2 className={styles.title}>E-mail</h2>
+      <p className={styles.muted}>
+        Os bots podem pesquisar e ler as caixas de e-mail conectadas e preparar rascunhos. Nada é
+        enviado até você revisar um rascunho e clicar em Enviar. As senhas de app são criptografadas
+        no cofre e nunca são mostradas aos bots.
       </p>
-      <ul className="space-y-2">
+      <ul className={styles.stack}>
         {accounts.map((a) => (
-          <li key={a.id} className="space-y-2 rounded border border-zinc-800 p-3 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{a.label}</span>
-              <span className="text-xs text-zinc-500">
+          <li key={a.id} className={styles.card}>
+            <div className={styles.row}>
+              <span className={styles.name}>{a.label}</span>
+              <span className={styles.muted}>
                 {a.address} · {a.provider}
               </span>
-              <button
+              <Button
                 type="button"
-                className="ml-auto text-xs text-sky-400 hover:text-sky-300"
+                className={styles.push}
                 onClick={() => {
-                  setTests((t) => ({ ...t, [a.id]: "Testing…" }));
+                  setTests((t) => ({ ...t, [a.id]: "Testando…" }));
                   client
                     .request("email.accounts.test", { id: a.id })
                     .then((r) =>
                       setTests((t) => ({
                         ...t,
                         [a.id]: r.ok
-                          ? "Connected"
+                          ? "Conectado"
                           : [r.imap, r.smtp].filter((x) => x !== "ok").join(" · "),
                       })),
                     )
                     .catch(fail("email.accounts.test_failed"));
                 }}
               >
-                Test
-              </button>
-              <button
+                Testar
+              </Button>
+              <Button
                 type="button"
-                className="text-xs text-zinc-500 hover:text-red-400"
+                className={styles.action}
                 onClick={() =>
                   client
                     .request("email.accounts.delete", { id: a.id })
                     .catch(fail("email.accounts.delete_failed"))
                 }
               >
-                Remove
-              </button>
+                Remover
+              </Button>
             </div>
-            {tests[a.id] && <div className="text-xs text-zinc-400">{tests[a.id]}</div>}
-            <div className="flex flex-wrap gap-2 text-xs text-zinc-400">
+            {tests[a.id] && <div className={styles.muted}>{tests[a.id]}</div>}
+            <div className={styles.row}>
               <span>Bots:</span>
               {agents.map((b) => {
                 const all = a.agentIds.length === 0;
                 const on = all || a.agentIds.includes(b.id);
                 return (
-                  <label key={b.id} className="flex items-center gap-1">
+                  <label key={b.id} className={styles.checkLabel}>
                     <input
+                      className={styles.checkbox}
                       type="checkbox"
                       checked={on}
                       onChange={(e) => {
@@ -282,10 +330,10 @@ export function EmailView({ client, agents }: { client: DaemonClient; agents: Ag
             </div>
           </li>
         ))}
-        {accounts.length === 0 && <li className="text-sm text-zinc-500">No email accounts yet.</li>}
+        {accounts.length === 0 && <li className={styles.muted}>Nenhuma conta de e-mail ainda.</li>}
       </ul>
       <form
-        className="space-y-2 rounded border border-zinc-800 p-3"
+        className={styles.card}
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
@@ -310,85 +358,91 @@ export function EmailView({ client, agents }: { client: DaemonClient; agents: Ag
             .catch(fail("email.accounts.save_failed"));
         }}
       >
-        <h3 className="text-sm font-semibold text-zinc-300">Connect an account</h3>
-        <div className="flex gap-2">
-          <select
-            className={inputCls}
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as EmailProvider)}
-            aria-label="Provider"
-          >
-            <option value="gmail">Gmail</option>
-            <option value="icloud">iCloud Mail</option>
-            <option value="outlook">Outlook</option>
-            <option value="custom">Other (IMAP/SMTP)</option>
-          </select>
-          <input
-            className={inputCls}
-            placeholder="Label (optional)"
+        <h3 className={styles.subtitle}>Conectar uma conta</h3>
+        <div className={styles.formRow}>
+          <div className={styles.selectField}>
+            <label htmlFor={providerId}>Provedor</label>
+            <Select
+              id={providerId}
+              value={provider}
+              onChange={(e) => setProvider(e.target.value as EmailProvider)}
+              aria-label="Provedor de e-mail"
+            >
+              <option value="gmail">Gmail</option>
+              <option value="icloud">iCloud Mail</option>
+              <option value="outlook">Outlook</option>
+              <option value="custom">Outro (IMAP/SMTP)</option>
+            </Select>
+          </div>
+          <Field
+            label="Nome (opcional)"
+            placeholder="Nome (opcional)"
             value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })}
           />
         </div>
-        <input
-          className={inputCls}
+        <Field
           type="email"
           required
-          placeholder="Email address"
+          label="Endereço de e-mail"
+          placeholder="Endereço de e-mail"
           value={form.address}
           onChange={(e) => setForm({ ...form, address: e.target.value })}
         />
-        <input
-          className={inputCls}
+        <Field
           type="password"
           required
           autoComplete="off"
-          placeholder="App password"
+          label="Senha de app"
+          placeholder="Senha de app"
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
         />
         {provider === "custom" && (
-          <div className="grid grid-cols-[1fr_6rem] gap-2">
-            <input
-              className={inputCls}
+          <div className={styles.serverFields}>
+            <Field
               required
-              placeholder="IMAP host"
+              label="Servidor IMAP"
+              placeholder="Servidor IMAP"
               value={form.imapHost}
               onChange={(e) => setForm({ ...form, imapHost: e.target.value })}
             />
-            <input
-              className={inputCls}
+            <Field
+              label="Porta IMAP"
               placeholder="993"
               value={form.imapPort}
               onChange={(e) => setForm({ ...form, imapPort: e.target.value })}
             />
-            <input
-              className={inputCls}
+            <Field
               required
-              placeholder="SMTP host"
+              label="Servidor SMTP"
+              placeholder="Servidor SMTP"
               value={form.smtpHost}
               onChange={(e) => setForm({ ...form, smtpHost: e.target.value })}
             />
-            <input
-              className={inputCls}
-              placeholder="465 or 587"
+            <Field
+              label="Porta SMTP"
+              placeholder="465 ou 587"
               value={form.smtpPort}
               onChange={(e) => setForm({ ...form, smtpPort: e.target.value })}
             />
           </div>
         )}
-        <p className="text-xs text-zinc-500">{PROVIDER_HINTS[provider]}</p>
+        <p className={styles.muted}>{PROVIDER_HINTS[provider]}</p>
         {(error || accountsError || draftsError) && (
-          <div className="text-xs text-red-400">{error ?? accountsError ?? draftsError}</div>
+          <div className={styles.error} role="alert">
+            {error ?? accountsError ?? draftsError}
+          </div>
         )}
-        <button type="submit" className={`${btnCls} bg-sky-600 hover:bg-sky-500`}>
-          Connect
-        </button>
+        <Button type="submit" variant="primary">
+          Conectar
+        </Button>
       </form>
-      <h3 className="text-sm font-semibold text-zinc-300">Drafts</h3>
-      <div className="space-y-2">
+      <h3 className={styles.subtitle}>Rascunhos</h3>
+      <div className={styles.stack}>
         {drafts.map((d) => (
           <DraftCard
+            settings
             key={`${d.id}:${d.updatedAt}`}
             client={client}
             draft={d}
@@ -396,7 +450,7 @@ export function EmailView({ client, agents }: { client: DaemonClient; agents: Ag
             botName={nameOf(d.agentId)}
           />
         ))}
-        {drafts.length === 0 && <p className="text-sm text-zinc-500">No drafts yet.</p>}
+        {drafts.length === 0 && <p className={styles.muted}>Nenhum rascunho ainda.</p>}
       </div>
     </div>
   );

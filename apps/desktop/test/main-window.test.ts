@@ -4,12 +4,16 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
   Agent,
+  AgentPlacement,
   Approval,
   ApprovalRule,
   ChannelMessage,
   ConnectedApp,
+  EmailAccount,
   EmailDraft,
+  RemoteHost,
   Routine,
+  VmCredential,
 } from "@boto/protocol";
 import { type Browser, chromium, type Page, type WebSocketRoute } from "playwright-core";
 import {
@@ -1633,6 +1637,369 @@ test("Library forms retain skill, vault, gateway, mobile and team actions", asyn
     await target.close();
   }
 }, 30000);
+
+test("Hosts settings retain creation, preflight, placement, credentials and action errors", async () => {
+  const target = await browser.newPage();
+  target.setDefaultTimeout(5000);
+  const calls: { method: string; params: Record<string, unknown> }[] = [];
+  let hosts: RemoteHost[] = [];
+  let placements: AgentPlacement[] = [];
+  let creds: VmCredential[] = [];
+  await target.routeWebSocket(/\/ws\?/, (socket) => {
+    const server = socket.connectToServer();
+    server.onMessage((message) => socket.send(message));
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      calls.push(request);
+      const p = request.params;
+      let result: unknown = { ok: true };
+      if (request.method === "hosts.list") result = hosts;
+      else if (request.method === "placements.list") result = placements;
+      else if (request.method === "subagents.list")
+        result = hosts[0]?.root
+          ? ["running", "done", "failed", "stopped"].map((status) => ({
+              agentId: `eco-sub-${status}`,
+              parentId: bot.id,
+              batchId: "eco-batch",
+              task: "Tarefa de verificação",
+              status,
+              result: null,
+              createdAt: Date.now(),
+              finishedAt: null,
+            }))
+          : [];
+      else if (request.method === "vmCredentials.list") result = creds;
+      else if (request.method === "hosts.create") {
+        hosts = [{ ...p, id: "eco-host", root: null, preflight: null, createdAt: Date.now() }];
+      } else if (request.method === "hosts.install") {
+        hosts = hosts.map((host) => ({
+          ...host,
+          root: "/home/test/.boto",
+          preflight: {
+            root: "/home/test/.boto",
+            os: "linux",
+            arch: "x64",
+            kernelRelease: "6.8",
+            bun: "1.4.4",
+            kvm: true,
+            firecracker: { path: "/usr/bin/firecracker", version: "1.10" },
+            kernelImage: "/kernel",
+            rootfs: "/rootfs",
+            mkfsExt4: "/sbin/mkfs.ext4",
+            guestHelperCurrent: true,
+            providers: { claude: "2.1" },
+            firecrackerReady: true,
+          },
+        }));
+      } else if (request.method === "hosts.check") {
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            error: { code: "internal", message: "Falha de verificação" },
+          }),
+        );
+        return;
+      } else if (request.method === "hosts.delete") hosts = [];
+      else if (request.method === "placements.set") placements = [p];
+      else if (request.method === "vmCredentials.set")
+        creds = [{ provider: p.provider, kind: p.kind, updatedAt: Date.now() }];
+      else if (request.method === "vmCredentials.delete") creds = [];
+      else {
+        server.send(message);
+        return;
+      }
+      socket.send(JSON.stringify({ id: request.id, result }));
+    });
+  });
+  try {
+    await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await target.getByRole("button", { name: "Configurações", exact: true }).click();
+    await target.getByRole("tab", { name: "Servidores", exact: true }).click();
+    await target.getByRole("heading", { name: "Servidores remotos" }).waitFor();
+    expect(await target.getByRole("button", { name: "Instalar", exact: true }).count()).toBe(0);
+    await target.getByLabel("Nome", { exact: true }).fill("Fixture SSH");
+    await target.getByLabel("Destino SSH").fill("test@example.invalid");
+    await target.getByLabel("Porta SSH").fill("2222");
+    await target.getByLabel("Arquivo de identidade (opcional)").fill("~/.ssh/id_ed25519");
+    await target.getByRole("button", { name: "Adicionar servidor", exact: true }).click();
+    await target.getByText("Não instalado — clique em Instalar.", { exact: true }).waitFor();
+    expect(calls.findLast((c) => c.method === "hosts.create")?.params).toEqual({
+      name: "Fixture SSH",
+      target: "test@example.invalid",
+      port: 2222,
+      identityFile: "~/.ssh/id_ed25519",
+    });
+    expect(await target.getByRole("button", { name: "Verificar", exact: true }).isDisabled()).toBe(
+      true,
+    );
+    await target.getByRole("button", { name: "Instalar", exact: true }).click();
+    await target.getByText("microVMs disponíveis", { exact: true }).waitFor();
+    await target.getByRole("heading", { name: "Sub-bots", exact: true }).waitFor();
+    const statusClasses = [];
+    for (const [label, indicator] of [
+      ["Em execução", "run"],
+      ["Concluído", "ok"],
+      ["Falhou", "err"],
+      ["Parado", "idle"],
+    ]) {
+      const status = target.getByText(label, { exact: true });
+      await status.waitFor();
+      const className = await status.getAttribute("class");
+      expect(className).toContain(`_${indicator}_`);
+      statusClasses.push(className);
+      expect(await status.locator("svg").getAttribute("aria-hidden")).toBe("true");
+    }
+    expect(new Set(statusClasses).size).toBe(4);
+    await target.getByLabel(`Servidor de ${bot.name}`, { exact: true }).selectOption("eco-host");
+    const isolation = target.getByLabel(`Isolamento de ${bot.name}`, { exact: true });
+    await target.waitForFunction(
+      (input) => input instanceof HTMLSelectElement && !input.disabled,
+      await isolation.elementHandle(),
+    );
+    await isolation.selectOption("firecracker");
+    await target.getByText("2 vCPU · 2048 MiB", { exact: true }).waitFor();
+    expect(calls.findLast((c) => c.method === "placements.set")?.params).toEqual({
+      agentId: bot.id,
+      hostId: "eco-host",
+      isolation: "firecracker",
+      vcpus: 2,
+      memMib: 2048,
+    });
+    for (const [name, label] of [
+      ["Provedor da microVM", "Provedor"],
+      ["Tipo de credencial", "Tipo de credencial"],
+    ]) {
+      expect(
+        await target
+          .getByLabel(name)
+          .evaluate((select) =>
+            Array.from((select as HTMLSelectElement).labels ?? []).map(
+              (label) => label.textContent,
+            ),
+          ),
+      ).toEqual([label]);
+      await target.locator("label", { hasText: label }).first().waitFor();
+    }
+    expect(
+      await target.getByLabel("Credencial da microVM", { exact: true }).getAttribute("placeholder"),
+    ).toBe("Token ou chave de API");
+    await target.getByLabel("Provedor da microVM").selectOption("gemini");
+    expect(await target.getByLabel("Tipo de credencial").inputValue()).toBe("api_key");
+    await target
+      .getByLabel("Credencial da microVM", { exact: true })
+      .fill("fixture-not-a-real-key");
+    await target.getByRole("button", { name: "Salvar", exact: true }).click();
+    await target.getByText(/Chave de API · salvo em/).waitFor();
+    expect(calls.findLast((c) => c.method === "vmCredentials.set")?.params).toEqual({
+      provider: "gemini",
+      kind: "api_key",
+      value: "fixture-not-a-real-key",
+    });
+    await target.getByRole("button", { name: "Remover", exact: true }).last().click();
+    await target.getByText(/Chave de API · salvo em/).waitFor({ state: "detached" });
+    await target.getByRole("button", { name: "Verificar", exact: true }).click();
+    await target.getByRole("alert").filter({ hasText: "Falha de verificação" }).waitFor();
+    await target.getByRole("button", { name: "Remover", exact: true }).click();
+    await target
+      .getByRole("button", { name: "Reinstalar", exact: true })
+      .waitFor({ state: "detached" });
+    expect(calls.findLast((c) => c.method === "hosts.delete")?.params).toEqual({ id: "eco-host" });
+  } finally {
+    await target.close();
+  }
+}, 30000);
+
+test("E-mail settings retain account fields, access, testing and isolated draft actions", async () => {
+  const target = await browser.newPage();
+  target.setDefaultTimeout(5000);
+  const calls: { method: string; params: Record<string, unknown> }[] = [];
+  let accounts: EmailAccount[] = [];
+  let drafts: EmailDraft[] = [];
+  await target.routeWebSocket(/\/ws\?/, (socket) => {
+    const server = socket.connectToServer();
+    server.onMessage((message) => socket.send(message));
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      calls.push(request);
+      const p = request.params;
+      let result: unknown = { ok: true };
+      if (request.method === "email.accounts.list") result = accounts;
+      else if (request.method === "email.drafts.list") result = drafts;
+      else if (request.method === "email.accounts.save") {
+        if (p.id) accounts = accounts.map((a) => ({ ...a, agentIds: p.agentIds }));
+        else {
+          accounts = [
+            {
+              ...p,
+              id: "eco-mail",
+              username: p.address,
+              hasPassword: true,
+              agentIds: [],
+              createdAt: Date.now(),
+            },
+          ];
+          drafts = [
+            {
+              id: "eco-draft",
+              agentId: bot.id,
+              accountId: "eco-mail",
+              to: ["review@example.com"],
+              cc: [],
+              subject: "Revisão",
+              body: "Revisar antes de enviar.",
+              inReplyTo: null,
+              status: "pending",
+              error: null,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          ];
+          socket.send(JSON.stringify({ event: "email.draft.updated", data: drafts[0] }));
+        }
+        socket.send(JSON.stringify({ event: "email.accounts.changed", data: {} }));
+      } else if (request.method === "email.accounts.test")
+        result = { ok: true, imap: "ok", smtp: "ok" };
+      else if (request.method === "email.accounts.delete") {
+        accounts = [];
+        socket.send(JSON.stringify({ event: "email.accounts.changed", data: {} }));
+      } else if (request.method === "email.drafts.update") result = { ...drafts[0], ...p };
+      else if (request.method === "email.drafts.send") {
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            error: { code: "internal", message: "Falha de envio" },
+          }),
+        );
+        return;
+      } else if (request.method === "email.drafts.discard") {
+        drafts = [];
+        socket.send(JSON.stringify({ event: "email.draft.updated", data: { agentId: bot.id } }));
+      } else {
+        server.send(message);
+        return;
+      }
+      socket.send(JSON.stringify({ id: request.id, result }));
+    });
+  });
+  try {
+    await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await target.getByRole("button", { name: "Configurações", exact: true }).click();
+    await target.getByRole("tab", { name: "E-mail", exact: true }).click();
+    await target.getByText("Nenhuma conta de e-mail ainda.", { exact: true }).waitFor();
+    await target.getByText("Nenhum rascunho ainda.", { exact: true }).waitFor();
+    expect(
+      await target
+        .getByLabel("Provedor de e-mail")
+        .evaluate((select) =>
+          Array.from((select as HTMLSelectElement).labels ?? []).map((label) => label.textContent),
+        ),
+    ).toEqual(["Provedor"]);
+    await target.locator("label", { hasText: "Provedor" }).waitFor();
+    await target.getByLabel("Provedor de e-mail").selectOption("custom");
+    for (const [label, value] of [
+      ["Nome (opcional)", "Fixture"],
+      ["Endereço de e-mail", "test@example.com"],
+      ["Senha de app", "fixture-password"],
+      ["Servidor IMAP", "imap.example.com"],
+      ["Porta IMAP", "993"],
+      ["Servidor SMTP", "smtp.example.com"],
+      ["Porta SMTP", "587"],
+    ]) {
+      await target.getByLabel(label, { exact: true }).fill(value);
+    }
+    await target.getByRole("button", { name: "Conectar", exact: true }).click();
+    const account = target.getByRole("listitem").filter({ hasText: "test@example.com" });
+    await account.waitFor();
+    expect(calls.findLast((c) => c.method === "email.accounts.save")?.params).toEqual({
+      provider: "custom",
+      address: "test@example.com",
+      password: "fixture-password",
+      label: "Fixture",
+      imapHost: "imap.example.com",
+      imapPort: 993,
+      smtpHost: "smtp.example.com",
+      smtpPort: 587,
+      smtpSecure: false,
+    });
+    await account.getByRole("button", { name: "Testar", exact: true }).click();
+    await account.getByText("Conectado", { exact: true }).waitFor();
+    const access = account.getByRole("checkbox", { name: bot.name, exact: true });
+    await access.click();
+    await target.waitForFunction(
+      (input) => input instanceof HTMLInputElement && !input.checked,
+      await access.elementHandle(),
+    );
+    expect(calls.findLast((c) => c.method === "email.accounts.save")?.params).toMatchObject({
+      id: "eco-mail",
+      provider: "custom",
+      address: "test@example.com",
+    });
+    const card = target.getByTestId("email-draft");
+    await card.getByLabel("Para", { exact: true }).fill("one@example.com; two@example.com");
+    await card.getByLabel("Cc", { exact: true }).fill("copy@example.com");
+    await card.getByLabel("Assunto", { exact: true }).fill("Revisado");
+    await card.getByLabel("Mensagem", { exact: true }).fill("Corpo revisado");
+    await card.getByRole("button", { name: "Enviar", exact: true }).click();
+    await card.getByRole("alert").filter({ hasText: "Falha de envio" }).waitFor();
+    const send = calls.findLastIndex((c) => c.method === "email.drafts.send");
+    expect(calls[send - 1]).toEqual({
+      ...calls[send - 1],
+      method: "email.drafts.update",
+      params: {
+        id: "eco-draft",
+        to: ["one@example.com", "two@example.com"],
+        cc: ["copy@example.com"],
+        subject: "Revisado",
+        body: "Corpo revisado",
+      },
+    });
+    await card.getByRole("button", { name: "Salvar", exact: true }).click();
+    await card.getByRole("alert").waitFor({ state: "detached" });
+    await card.getByRole("button", { name: "Descartar", exact: true }).click();
+    await card.waitFor({ state: "detached" });
+    await account.getByRole("button", { name: "Remover", exact: true }).click();
+    await target.getByText("Nenhuma conta de e-mail ainda.", { exact: true }).waitFor();
+  } finally {
+    await target.close();
+  }
+}, 30000);
+
+test("Hosts and E-mail settings expose query errors", async () => {
+  const target = await browser.newPage();
+  await target.routeWebSocket(/\/ws\?/, (socket) => {
+    const server = socket.connectToServer();
+    server.onMessage((message) => socket.send(message));
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      if (
+        ["hosts.list", "vmCredentials.list", "email.accounts.list", "email.drafts.list"].includes(
+          request.method,
+        )
+      ) {
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            error: { code: "internal", message: "Falha das integrações" },
+          }),
+        );
+      } else server.send(message);
+    });
+  });
+  try {
+    await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await target.getByRole("button", { name: "Configurações", exact: true }).click();
+    for (const tab of ["Servidores", "E-mail"]) {
+      await target.getByRole("tab", { name: tab, exact: true }).click();
+      await target
+        .getByRole("alert")
+        .filter({ hasText: "Falha das integrações" })
+        .first()
+        .waitFor();
+    }
+  } finally {
+    await target.close();
+  }
+}, 20000);
 
 test("capture matching prototype states when visual verification is requested", async () => {
   if (!out || !process.env.PHASE2_PROTOTYPE) return;
