@@ -350,6 +350,41 @@ test("startup drain of a lost approval opens Approvals with a notice, removes to
   }
 });
 
+test("restart preserves a delivered interrupted toast until its real callback opens the notice", async () => {
+  const before = harness();
+  await before.controller.start();
+  expect(before.posts).toHaveLength(1);
+  before.controller.stop();
+  const interrupted: Approval = {
+    ...pending,
+    status: "interrupted",
+    detail: "",
+    interruptedAt: 500,
+  };
+  const after = harness([interrupted], before.store);
+  try {
+    await after.controller.start();
+    expect(after.posts).toEqual([]);
+    expect(after.removals).toEqual([]);
+    await after.update(interrupted);
+    expect(after.removals).toEqual([]);
+    await after.controller.respond({ id: interrupted.id, action: "review" });
+    expect(after.notices).toEqual([INTERRUPTED_NOTICE]);
+    expect(after.removals).toEqual([interrupted.id]);
+    expect(after.calls.some((call) => call.method === "approvals.respond")).toBe(false);
+  } finally {
+    after.controller.stop();
+  }
+  const missing = harness([], before.store);
+  try {
+    await missing.controller.start();
+    expect(missing.removals).toEqual([pending.id]);
+    expect(missing.posts).toEqual([]);
+  } finally {
+    missing.controller.stop();
+  }
+});
+
 test("an approval interrupted by a daemon restart shows that state, removes the toast and never retries", async () => {
   const interrupted: Approval = {
     ...pending,

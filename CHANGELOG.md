@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+- Keep already delivered interrupted-approval notifications in Notification Center until
+  reviewed, so clicking them after a restart opens the specific interrupted notice.
+
 ### Added
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,

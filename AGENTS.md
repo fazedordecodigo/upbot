@@ -117,6 +117,8 @@ rebuilt from the tool/secret name; `approvals.respond` rejects them with `not_fo
 ("interrupted by a daemon restart"); nothing is resumed or re-run. UI: "Interrompido pelo
 reinício", no actions. Toast clicks for those IDs open Settings → Approvals with
 `INTERRUPTED_NOTICE` and remove the toast; unknown IDs keep the generic unavailable notice.
+Startup/reconnect preserves delivered interrupted toasts without posting them again;
+they are removed on review or when the retained interrupted record is pruned.
 Tests: `test/approvals-restart.e2e.test.ts` (SIGKILL and SIGTERM restarts),
 `test/approval-audit.test.ts`, desktop `test/notifications.test.ts`.
 Windows registers its COM activator before spawning the daemon; `-ToastActivated`

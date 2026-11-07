@@ -212,13 +212,16 @@ export class ApprovalNotifications {
     const sync = async () => {
       const approvals = await this.client.request("approvals.list", {});
       if (this.stopped) return;
-      const pending = new Set(
+      const retained = new Set(
         approvals
-          .filter((a) => a.status === "pending" && a.expiresAt > this.now())
+          .filter(
+            (a) =>
+              a.status === "interrupted" || (a.status === "pending" && a.expiresAt > this.now()),
+          )
           .map((a) => a.id),
       );
       for (const id of this.seen)
-        if (!pending.has(id) && !this.local.has(id)) await this.bridge.remove(id);
+        if (!retained.has(id) && !this.local.has(id)) await this.bridge.remove(id);
       for (const approval of approvals) update(approval);
       await this.events;
     };
@@ -232,6 +235,13 @@ export class ApprovalNotifications {
 
   private async update(approval: Approval) {
     if (this.stopped) return;
+    if (approval.status === "interrupted") {
+      this.active.delete(approval.id);
+      const timer = this.timers.get(approval.id);
+      if (timer !== undefined) clearTimeout(timer);
+      this.timers.delete(approval.id);
+      return;
+    }
     const notification = decisionNotification(
       approval,
       this.botName(approval.agentId),
