@@ -485,6 +485,32 @@ test("chat column max-width follows the Eco token", async () => {
   expect(maxWidth).toBe("760px");
 });
 
+test("Hosts and E-mail settings use scoped Eco controls without migrating composer drafts", () => {
+  const source = fileURLToPath(new URL("../src/components", import.meta.url));
+  for (const name of ["HostsView", "EmailView"]) {
+    const component = readFileSync(join(source, `${name}.tsx`), "utf8");
+    const css = readFileSync(join(source, `${name}.module.css`), "utf8");
+    const settings =
+      name === "EmailView"
+        ? component.slice(component.indexOf("export function EmailView"))
+        : component;
+    expect(component).toContain('from "./ds/controls"');
+    expect(settings).not.toMatch(/className="|btnCls|inputCls|<(?:button|select|textarea)\b/);
+    for (const match of css.matchAll(/var\((--[\w-]+)/g)) {
+      expect(match[1]?.startsWith("--boto-")).toBe(true);
+    }
+    if (name === "EmailView") {
+      expect(settings).toMatch(/<DraftCard\s+settings/);
+      const composer = component.slice(
+        component.indexOf("export function DraftCards"),
+        component.indexOf("export function EmailView"),
+      );
+      expect(composer).not.toContain("settings");
+      expect(component).toContain('const Action = settings ? Button : "button"');
+    }
+  }
+});
+
 test("build-tokens.ts leaves committed css unchanged", () => {
   const root = fileURLToPath(new URL("../../..", import.meta.url));
   const tokensPath = join(root, "apps/desktop/src/styles/tokens.css");
