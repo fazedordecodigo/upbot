@@ -1,5 +1,5 @@
 import type { Agent, EmailAccount, EmailDraft, EmailProvider } from "@boto/protocol";
-import { type InputHTMLAttributes, type TextareaHTMLAttributes, useState } from "react";
+import { type InputHTMLAttributes, type TextareaHTMLAttributes, useId, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { DaemonClient } from "../lib/daemon";
 import { errorMessage } from "../lib/errors";
@@ -227,6 +227,7 @@ export function DraftCards({ client, agentId }: { client: DaemonClient; agentId:
 }
 
 export function EmailView({ client, agents }: { client: DaemonClient; agents: Agent[] }) {
+  const providerId = useId();
   const { data: accounts = [], error: accountsError } = useAccounts(client);
   const { data: drafts = [], error: draftsError } = useDrafts(client);
   const [provider, setProvider] = useState<EmailProvider>("gmail");
@@ -359,16 +360,20 @@ export function EmailView({ client, agents }: { client: DaemonClient; agents: Ag
       >
         <h3 className={styles.subtitle}>Conectar uma conta</h3>
         <div className={styles.formRow}>
-          <Select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as EmailProvider)}
-            aria-label="Provedor de e-mail"
-          >
-            <option value="gmail">Gmail</option>
-            <option value="icloud">iCloud Mail</option>
-            <option value="outlook">Outlook</option>
-            <option value="custom">Outro (IMAP/SMTP)</option>
-          </Select>
+          <div className={styles.selectField}>
+            <label htmlFor={providerId}>Provedor</label>
+            <Select
+              id={providerId}
+              value={provider}
+              onChange={(e) => setProvider(e.target.value as EmailProvider)}
+              aria-label="Provedor de e-mail"
+            >
+              <option value="gmail">Gmail</option>
+              <option value="icloud">iCloud Mail</option>
+              <option value="outlook">Outlook</option>
+              <option value="custom">Outro (IMAP/SMTP)</option>
+            </Select>
+          </div>
           <Field
             label="Nome (opcional)"
             placeholder="Nome (opcional)"

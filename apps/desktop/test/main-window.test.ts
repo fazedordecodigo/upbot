@@ -1578,6 +1578,24 @@ test("Hosts settings retain creation, preflight, placement, credentials and acti
       vcpus: 2,
       memMib: 2048,
     });
+    for (const [name, label] of [
+      ["Provedor da microVM", "Provedor"],
+      ["Tipo de credencial", "Tipo de credencial"],
+    ]) {
+      expect(
+        await target
+          .getByLabel(name)
+          .evaluate((select) =>
+            Array.from((select as HTMLSelectElement).labels ?? []).map(
+              (label) => label.textContent,
+            ),
+          ),
+      ).toEqual([label]);
+      await target.locator("label", { hasText: label }).first().waitFor();
+    }
+    expect(
+      await target.getByLabel("Credencial da microVM", { exact: true }).getAttribute("placeholder"),
+    ).toBe("Token ou chave de API");
     await target.getByLabel("Provedor da microVM").selectOption("gemini");
     expect(await target.getByLabel("Tipo de credencial").inputValue()).toBe("api_key");
     await target
@@ -1682,6 +1700,14 @@ test("E-mail settings retain account fields, access, testing and isolated draft 
     await target.getByRole("tab", { name: "E-mail", exact: true }).click();
     await target.getByText("Nenhuma conta de e-mail ainda.", { exact: true }).waitFor();
     await target.getByText("Nenhum rascunho ainda.", { exact: true }).waitFor();
+    expect(
+      await target
+        .getByLabel("Provedor de e-mail")
+        .evaluate((select) =>
+          Array.from((select as HTMLSelectElement).labels ?? []).map((label) => label.textContent),
+        ),
+    ).toEqual(["Provedor"]);
+    await target.locator("label", { hasText: "Provedor" }).waitFor();
     await target.getByLabel("Provedor de e-mail").selectOption("custom");
     for (const [label, value] of [
       ["Nome (opcional)", "Fixture"],

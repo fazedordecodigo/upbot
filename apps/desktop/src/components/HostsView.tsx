@@ -6,7 +6,7 @@ import type {
   VmCredentialKind,
   VmCredentialProvider,
 } from "@boto/protocol";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { DaemonClient } from "../lib/daemon";
 import { errorMessage } from "../lib/errors";
@@ -65,6 +65,8 @@ function VmCredentials({
   client: DaemonClient;
   onError: (e: unknown) => void;
 }) {
+  const providerId = useId();
+  const kindId = useId();
   const {
     data: credsData,
     error: credsError,
@@ -111,7 +113,7 @@ function VmCredentials({
         </div>
       ))}
       <form
-        className={styles.formRow}
+        className={styles.credentialsForm}
         onSubmit={(e) => {
           e.preventDefault();
           client
@@ -123,37 +125,45 @@ function VmCredentials({
             .catch(onError);
         }}
       >
-        <Select
-          aria-label="Provedor da microVM"
-          value={form.provider}
-          onChange={(e) => {
-            const provider = e.target.value as VmCredentialProvider;
-            const kind = Object.keys(CRED_HINT[provider])[0] as VmCredentialKind;
-            setForm({ provider, kind, value: "" });
-          }}
-        >
-          <option value="claude">claude</option>
-          <option value="codex">codex</option>
-          <option value="gemini">gemini</option>
-          <option value="cursor">cursor</option>
-        </Select>
-        <Select
-          aria-label="Tipo de credencial"
-          value={form.kind}
-          onChange={(e) => setForm({ ...form, kind: e.target.value as VmCredentialKind })}
-        >
-          {kinds.map((k) => (
-            <option key={k} value={k}>
-              {k === "oauth_token" ? "Token de assinatura" : "Chave de API"}
-            </option>
-          ))}
-        </Select>
+        <div className={styles.selectField}>
+          <label htmlFor={providerId}>Provedor</label>
+          <Select
+            id={providerId}
+            aria-label="Provedor da microVM"
+            value={form.provider}
+            onChange={(e) => {
+              const provider = e.target.value as VmCredentialProvider;
+              const kind = Object.keys(CRED_HINT[provider])[0] as VmCredentialKind;
+              setForm({ provider, kind, value: "" });
+            }}
+          >
+            <option value="claude">claude</option>
+            <option value="codex">codex</option>
+            <option value="gemini">gemini</option>
+            <option value="cursor">cursor</option>
+          </Select>
+        </div>
+        <div className={styles.selectField}>
+          <label htmlFor={kindId}>Tipo de credencial</label>
+          <Select
+            id={kindId}
+            aria-label="Tipo de credencial"
+            value={form.kind}
+            onChange={(e) => setForm({ ...form, kind: e.target.value as VmCredentialKind })}
+          >
+            {kinds.map((k) => (
+              <option key={k} value={k}>
+                {k === "oauth_token" ? "Token de assinatura" : "Chave de API"}
+              </option>
+            ))}
+          </Select>
+        </div>
         <Field
           type="password"
           autoComplete="off"
           label="Credencial da microVM"
           hint={CRED_HINT[form.provider][form.kind] ?? ""}
-          placeholder={CRED_HINT[form.provider][form.kind]}
+          placeholder="Token ou chave de API"
           value={form.value}
           onChange={(e) => setForm({ ...form, value: e.target.value })}
           required

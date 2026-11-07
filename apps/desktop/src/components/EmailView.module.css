@@ -4,8 +4,11 @@
 .stack { display: flex; flex-direction: column; gap: var(--boto-space-3); list-style: none; margin: 0; padding: 0; }
 .card { display: flex; flex-direction: column; gap: var(--boto-space-4); padding: var(--boto-space-5); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-lg); background: var(--boto-color-surface); }
 .row, .formRow { display: flex; align-items: center; flex-wrap: wrap; gap: var(--boto-space-3); }
-.formRow { align-items: end; }
-.formRow > div, .formRow > select { flex: 1 1 220px; min-width: 0; }
+.formRow { align-items: start; }
+.formRow > div { flex: 1 1 220px; min-width: 0; }
+.selectField { display: flex; flex-direction: column; gap: calc(var(--boto-space-3) / 2); font-size: var(--boto-font-size-body); }
+.selectField label { font-size: var(--boto-font-size-small); font-weight: var(--boto-font-weight-medium); }
+.selectField select { width: 100%; }
 .muted { color: var(--boto-color-fg-muted); font-size: var(--boto-font-size-small); line-height: var(--boto-line-height-normal); }
 .name { font-weight: var(--boto-font-weight-semibold); }
 .push, .status { margin-left: auto; }
