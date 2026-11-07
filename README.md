@@ -114,6 +114,11 @@ bun run lint && bun run typecheck
 Architecture and conventions: [AGENTS.md](AGENTS.md). Contributions are welcome — see the
 [contributing guide](CONTRIBUTING.md).
 
+## Fonts
+
+The desktop app bundles Host Grotesk and DM Mono under the SIL Open Font License 1.1;
+the license texts ship in `apps/desktop/src/fonts/`.
+
 ## License
 
 [MIT](LICENSE)
