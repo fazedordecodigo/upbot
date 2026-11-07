@@ -15,118 +15,92 @@
   <img alt="macOS · Windows · Linux" src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-informational">
 </p>
 
-Boto is a local-first desktop app where a team of AI bots work together on your everyday
-tasks: researching and browsing the web, reading and organizing files, drafting emails and
-documents, and using your connected apps. Each bot has its own name, role, memory and chat —
-they message each other, delegate, share files through a shared workspace, and ask before
-doing anything consequential. Under the hood, Claude Code, Codex and other ACP agents
-(Devin, Cursor, Grok, OpenCode, Gemini) are the bots' brains.
+<p align="center">
+  <img src="docs/screenshots/chat.png" alt="Boto chat: a travel bot replies with a markdown itinerary" width="100%">
+</p>
 
-Everything runs on your machine. Your bots, chats and secrets stay in `~/Boto` (or the
-platform equivalent), secrets live in an encrypted vault, and nothing ever gets sent or
-written on your behalf without your approval.
+## What is Boto
 
-Pending approvals appear in the macOS Dock badge, Windows taskbar overlay (9+ above nine),
-and Linux launcher count where the desktop supports Unity badges with an installed
-desktop entry. The count clears at zero and stays visible while notification popups are muted.
-On macOS, allow notifications and badges for Boto. Existing installations may need to enable
-System Settings → Notifications → Boto → Badge application icon after upgrading.
+Boto is a local-first desktop app for a **team of AI bots** that work together on your
+everyday tasks: researching the web, organizing files, drafting e-mails and documents,
+and using your connected apps. Each bot has its own name, role, memory and chat — they
+message each other, delegate work and share a workspace, and ask before doing anything
+consequential.
 
-## Upgrading from UpBot
+Everything runs on your machine. Bots, chats and secrets stay in `~/Boto` (or the
+platform equivalent), secrets live in an encrypted vault, and nothing is sent or written
+on your behalf without your approval. The bots' brains are the AI agents you already use —
+Claude Code, Codex, Devin, Cursor, Grok, OpenCode and Gemini (ACP).
 
-Quit the old app before starting Boto. Boto moves the default `~/UpBot` (or older
-`~/BobAgent`) home to `~/Boto`, repoints stored bot workspaces, and migrates the
-`com.upbot.desktop` (or `com.bobagent.desktop`) app data directory to `com.boto.desktop`.
-The existing SQLite database becomes `boto.db`, including committed WAL records;
-vault keys from the old Keychain/Secret Service names remain readable. Existing Boto
-directories/databases are never overwritten or merged. Custom workspace roots stay put.
+## Features
 
-Update custom environment variables from `UPBOT_*` to `BOTO_*`. The daemon is now
-`botod`, the remote helper is `boto-host`, and the MCP server is `boto`.
-For remote hosts, stop active sessions, use **Install** again in Settings → Hosts to
-migrate the default `~/.upbot` directory to `~/.boto` and upload the new helper, then
-rebuild the Firecracker rootfs before launching microVMs. Persistent workspace disks
-are retained. Custom host roots require the matching `BOTO_HOST_ROOT` setting.
-The repository moved to `fazedordecodigo/boto`. Old `upbot` URLs redirect, so installed
-UpBot apps still receive updates; saved UpBot/BobAgent marketplace sources migrate
-automatically without duplicating entries.
+- **A team, not a chatbot** — bots with their own roles and memories collaborate in group
+  chats you can watch and steer.
+- **Bots that do real work** — browse the web, manage files, read your e-mail and prepare
+  drafts (only you send), and publish HTML reports and trackers to a local Pages library.
+- **You're always in control** — granular approval rules, secure secret requests, browser
+  take-over for sign-ins, native notifications and pending-approval badges on every OS.
+- **Connected apps** — Notion, GitHub, Brave Search, Airtable, Stripe or any MCP server,
+  shared with the bots you choose; tokens stay in the vault.
+- **Reachable everywhere** — Telegram, Slack, Discord, a mobile companion on your LAN,
+  team relay, and routines on schedules and webhooks.
+- **Built to grow** — skills library, marketplace of skills and bot templates, bots created
+  from a prompt, and bots running on your Mac/PC or on your own Linux VPS in Firecracker
+  microVMs.
 
-## Why you'll like it
-
-- **A team, not a chatbot.** Create bots with their own roles and memories; they talk to
-  each other, hand off files and work together in group chats you can watch and steer.
-- **Bots that do real work.** They browse the web in their own Chrome tabs, organize your
-  files, read your email and prepare drafts, and publish HTML reports, dashboards and
-  trackers to a local Pages library.
-- **You're always in control.** Ask-first / allow-automatically approval rules, secure
-  secret requests, browser take-over for sign-ins and CAPTCHAs — and a draft is never sent
-  until you click Send.
-- **Connected, on your terms.** Connect Notion, GitHub, Brave Search, Airtable, Stripe or
-  any MCP server once and share them with the bots you choose; tokens stay in the vault.
-- **Everywhere you are.** Reach your bots from Telegram, Slack, Discord, the mobile
-  companion on your LAN, or share them with a team relay — plus routines on schedules and
-  webhooks.
-- **Built to grow.** A skills library, a marketplace of skills and bot templates, and bots
-  you can create from a prompt — then run them on your Mac/PC, or on your own Linux VPS in
-  Firecracker microVMs.
-
-Built with Bun, SQLite, Tauri 2 (Rust) and React. The desktop UI uses the Eco palette
-(Água preta, Rosa, Ametista and Névoa) and the Host Grotesk and DM Mono typefaces.
-See `docs/design-system.md`.
-
-| Marketplace | Gateways |
+| Approvals | Group chats |
 |---|---|
-| ![Marketplace](docs/screenshots/marketplace.png) | ![Gateways](docs/screenshots/gateways.png) |
-| **Mobile companion** | **Team relay** |
-| ![Mobile](docs/screenshots/mobile.png) | ![Team](docs/screenshots/team.png) |
+| ![Approvals](docs/screenshots/approvals.png) | ![Group chat](docs/screenshots/group-chat.png) |
+| **Connected apps** | **Marketplace** |
+| ![Connected apps](docs/screenshots/apps.png) | ![Marketplace](docs/screenshots/marketplace.png) |
 
-## Get Boto
+## Install
 
 Download the installer for your OS from [Releases](https://github.com/fazedordecodigo/boto/releases):
 
 - **macOS:** install the `.dmg`; the app updates itself. Signed and notarized builds open
   normally. For unsigned builds, open System Settings → Privacy & Security and click
-  **Open Anyway** (or run `xattr -cr /Applications/Boto.app`). Versions before 0.2.1 were
-  reported as "damaged"; use the `xattr` command for those.
-- **Windows x64 / ARM64:** run the matching per-user `.exe` installer. Signed builds show the publisher;
-  SmartScreen may still warn until reputation builds, especially with OV certificates.
-  For unsigned builds, SmartScreen may warn: choose **More info → Run anyway** (in Portuguese,
-  **Mais informações → Executar assim mesmo**).
-- **Linux x64 / ARM64:** use the matching `.AppImage` for in-app updates
-  (`chmod +x Boto_*.AppImage`, then run it), or install the `.deb` with
-  `sudo apt install ./Boto_*.deb` or the `.rpm` with `sudo dnf install ./Boto-*.rpm`.
-  RPM and deb packages do not self-update; install newer releases manually.
+  **Open Anyway** (or run `xattr -cr /Applications/Boto.app`).
+- **Windows x64 / ARM64:** run the matching per-user `.exe` installer. SmartScreen may warn
+  on unsigned builds: choose **More info → Run anyway**.
+- **Linux x64 / ARM64:** use the `.AppImage` for in-app updates (`chmod +x Boto_*.AppImage`),
+  or install the `.deb` with `sudo apt install ./Boto_*.deb` or the `.rpm` with
+  `sudo dnf install ./Boto-*.rpm`. Packages do not self-update.
 
-On Linux, install `libsecret-tools` to store the vault key in Secret Service. Otherwise
-Boto uses a plaintext key file with owner-only permissions and warns at startup. Windows
-stores new keys using DPAPI, and macOS uses Keychain. Computer Use supports macOS, Windows and Linux X11, and remains opt-in per bot with approval gating.
-On Linux install `xdotool` and one of ImageMagick (`import`), `scrot` or `gnome-screenshot`;
-Wayland and missing tools/display are reported as unavailable in bot settings. Windows uses
-Windows PowerShell/.NET and cannot control elevated windows or UAC prompts. macOS requires
-Screen Recording and Accessibility permission. Coordinates are screen points on macOS and
-screen pixels on Windows/Linux (Linux captures the X11 desktop).
-Read-aloud works out of the box with `say` on macOS and System.Speech (Windows PowerShell) on
-Windows; on Linux install `espeak-ng` (or `espeak`, or use a running `speech-dispatcher`). Voice
-input needs `whisper` on PATH or `BOTO_STT_COMMAND`; `BOTO_TTS_COMMAND` overrides read-aloud.
+On Linux, install `libsecret-tools` to keep the vault key in Secret Service (otherwise a
+plaintext key file with owner-only permissions is used, with a startup warning). Computer
+Use needs `xdotool` and a screenshot tool (`import`, `scrot` or `gnome-screenshot`) and
+remains opt-in per bot; read-aloud uses `espeak-ng` when available.
 
-Boto was previously called UpBot (and originally BobAgent). The next release is 0.5.0;
-0.4.0 was released as UpBot. Updating migrates `~/UpBot` or `~/BobAgent` to `~/Boto`
-and keeps your bots, chats and vault.
+## Evolution
+
+Boto was BobAgent, then UpBot, and is now Boto — each rename migrated your bots, chats and
+vault automatically. The next release is **0.5.0**, which brings:
+
+- the new Eco design system (dark theme, Host Grotesk and DM Mono fonts) and a
+  Brazilian Portuguese interface;
+- native approval notifications on Linux (freedesktop D-Bus) and pending-approval badges
+  on macOS, Windows and Linux;
+- a persistent approval audit trail, interrupted-approval recovery after restarts, and
+  Devin and Grok running inside Firecracker microVMs;
+- routine run history, skill versioning and many reliability fixes.
+
+See the [changelog](CHANGELOG.md) for the full history.
+
+### Upgrading from UpBot
+
+Quit the old app before starting Boto. It moves `~/UpBot` (or `~/BobAgent`) to `~/Boto`,
+repoints bot workspaces, migrates the app data directory to `com.boto.desktop` and keeps
+your vault readable. Custom `UPBOT_*` environment variables become `BOTO_*`; for remote
+hosts, reinstall from Settings → Hosts and rebuild the microVM rootfs. Details and edge
+cases: [AGENTS.md](AGENTS.md#bots-general-purpose).
 
 ## Run bots on your own server
 
 Point Boto at a Linux VPS and each bot session can run there instead — as a plain process
-or inside its own Firecracker microVM, with credentials delivered only inside the VM. Setup
-guide, host requirements and microVM internals:
+or inside its own Firecracker microVM, with credentials delivered only inside the VM.
+Setup guide, host requirements and microVM internals:
 [docs/remote-hosts.md](docs/remote-hosts.md).
-
-The Firecracker image supports Claude, Codex, Gemini, OpenCode, Cursor, Devin and Grok.
-Build with `--providers "claude codex gemini opencode cursor devin grok" --size-mib 8192`.
-Devin 3000.12.17 and Grok 1.0.77 install under `/opt/devin-home` and `/opt/grok-home`
-(not the persistent `/root` mount). Override pins with `DEVIN_CLI_VERSION` and
-`GROK_CLI_VERSION`. Settings → Hosts accepts Devin's Windsurf API key and Grok's
-xAI API key, delivered only to VM provider processes. Grok uses headless API-key
-authentication and disables auto-update for remote ACP sessions.
 
 ## Develop
 
@@ -135,36 +109,10 @@ bun install
 bun run dev          # sidecar + tauri dev
 bun run test         # daemon e2e tests
 bun run lint && bun run typecheck
-bun run build:app    # debug bundle for the host platform
 ```
 
-Architecture and conventions: [AGENTS.md](AGENTS.md).
-
-## Contributing
-
-Boto is better with more hands — PRs, ideas, bug reports and skills for the marketplace
-are all welcome. The [contributing guide](CONTRIBUTING.md) covers setup, the pre-PR
-checklist and the few rules that keep the codebase easy to review, and
-[AGENTS.md](AGENTS.md) explains how everything fits together.
-
-Meet the people who built it so far:
-
-<a href="https://github.com/fazedordecodigo/boto/graphs/contributors">
-  <img alt="Boto contributors" src="https://contrib.rocks/image?repo=fazedordecodigo/boto">
-</a>
-
-Want to add yourself? Pick an [issue](https://github.com/fazedordecodigo/boto/issues) or
-open a small PR — focused changes get reviewed fastest. See the
-[changelog](CHANGELOG.md) for what's shipped.
-
-## Fonts
-
-The desktop app bundles two fonts under the SIL Open Font License 1.1. The license
-text ships next to the files in `apps/desktop/src/fonts/`. Neither license declares
-a Reserved Font Name.
-
-- Host Grotesk — Copyright 2023 The Host Grotesk Project Authors. See `OFL-HostGrotesk.txt`.
-- DM Mono — Copyright 2020 The DM Mono Project Authors. See `OFL-DMMono.txt`.
+Architecture and conventions: [AGENTS.md](AGENTS.md). Contributions are welcome — see the
+[contributing guide](CONTRIBUTING.md).
 
 ## License
 
