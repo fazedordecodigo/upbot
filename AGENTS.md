@@ -400,10 +400,15 @@ returning them: `connector.github` -> `github_api` (REST proxy, token redacted,
 `BOTO_GITHUB_API` for tests); `connector.1password` -> `onepassword_read` (`op read`,
 optional service-account token); `connector.bitwarden` -> `bitwarden_get` (`bw get`,
 BW_SESSION). `BOTO_OP_COMMAND`/`BOTO_BW_COMMAND` override the CLIs.
-Computer Use (`src/computer.ts`, macOS): off per agent until `computer.setAccess`; bridge
+Computer Use (`src/computer.ts`, `src/computer-platform.ts`): off per agent until `computer.setAccess`; bridge
 `computer_screenshot` (screencapture), `computer_click` (CoreGraphics via JXA),
 `computer_type`, `computer_key` (System Events, whitelisted keys/modifiers);
-`BOTO_COMPUTER_DRYRUN=<file>` logs commands instead (tests).
+Windows uses PowerShell/.NET System.Drawing, user32 mouse input and Unicode SendInput.
+Linux requires X11, xdotool and import (ImageMagick), scrot or gnome-screenshot.
+`computer.access` includes an unavailable reason for Wayland/missing tools/display; the UI shows it.
+Command/option map to Win/Super and Alt outside macOS; whitelist and approval gating are unchanged.
+`BOTO_COMPUTER_DRYRUN=<file>` logs platform commands instead (tests); Windows typing payload
+is passed only in the child environment to avoid command-line limits. Tests: `test/computer-platform.test.ts`.
 Voice (`src/voice.ts`): `voice.speak` uses `BOTO_TTS_COMMAND` (text on stdin) or the
 built-in default from `ttsCommand`: macOS `say`; Windows `powershell` (Windows PowerShell 5.1,
 then `%SystemRoot%` path; pwsh lacks System.Speech) running the fixed `WINDOWS_SPEECH_SCRIPT`
@@ -594,9 +599,9 @@ in `default` when the user settings set `auto_edit` or `yolo`. Settings cannot s
 - `bun run build:app` — build the debug desktop bundle for the host platform (macOS app,
   Linux AppImage/deb, or Windows NSIS).
 - `bun run test` — `bun test packages/daemon packages/host apps/desktop/test` (daemon e2e and desktop browser tests).
-- Computer Use is macOS-only. Built-in read-aloud uses `say` (macOS), System.Speech via
-  Windows PowerShell (Windows) or espeak-ng/espeak/Speech Dispatcher (Linux). Linux uses Secret
-  Service for the vault key when available, while Windows uses DPAPI.
+- Computer Use supports macOS, Windows and Linux X11. Built-in read-aloud uses `say` (macOS),
+  System.Speech via Windows PowerShell (Windows) or espeak-ng/espeak/Speech Dispatcher (Linux).
+  Linux uses Secret Service for the vault key when available, while Windows uses DPAPI.
 - `bun run lint` — `biome check .`
 - `bun run typecheck` — `tsc -p` for protocol, daemon, relay, host, desktop (sequential).
 - `cd apps/desktop/src-tauri && cargo check` — Rust side.

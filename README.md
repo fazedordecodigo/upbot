@@ -91,7 +91,12 @@ Download the installer for your OS from [Releases](https://github.com/fazedordec
 
 On Linux, install `libsecret-tools` to store the vault key in Secret Service. Otherwise
 Boto uses a plaintext key file with owner-only permissions and warns at startup. Windows
-stores new keys using DPAPI, and macOS uses Keychain. Computer Use is macOS-only.
+stores new keys using DPAPI, and macOS uses Keychain. Computer Use supports macOS, Windows and Linux X11, and remains opt-in per bot with approval gating.
+On Linux install `xdotool` and one of ImageMagick (`import`), `scrot` or `gnome-screenshot`;
+Wayland and missing tools/display are reported as unavailable in bot settings. Windows uses
+Windows PowerShell/.NET and cannot control elevated windows or UAC prompts. macOS requires
+Screen Recording and Accessibility permission. Coordinates are screen points on macOS and
+screen pixels on Windows/Linux (Linux captures the X11 desktop).
 Read-aloud works out of the box with `say` on macOS and System.Speech (Windows PowerShell) on
 Windows; on Linux install `espeak-ng` (or `espeak`, or use a running `speech-dispatcher`). Voice
 input needs `whisper` on PATH or `BOTO_STT_COMMAND`; `BOTO_TTS_COMMAND` overrides read-aloud.

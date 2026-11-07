@@ -26,7 +26,7 @@ import {
 } from "../lib/agent-config";
 import type { DaemonClient } from "../lib/daemon";
 import { errorMessage } from "../lib/errors";
-import { isWindows, mod } from "../lib/platform";
+import { isMac, isWindows, mod } from "../lib/platform";
 import s from "./AgentConfigScreen.module.css";
 import { PermissionNotice } from "./AgentSettings";
 import { Button, Field, SegmentedControl, Switch } from "./ds/controls";
@@ -192,7 +192,11 @@ export function AgentConfigScreen({
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [optionsError, setOptionsError] = useState("");
   const [routines, setRoutines] = useState<Routine[]>([]);
-  const [computer, setComputer] = useState({ available: false, agentIds: [] as string[] });
+  const [computer, setComputer] = useState<{
+    available: boolean;
+    reason?: string | undefined;
+    agentIds: string[];
+  }>({ available: false, agentIds: [] });
   const [apps, setApps] = useState<ConnectedApp[]>([]);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
   const [memoryText, setMemoryText] = useState("");
@@ -802,17 +806,21 @@ export function AgentConfigScreen({
               {!draft.routines.length && <p className={s.empty}>Nenhuma rotina ainda.</p>}
             </div>
           </section>
-          {computer.available && (
+          {(computer.available || computer.reason) && (
             <section className={s.section}>
               <h2>Acesso</h2>
               <div className={s.box}>
                 <div className={`${s.row} ${s.rowSplit}`}>
                   <div>
                     <b>Usar o computador</b>
-                    <p>Ver a tela e controlar mouse e teclado. Pergunta antes de cada sessão.</p>
+                    <p>
+                      {computer.reason ??
+                        "Ver a tela e controlar mouse e teclado. Pergunta antes de cada sessão."}
+                    </p>
                   </div>
                   <Switch
                     checked={draft.computerUse}
+                    disabled={!computer.available && !draft.computerUse}
                     aria-label="Usar o computador"
                     onCheckedChange={(value) => {
                       if (value) setDialog("computer");
@@ -929,7 +937,7 @@ export function AgentConfigScreen({
       )}
       {dialog === "computer" && (
         <LayerDialog
-          title="Deixar o agente usar o computador?"
+          title="Deixar o bot usar o computador?"
           onClose={() => setDialog(null)}
           initialFocus='[data-action="allow"]'
           {...(isWindows ? { testId: "computer-dialog-windows" } : {})}
@@ -957,8 +965,10 @@ export function AgentConfigScreen({
             </ul>
             <p className={s.computerNote}>
               {isWindows
-                ? "O Windows não pede permissão à parte. O agente não controla janelas abertas como administrador nem os avisos do Controle de Conta de Usuário."
-                : "Na primeira vez, o macOS pede as permissões de Gravação de Tela e Acessibilidade."}
+                ? "O Windows não pede permissão à parte. O bot não controla janelas abertas como administrador nem os avisos do Controle de Conta de Usuário."
+                : isMac
+                  ? "Na primeira vez, o macOS pede as permissões de Gravação de Tela e Acessibilidade."
+                  : "No Linux, é preciso uma sessão X11, xdotool e import (ImageMagick), scrot ou gnome-screenshot. Wayland não é suportado."}
             </p>
           </div>
           <footer className={isWindows ? s.windowsButtons : undefined}>

@@ -9,6 +9,7 @@
   sign-in error after 30 seconds.
 
 ### Added
+- Opt-in Computer Use on Windows and Linux X11, with unavailable reasons for Wayland or missing tools.
 - Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases.
 - Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
   Authenticode signing; releases reject incomplete signing secrets and verify signatures.
