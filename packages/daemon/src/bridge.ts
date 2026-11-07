@@ -543,6 +543,7 @@ export class Bridge {
     }
     if (body.method !== "tools/call")
       throw new Error(`unknown bridge method ${String(body.method)}`);
+    this.runtimes().bridgeActivity(agentId);
     const params = (body.params ?? {}) as Json;
     const args = (params.arguments ?? {}) as Json;
     const startedAt = Date.now();

@@ -80,6 +80,10 @@ export class RuntimeManager {
     return this.runtimes.get(agentId)?.currentHops() ?? 0;
   }
 
+  bridgeActivity(agentId: string): void {
+    this.runtimes.get(agentId)?.bridgeActivity();
+  }
+
   getQueue(agentId: string): QueueState {
     if (!this.agents.get(agentId)) throw new RpcError("not_found", "agent not found");
     const rt = this.runtimes.get(agentId);
