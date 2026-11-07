@@ -82,3 +82,7 @@ Alguns módulos ainda declaram peso 700 ou 800 por cima da regra global (`AgentC
 - anel de foco de 2px com folga de 3px;
 - alvo de pelo menos 44px;
 - `bun scripts/build-tokens.ts` sem diff no CSS commitado.
+
+## Integrações secundárias
+
+Servidores (`HostsView.tsx`) e E-mail (`EmailView.tsx`) usam os controles de `components/ds/` e seus próprios CSS Modules com tokens `--boto-*`, sem layouts utilitários Tailwind, com textos em pt-BR. Os rascunhos do compositor mantêm sua apresentação existente; a apresentação Eco é ativada apenas nas configurações de E-mail. As telas de `Library.tsx` são migradas em um PR separado.

@@ -8,6 +8,10 @@
   and platform-secure vault key storage.
 - Linux and Windows CI checks and multi-platform updater releases.
 
+### Changed
+- Updated remote host and email settings to Eco design-system controls and layouts, with
+  Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
+
 ## 0.3.0
 
 ### Changed

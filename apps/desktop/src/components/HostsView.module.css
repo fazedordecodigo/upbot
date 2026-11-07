@@ -1,0 +1,21 @@
+.page { width: 100%; max-width: 880px; margin: 0 auto; padding: var(--boto-space-8) var(--boto-space-6) var(--boto-space-12); display: flex; flex-direction: column; gap: var(--boto-space-6); color: var(--boto-color-fg); font-family: var(--boto-font-sans); overflow-wrap: anywhere; }
+.title { font-size: var(--boto-font-size-title); font-weight: var(--boto-font-weight-semibold); }
+.subtitle { font-size: var(--boto-font-size-lead); font-weight: var(--boto-font-weight-semibold); }
+.stack { display: flex; flex-direction: column; gap: var(--boto-space-3); }
+.row, .formRow { display: flex; align-items: center; flex-wrap: wrap; gap: var(--boto-space-3); }
+.formRow { align-items: end; }
+.formRow > div { flex: 1 1 220px; min-width: 0; }
+.hostForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--boto-space-3); border: 1px dashed var(--boto-color-border); border-radius: var(--boto-radius-lg); padding: var(--boto-space-5); }
+.card { display: flex; flex-direction: column; gap: var(--boto-space-4); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-lg); padding: var(--boto-space-5); background: var(--boto-color-surface); }
+.muted, .warning, .ready, .preflight { font-size: var(--boto-font-size-small); color: var(--boto-color-fg-muted); line-height: var(--boto-line-height-normal); }
+.warning, .error { color: var(--boto-color-danger-text); }
+.error { font-size: var(--boto-font-size-small); }
+.preflight { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--boto-space-2) var(--boto-space-4); }
+.name { font-weight: var(--boto-font-weight-semibold); }
+.provider { min-width: 80px; }
+.grow { flex: 1; }
+.botName { width: 160px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.truncate { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.action { flex: none; }
+.row select { max-width: 100%; }
+@media (max-width: 759px) { .page { padding: var(--boto-space-6) var(--boto-space-4) var(--boto-space-8); } .hostForm, .preflight { grid-template-columns: minmax(0, 1fr); } }
