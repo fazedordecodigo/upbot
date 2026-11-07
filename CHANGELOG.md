@@ -10,7 +10,13 @@
   dark theme, responsive navigation and keyboard/accessibility improvements.
 - Improved chat streaming performance and rendered bot replies as Markdown.
 
+### Fixed
+- OpenCode turns waiting on bridge tools or user approvals no longer fail with a spurious
+  sign-in error after 30 seconds.
+
 ### Added
+- Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
+  Authenticode signing; releases reject incomplete signing secrets and verify signatures.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.
