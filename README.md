@@ -26,6 +26,12 @@ Everything runs on your machine. Your bots, chats and secrets stay in `~/Boto` (
 platform equivalent), secrets live in an encrypted vault, and nothing ever gets sent or
 written on your behalf without your approval.
 
+Pending approvals appear in the macOS Dock badge, Windows taskbar overlay (9+ above nine),
+and Linux launcher count where the desktop supports Unity badges with an installed
+desktop entry. The count clears at zero and stays visible while notification popups are muted.
+On macOS, allow notifications and badges for Boto. Existing installations may need to enable
+System Settings → Notifications → Boto → Badge application icon after upgrading.
+
 ## Upgrading from UpBot
 
 Quit the old app before starting Boto. Boto moves the default `~/UpBot` (or older
