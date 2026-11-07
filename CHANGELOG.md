@@ -10,6 +10,9 @@
 - Request macOS badge authorization so pending-approval Dock counts can appear. Existing
   installations may need to enable Badge application icon in Boto's notification settings.
 
+- OpenCode turns waiting on bridge tools or user approvals no longer fail with a spurious
+  sign-in error after 30 seconds.
+
 ### Added
 - Pending-approval badges on the macOS Dock, Windows taskbar and supported Linux launchers,
   independent of popup notification mute.
