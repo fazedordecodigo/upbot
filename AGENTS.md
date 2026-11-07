@@ -106,9 +106,22 @@ per-user COM activation registration; mute uses SuppressPopup plus silent audio 
 is also in the toast context menu. General settings expose mute on every platform.
 Native callbacks queue actions until the main frontend can drain them; the daemon
 remains authoritative. Optional dock/taskbar badges are not implemented.
-Pending approvals and their blocked calls are memory-only: after daemon shutdown,
-toast decisions cannot recover them. Missing IDs open Settings → Approvals with an
-unavailable notice and remove the toast, without retrying or fabricating approval.
+Blocked calls are memory-only and die with the daemon. Pending approvals are mirrored in
+`approval_records` (migration 22) with only the audit fields (kind, tool, secretName, app
+id/name, permission, background, expiresAt — never args, detail, bot-written titles or secret
+values); a decision or expiry deletes the row. `ApprovalService.suspend()` runs first on
+shutdown so closing runtimes do not expire them. On start, `interruptLeftovers()` marks leftover
+rows `interrupted` (`interruptedAt`) and writes `approval.interrupted` (reason `daemon_restart`)
+in one transaction per approval (a failed audit write keeps the row pending for the next
+start), and keeps the latest 50. `approvals.list` returns them with `detail: ""` and a title
+rebuilt from the tool/secret name; `approvals.respond` rejects them with `not_found`
+("interrupted by a daemon restart"); nothing is resumed or re-run. UI: "Interrompido pelo
+reinício", no actions. Toast clicks for those IDs open Settings → Approvals with
+`INTERRUPTED_NOTICE` and remove the toast; unknown IDs keep the generic unavailable notice.
+Startup/reconnect preserves delivered interrupted toasts without posting them again;
+they are removed on review or when the retained interrupted record is pruned.
+Tests: `test/approvals-restart.e2e.test.ts` (SIGKILL and SIGTERM restarts),
+`test/approval-audit.test.ts`, desktop `test/notifications.test.ts`.
 Windows registers its COM activator before spawning the daemon; `-ToastActivated`
 payloads and COM callbacks share the native queue. The single-instance plugin forwards
 second-launch arguments and focuses the existing window before another daemon starts.
@@ -207,8 +220,24 @@ Env vars (daemon):
   (`0` kills immediately).
 
 Sign-in commands surfaced on auth errors: `devin auth login`, `agent login`,
-`grok login`, `opencode auth login`, `claude auth login`, `codex login` (all verified via --help). Gemini: `gemini`
-interactive sign-in — UNVERIFIED, CLI not installed.
+`grok login`, `opencode auth login`, `claude auth login`, `codex login` (all verified via --help).
+Gemini has no login subcommand: the message says to run `gemini` and pick Sign in with Google,
+Use Gemini API Key or Vertex AI (`LOGIN_HINTS`).
+
+Gemini CLI (verified 0.65.0 and 0.67.0 with `spikes/acp-probe.ts`, plus the daemon with the real
+binary): Boto runs `gemini --acp`; `--experimental-acp` still works but `--help` marks it
+deprecated. `initialize` returns authMethods oauth-personal, gemini-api-key, vertex-ai and gateway.
+`session/new` reads `security.auth.selectedType` from settings and falls back to gemini-api-key.
+With no method and no `GEMINI_API_KEY`, it fails with -32000 `Gemini API key is missing or not
+configured.`, which maps to `auth_required`. Interactive `gemini` shows the auth picker and saves the
+choice to `~/.gemini/settings.json`. An API key entered there is stored by the CLI (on a host with
+no keychain: `~/.gemini/gemini-credentials.json`), and `--acp` uses it without env. If
+oauth-personal is selected without cached creds, the CLI exits 41 before `initialize`. Its stderr
+then shows `Failed to authenticate with user code.` (AUTH_RE). `classifyStartupError` quotes only
+the stderr line that matched, not the stack. A bad key fails at `session/prompt` with HTTP 400
+`API key not valid`.
+Gemini exposes legacy ACP `modes` (default, autoEdit, yolo, plan; `currentModeId` default), not
+`configOptions`, so `DEFAULT_MODE` does not apply. Its approval level comes from its own settings.
 
 `bun run smoke:ui` — real-Chrome UI smoke (playwright-core, dev-only
 `location.hash` connect path in daemon.ts — dead code in prod builds).
@@ -377,10 +406,15 @@ returning them: `connector.github` -> `github_api` (REST proxy, token redacted,
 `BOTO_GITHUB_API` for tests); `connector.1password` -> `onepassword_read` (`op read`,
 optional service-account token); `connector.bitwarden` -> `bitwarden_get` (`bw get`,
 BW_SESSION). `BOTO_OP_COMMAND`/`BOTO_BW_COMMAND` override the CLIs.
-Computer Use (`src/computer.ts`, macOS): off per agent until `computer.setAccess`; bridge
+Computer Use (`src/computer.ts`, `src/computer-platform.ts`): off per agent until `computer.setAccess`; bridge
 `computer_screenshot` (screencapture), `computer_click` (CoreGraphics via JXA),
 `computer_type`, `computer_key` (System Events, whitelisted keys/modifiers);
-`BOTO_COMPUTER_DRYRUN=<file>` logs commands instead (tests).
+Windows uses PowerShell/.NET System.Drawing, user32 mouse input and Unicode SendInput.
+Linux requires X11, xdotool and import (ImageMagick), scrot or gnome-screenshot.
+`computer.access` includes an unavailable reason for Wayland/missing tools/display; the UI shows it.
+Command/option map to Win/Super and Alt outside macOS; whitelist and approval gating are unchanged.
+`BOTO_COMPUTER_DRYRUN=<file>` logs platform commands instead (tests); Windows typing payload
+is passed only in the child environment to avoid command-line limits. Tests: `test/computer-platform.test.ts`.
 Voice (`src/voice.ts`): `voice.speak` (`say`, or `BOTO_TTS_COMMAND` with text on
 stdin), `voice.transcribe` (`BOTO_STT_COMMAND` with `{file}`, or `whisper` on PATH),
 `voice.status`. UI: Vault view, Computer Use toggle, composer mic, read-aloud button;
@@ -551,7 +585,12 @@ Provider agents ask for approval only when THEIR OWN config says so
 (`PROVIDER_PERMISSION_CONFIG` in `packages/protocol` maps provider -> config path).
 The UI shows this as a notice; we never change or sandbox those configs.
 Note: `spikes/out/mode-probe.json` was measured with the user's permissive global
-configs, so it does not reflect stock defaults. Gemini's config path is unverified.
+configs, so it does not reflect stock defaults. Gemini (verified 0.65.0/0.67.0) reads user
+`~/.gemini/settings.json` (`$GEMINI_CLI_HOME/.gemini` when set), workspace `.gemini/settings.json`
+and a system file such as `/etc/gemini-cli/settings.json`. `general.defaultApprovalMode` defaults
+to `default` (prompts) and also accepts auto_edit or plan. Under `--acp`, the session still started
+in `default` when the user settings set `auto_edit` or `yolo`. Settings cannot select yolo; only
+`--yolo` or `--approval-mode` can.
 
 ## Verified commands (run from repo root)
 
@@ -563,7 +602,7 @@ configs, so it does not reflect stock defaults. Gemini's config path is unverifi
 - `bun run build:app` — build the debug desktop bundle for the host platform (macOS app,
   Linux AppImage/deb, or Windows NSIS).
 - `bun run test` — `bun test packages/daemon packages/host apps/desktop/test` (daemon e2e and desktop browser tests).
-- Computer Use and built-in `say` voice are macOS-only; Linux uses Secret Service for the
+- Computer Use supports macOS, Windows and Linux X11; built-in `say` voice is macOS-only; Linux uses Secret Service for the
   vault key when available, while Windows uses DPAPI.
 - `bun run lint` — `biome check .`
 - `bun run typecheck` — `tsc -p` for protocol, daemon, relay, host, desktop (sequential).

@@ -113,11 +113,15 @@ let dbRef: { close(): void } | null = null;
 let serverRef: { stop(): void } | null = null;
 let runtimesRef: { closeAll(): Promise<void> } | null = null;
 let gatewaysRef: { stopAll(): void } | null = null;
+let approvalsSuspendRef: { suspend(): void } | null = null;
 
 function shutdown(code: number, reason: string) {
   if (shuttingDown) return;
   shuttingDown = true;
   log("shutting down", { reason, code });
+  try {
+    approvalsSuspendRef?.suspend();
+  } catch {}
   try {
     gatewaysRef?.stopAll();
   } catch {}
@@ -223,6 +227,8 @@ async function main() {
   const apps = new AppsService(db, vault, broadcast);
   bridge.apps = apps;
   const approvals = new ApprovalService(db, vault, () => runtimes, broadcast, apps);
+  approvals.interruptLeftovers();
+  approvalsSuspendRef = approvals;
   bridge.approvals = approvals;
   const pages = new PageLibrary(db, workspaceRoot, broadcast);
   bridge.pages = pages;

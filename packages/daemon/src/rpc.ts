@@ -420,7 +420,7 @@ export class Rpc {
         return { ok: true };
       case "computer.access":
         return {
-          available: this.extras.computer.available(),
+          ...this.extras.computer.status(),
           agentIds: this.extras.computer.access(),
         };
       case "computer.setAccess": {

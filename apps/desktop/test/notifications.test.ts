@@ -6,6 +6,7 @@ import {
   ApprovalNotifications,
   type DecisionNotification,
   decisionNotification,
+  INTERRUPTED_NOTICE,
   MUTE_KEY,
   muteForHour,
   muteUntil,
@@ -342,6 +343,75 @@ test("startup drain of a lost approval opens Approvals with a notice, removes to
       const calls = h.calls.length;
       await h.controller.respond({ id: "lost-on-restart", action });
       expect(h.calls.length).toBe(calls);
+      expect(h.errors).toEqual([]);
+    } finally {
+      h.controller.stop();
+    }
+  }
+});
+
+test("restart preserves a delivered interrupted toast until its real callback opens the notice", async () => {
+  const before = harness();
+  await before.controller.start();
+  expect(before.posts).toHaveLength(1);
+  before.controller.stop();
+  const interrupted: Approval = {
+    ...pending,
+    status: "interrupted",
+    detail: "",
+    interruptedAt: 500,
+  };
+  const after = harness([interrupted], before.store);
+  try {
+    await after.controller.start();
+    expect(after.posts).toEqual([]);
+    expect(after.removals).toEqual([]);
+    await after.update(interrupted);
+    expect(after.removals).toEqual([]);
+    await after.controller.respond({ id: interrupted.id, action: "review" });
+    expect(after.notices).toEqual([INTERRUPTED_NOTICE]);
+    expect(after.removals).toEqual([interrupted.id]);
+    expect(after.calls.some((call) => call.method === "approvals.respond")).toBe(false);
+  } finally {
+    after.controller.stop();
+  }
+  const missing = harness([], before.store);
+  try {
+    await missing.controller.start();
+    expect(missing.removals).toEqual([pending.id]);
+    expect(missing.posts).toEqual([]);
+  } finally {
+    missing.controller.stop();
+  }
+});
+
+test("an approval interrupted by a daemon restart shows that state, removes the toast and never retries", async () => {
+  const interrupted: Approval = {
+    ...pending,
+    id: "interrupted-on-restart",
+    detail: "",
+    status: "interrupted",
+    interruptedAt: 500,
+  };
+  expect(notification({ status: "interrupted" })).toBeNull();
+  for (const action of ["task", "approve", "review", "undo", "deny"]) {
+    const h = harness([interrupted]);
+    h.bridge.listen = async (handler) => {
+      handler({ id: interrupted.id, action });
+      return () => {};
+    };
+    try {
+      await h.controller.start();
+      await Bun.sleep(0);
+      expect(h.views).toEqual(["approvals", "open"]);
+      expect(h.notices).toEqual([INTERRUPTED_NOTICE]);
+      expect(h.notices[0]).toContain("interrompido pelo reinício");
+      expect(h.removals).toContain(interrupted.id);
+      expect(h.posts).toEqual([]);
+      const calls = h.calls.length;
+      await h.controller.respond({ id: interrupted.id, action });
+      expect(h.calls.length).toBe(calls);
+      expect(h.calls.some((c) => c.method === "approvals.respond")).toBe(false);
       expect(h.errors).toEqual([]);
     } finally {
       h.controller.stop();
