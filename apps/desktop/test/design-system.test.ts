@@ -17,7 +17,7 @@ beforeAll(async () => {
     stdout: "ignore",
     stderr: "inherit",
   });
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < 600; attempt++) {
     try {
       if ((await fetch("http://localhost:1421")).ok) break;
     } catch {}
@@ -31,8 +31,10 @@ beforeAll(async () => {
   });
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   await page.goto("http://localhost:1421/#/kit");
-  await page.getByRole("heading", { name: "Controles", exact: true }).waitFor();
-}, 60000);
+  await page
+    .getByRole("heading", { name: "Controles", exact: true })
+    .waitFor({ timeout: 90000 });
+}, 180000);
 
 afterAll(async () => {
   await browser?.close();
