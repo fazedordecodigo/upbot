@@ -217,6 +217,10 @@ export class AgentRuntime {
     return this.turn ? this.turnChannelId : null;
   }
 
+  bridgeActivity(): void {
+    if (this.turn) this.session?.bridgeActivity?.();
+  }
+
   updateAgent(agent: Agent) {
     this.agent = agent;
   }

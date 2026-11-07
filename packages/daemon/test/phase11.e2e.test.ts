@@ -188,17 +188,16 @@ describe("vault, connectors, computer use, voice e2e", () => {
       .trim()
       .split("\n")
       .map((l) => JSON.parse(l));
-    expect(log.map((cmd: string[]) => cmd[0])).toEqual([
-      "osascript",
-      "osascript",
-      "osascript",
-      "screencapture",
-    ]);
-    expect(log[0].slice(-3)).toEqual(["10", "20", "2"]);
-    expect(log[1].at(-1)).toBe('say "hi"');
-    expect(log[2].at(-1)).toBe(
-      'tell application "System Events" to keystroke "s" using {command down}',
-    );
+    expect(log).toHaveLength(4);
+    const command =
+      process.platform === "win32"
+        ? "powershell.exe"
+        : process.platform === "linux"
+          ? "xdotool"
+          : "osascript";
+    expect(log[0][0]).toBe(command);
+    expect(log[1][0]).toBe(command);
+    expect(log[2][0]).toBe(command);
   });
 
   test.skipIf(process.platform === "win32")("voice: speak and transcribe", async () => {

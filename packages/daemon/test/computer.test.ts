@@ -7,8 +7,7 @@ import { migrations } from "../src/db/migrations";
 test("Unicode typing preserves text as data and serializes clipboard access, including after errors", async () => {
   const db = new Database(":memory:");
   for (const sql of migrations) db.exec(sql);
-  const computer = new ComputerUse(db);
-  const available = spyOn(computer, "available").mockReturnValue(true);
+  const computer = new ComputerUse(db, { platform: "darwin" });
   const commands: string[][] = [];
   const exec = spyOn(computer as unknown as { exec(cmd: string[]): Promise<void> }, "exec");
   let active = 0;
@@ -24,7 +23,7 @@ test("Unicode typing preserves text as data and serializes clipboard access, inc
   try {
     await expect(computer.type(agent, "ação")).rejects.toThrow("not enabled");
     computer.setAccess([agent.id]);
-    for (const text of ["", "a".repeat(5001)]) {
+    for (const text of ["", "a".repeat(5001), "a\0b"]) {
       await expect(computer.type(agent, text)).rejects.toThrow("1-5000");
     }
     expect(commands).toEqual([]);
@@ -46,7 +45,6 @@ test("Unicode typing preserves text as data and serializes clipboard access, inc
     expect(await computer.type(agent, "é")).toBe("typed 1 characters");
   } finally {
     exec.mockRestore();
-    available.mockRestore();
     db.close();
   }
 });
