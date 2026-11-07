@@ -145,9 +145,12 @@ claude (OAuth token or API key), codex (`OPENAI_API_KEY`), gemini (`GEMINI_API_K
 under `/opt/cursor-agent-home` because `/root` is bind-mounted from persistent storage.
 Signed-out behavior: Gemini reports `gemini`, OpenCode `opencode auth login`, and Cursor
 `agent login`. OpenCode alone has a 30-second first-activity watchdog: message/thought chunks,
-tool calls/updates, plans, or agent requests count as progress; session metadata updates such as
-available commands do not. Without progress after a prompt, it reports `opencode auth login` and
-tears down its child; after the first progress, the prompt is unbounded. Fake Gemini/Cursor credentials reach only
+tool calls/updates, plans, agent requests, or bridge tool calls for the agent's current turn count
+as progress; bridge calls count before approval gating, so waiting for approval cannot trigger
+the watchdog. Session metadata updates such as available commands do not count. Without progress
+after a prompt, it reports `opencode auth login` and tears down its child; after the first
+progress (including a completed or rejected bridge call), the prompt is unbounded.
+`BOTO_ACP_FIRST_ACTIVITY_MS` overrides the timeout for tests. Fake Gemini/Cursor credentials reach only
 Firecracker provider env. Gemini invalid-key errors are explicit; Cursor's
 `Failed to initialize session services` mapping is inferred from `proxy.log` showing a request
 to `api2.cursor.sh` with a microVM credential set, since Cursor returns no explicit invalid-key
@@ -448,12 +451,19 @@ with periodic `relay.audit_suppressed` summaries (`RELAY_AUDIT_WINDOW_MS`).
 - `.github/workflows/ci.yml`: lint/typecheck on Ubuntu; tests, daemon build, Rust check and
   desktop build on macOS, Linux and Windows.
 - `.github/workflows/release.yml`: on `v*` tags, tauri-action builds macOS `.app`/`.dmg`,
-  Linux `.AppImage`/`.deb` and an unsigned per-user Windows NSIS `.exe` into a draft release.
+  Linux `.AppImage`/`.deb` and a per-user Windows NSIS `.exe` into a draft release.
   It composes `latest.json` from each platform's updater asset and signature before publishing.
   Updater signing uses the `TAURI_SIGNING_PRIVATE_KEY` repo secret (pubkey in `tauri.conf.json`
   `plugins.updater`); Apple signing/notarization turn on when `APPLE_CERTIFICATE`,
   `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` (+ `APPLE_ID`, `APPLE_PASSWORD`,
-  `APPLE_TEAM_ID`) secrets exist. Bump `version` in `tauri.conf.json` before tagging.
+  `APPLE_TEAM_ID`) secrets exist. Partial secret groups and notarization without signing fail.
+  `Entitlements.plist` covers Bun JIT, microphone and Apple Events for the app and sidecar.
+  Tauri notarizes/staples the app; the workflow notarizes/staples the DMG, verifies both,
+  and replaces the uploaded DMG. Windows Authenticode uses `WINDOWS_CERTIFICATE` (base64
+  PFX) and `WINDOWS_CERTIFICATE_PASSWORD`, imported into the runner's user certificate store;
+  SHA-256/RFC 3161 signing covers the app, sidecar and installer, with post-build verification.
+  No signing secrets keeps macOS ad-hoc and Windows unsigned; updater signing is separate.
+  Bump `version` in `tauri.conf.json` before tagging.
 - In-app updates: `tauri-plugin-updater` + `components/UpdateButton.tsx` (sidebar footer).
 - Icon source: `apps/desktop/branding/icon.svg` -> `icon.png` (Chrome headless render) ->
   `bunx tauri icon branding/icon.png` (from `apps/desktop`).

@@ -3,6 +3,7 @@ dist/
 target/
 apps/desktop/src-tauri/binaries/
 apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/tauri.windows-signing.conf.json
 spikes/out/
 *.db
 *.db-wal
