@@ -16,6 +16,8 @@
 ### Added
 - Pending-approval badges on the macOS Dock, Windows taskbar and supported Linux launchers,
   independent of popup notification mute.
+- Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
+  Authenticode signing; releases reject incomplete signing secrets and verify signatures.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.
