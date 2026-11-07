@@ -451,7 +451,9 @@ agent templates create an agent (chosen provider) and install their listed skill
 `marketplace.list/install/setSources`; UI `MarketplaceView`. Regenerate the index with
 `bun scripts/marketplace-index.ts`. Tests: `test/marketplace.e2e.test.ts`.
 Saved UpBot/BobAgent registry URLs migrate to Boto and are deduplicated after conversion,
-preserving first-occurrence order. The default registry is served from `main`; publish
+preserving first-occurrence order. `BOTO_MARKETPLACE_URL` also overrides saved current/legacy
+default registry URLs, allowing daemon RPC migration tests to use a local registry without network.
+Custom source URLs are unchanged. The default registry is served from `main`; publish
 the Boto-branded marketplace there as part of the release, not only on `develop`.
 
 ## Mobile companion (Phase 12c)

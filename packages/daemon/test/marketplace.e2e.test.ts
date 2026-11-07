@@ -97,6 +97,27 @@ describe("marketplace e2e", () => {
     expect(installed.sort()).toEqual(["code-review", "reviewer", "write-tests"]);
   });
 
+  test("RPC listing migrates and deduplicates legacy and current default sources", async () => {
+    const before = await list();
+    await c.request("marketplace.setSources", {
+      urls: [
+        "https://raw.githubusercontent.com/fazedordecodigo/upbot/main/marketplace/index.json",
+        "https://raw.githubusercontent.com/fazedordecodigo/boto/main/marketplace/index.json",
+      ],
+    });
+    try {
+      const result = await list();
+      expect(result.sources).toEqual([fileIndex]);
+      expect(result.errors).toEqual([]);
+      expect(result.items).toEqual(before.items);
+      expect(result.items.length).toBe(6);
+      expect(new Set(result.items.map((item) => `${item.source}:${item.id}`)).size).toBe(6);
+      expect(result.items.every((item) => item.source === fileIndex)).toBe(true);
+    } finally {
+      await c.request("marketplace.setSources", { urls: [fileIndex] });
+    }
+  });
+
   test("tampered files are rejected by checksum", async () => {
     writeFileSync(
       join(market, "skills", "release-notes.md"),
