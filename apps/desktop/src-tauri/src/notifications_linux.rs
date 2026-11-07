@@ -755,16 +755,18 @@ mod tests {
                 }
                 assert_eq!(reason, 1);
                 let replacement = native.closed(server, reason).unwrap().unwrap();
-                let mut entries = native.entries.lock().unwrap();
-                assert_eq!(entries.server_id(&pending.id), replacement);
-                assert_eq!(entries.0.len(), 1);
-                assert_eq!(
-                    entries.response(replacement, "task"),
-                    parse_activation("task|linux-expiry-test")
-                );
-                if replacement != first {
-                    assert!(entries.response(first, "task").is_none());
-                    assert!(entries.expired(first, 1, now_ms(), 0).is_none());
+                {
+                    let mut entries = native.entries.lock().unwrap();
+                    assert_eq!(entries.server_id(&pending.id), replacement);
+                    assert_eq!(entries.0.len(), 1);
+                    assert_eq!(
+                        entries.response(replacement, "task"),
+                        parse_activation("task|linux-expiry-test")
+                    );
+                    if replacement != first {
+                        assert!(entries.response(first, "task").is_none());
+                        assert!(entries.expired(first, 1, now_ms(), 0).is_none());
+                    }
                 }
                 println!("early expiry re-presented: {first} -> {replacement}");
                 break;
