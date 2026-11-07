@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "@boto/protocol";
 import {
@@ -240,6 +240,55 @@ describe("avatars, memories, skills, agent creation e2e", () => {
     expect(lastPrompt()).toContain("release-checklist: Use before releases");
     await c.request("skills.delete", { name: "triage" });
     expect(existsSync(join(sharedRoot, "Skills", "triage"))).toBe(false);
+  });
+
+  test("skill versions expose previous files newest first and ignore unrelated files", async () => {
+    const name = "versioned-skill";
+    await c.request("skills.save", { name, description: "Old description", body: "Old body" });
+    expect(await c.request("skills.versions", { name })).toEqual([]);
+    await c.request("skills.save", {
+      name,
+      description: "Middle description",
+      body: "Middle body",
+    });
+    await Bun.sleep(5);
+    await c.request("skills.save", {
+      name,
+      description: "Current description",
+      body: "Current body",
+    });
+    writeFileSync(join(sharedRoot, "Skills", name, ".history", "notes.md"), "ignored");
+    const versions = await c.request("skills.versions", { name });
+    expect(versions.map((version) => version.version)).toEqual([2, 1]);
+    expect(versions.map((version) => version.body)).toEqual(["Middle body\n", "Old body\n"]);
+    expect(versions[0]).toMatchObject({ description: "Middle description", author: "user" });
+    expect(versions[0]!.savedAt).toBeGreaterThan(versions[1]!.savedAt);
+    for (const missing of ["missing-skill", "!!!"]) {
+      await expect(c.request("skills.versions", { name: missing })).rejects.toMatchObject({
+        code: "not_found",
+        message: "skill not found",
+      });
+    }
+    await c.request("skills.delete", { name });
+  });
+
+  test("skill version cap preserves full ordinal numbering", async () => {
+    const name = "many-versions";
+    await c.request("skills.save", { name, description: "", body: "Original" });
+    await c.request("skills.save", { name, description: "", body: "Current" });
+    const history = join(sharedRoot, "Skills", name, ".history");
+    for (let i = 1; i <= 55; i++) writeFileSync(join(history, `${i}.md`), `Body ${i}`);
+    const versions = await c.request("skills.versions", { name });
+    expect(versions).toHaveLength(50);
+    expect(versions[0]?.version).toBe(56);
+    expect(versions.at(-1)).toMatchObject({
+      version: 7,
+      savedAt: 7,
+      body: "Body 7",
+      description: "",
+      author: null,
+    });
+    await c.request("skills.delete", { name });
   });
 
   test("agents can create agents", async () => {

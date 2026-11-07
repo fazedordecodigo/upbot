@@ -1002,6 +1002,55 @@ test("skill detail renders fresh Markdown and raw text", async () => {
   }
 }, 15000);
 
+test("skill previous versions are read-only and return to the current version", async () => {
+  const name = "version-detail-fixture";
+  await rpc.request("skills.save", {
+    name,
+    description: "Descrição anterior",
+    body: "# Conteúdo anterior\n\nTexto da versão antiga.",
+  });
+  await rpc.request("skills.save", {
+    name,
+    description: "Descrição atual",
+    body: "# Conteúdo atual",
+  });
+  const target = await browser.newPage();
+  let fail = true;
+  await target.routeWebSocket(/\/ws\?/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => {
+      const request = JSON.parse(String(message));
+      if (fail && request.method === "skills.versions")
+        socket.send(
+          JSON.stringify({
+            id: request.id,
+            error: { code: "internal", message: "Falha de teste" },
+          }),
+        );
+      else server.send(message);
+    });
+  });
+  try {
+    await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await target.getByRole("button", { name: "Agendadas", exact: true }).waitFor();
+    await target.keyboard.press("Meta+,");
+    await target.getByRole("tab", { name: "Habilidades", exact: true }).click();
+    await target.getByRole("button", { name, exact: true }).click();
+    await target.getByText("Não foi possível carregar as versões: Falha de teste").waitFor();
+    fail = false;
+    await target.getByRole("button", { name: "Tentar novamente", exact: true }).click();
+    await target.getByRole("button", { name: /Versão 1 ·/ }).click();
+    await target.getByRole("heading", { name: "Conteúdo anterior", exact: true }).waitFor();
+    expect(await target.getByRole("button", { name: "Editar", exact: true }).count()).toBe(0);
+    await capture("skill-version", target);
+    await target.getByRole("button", { name: "Voltar para a versão atual" }).click();
+    await target.getByRole("heading", { name: "Conteúdo atual", exact: true }).waitFor();
+  } finally {
+    await target.close();
+    await rpc.request("skills.delete", { name });
+  }
+}, 15000);
+
 test("persisted permissions absent from the live list have no actions", async () => {
   const target = await browser.newPage();
   await target.addInitScript((id) => {

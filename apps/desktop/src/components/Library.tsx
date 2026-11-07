@@ -1,4 +1,11 @@
-import type { Agent, Gateway, GatewayKind, MarketplaceItem, ProviderId } from "@boto/protocol";
+import type {
+  Agent,
+  Gateway,
+  GatewayKind,
+  MarketplaceItem,
+  ProviderId,
+  SkillVersion,
+} from "@boto/protocol";
 import { useEffect, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { DaemonClient } from "../lib/daemon";
@@ -21,6 +28,20 @@ function SkillDetail({
   onEdit: (skill: { name: string; description: string; body: string }) => void;
 }) {
   const [raw, setRaw] = useState(false);
+  const [version, setVersion] = useState<SkillVersion | null>(null);
+  const {
+    data: versions,
+    error: versionsError,
+    reload: reloadVersions,
+  } = useDaemonQuery(
+    client,
+    "skills.versions",
+    { name },
+    {
+      events: { "skills.changed": true },
+      onError: (e) => logWarn("skills.versions_failed", errorFields(e)),
+    },
+  );
   const { data, error, reload } = useDaemonQuery(
     client,
     "skills.get",
@@ -30,6 +51,39 @@ function SkillDetail({
       onError: (e) => logWarn("skills.get_failed", errorFields(e)),
     },
   );
+  if (version)
+    return (
+      <section className={`mx-auto max-w-2xl p-6 ${detailStyles.detail}`}>
+        <Button
+          onClick={() => {
+            setVersion(null);
+            setRaw(false);
+          }}
+        >
+          Voltar para a versão atual
+        </Button>
+        <header className={detailStyles.heading}>
+          <h2>
+            {name} · Versão {version.version}
+          </h2>
+          <p>{version.description}</p>
+          <div className={detailStyles.meta}>
+            {version.author && <span>Autor: {version.author}</span>}
+            <span>Salva em {new Date(version.savedAt).toLocaleString("pt-BR")}</span>
+          </div>
+        </header>
+        <div className={detailStyles.actions}>
+          <Button aria-pressed={raw} onClick={() => setRaw(!raw)}>
+            {raw ? "Ver formatado" : "Ver texto bruto"}
+          </Button>
+        </div>
+        {raw ? (
+          <pre className={detailStyles.raw}>{version.body}</pre>
+        ) : (
+          <Markdown text={version.body} />
+        )}
+      </section>
+    );
   return (
     <section className={`mx-auto max-w-2xl p-6 ${detailStyles.detail}`}>
       <Button onClick={onBack}>Voltar</Button>
@@ -61,6 +115,36 @@ function SkillDetail({
           ) : (
             <Markdown text={data.body} />
           )}
+          <section className={detailStyles.versions}>
+            <h3>Versões anteriores</h3>
+            {versionsError ? (
+              <div role="alert">
+                <p>Não foi possível carregar as versões: {versionsError}</p>
+                <Button onClick={reloadVersions}>Tentar novamente</Button>
+              </div>
+            ) : !versions ? (
+              <p role="status">Carregando versões…</p>
+            ) : versions.length === 0 ? (
+              <p className={detailStyles.meta}>Nenhuma versão anterior.</p>
+            ) : (
+              <ul className={detailStyles.versionList}>
+                {versions.map((previous) => (
+                  <li key={previous.version}>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setVersion(previous);
+                        setRaw(false);
+                      }}
+                    >
+                      Versão {previous.version} ·{" "}
+                      {new Date(previous.savedAt).toLocaleString("pt-BR")}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </>
       )}
     </section>

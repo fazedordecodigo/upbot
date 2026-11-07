@@ -321,6 +321,14 @@ export const Skill = z.object({
   updatedAt: z.number(),
 });
 export type Skill = z.infer<typeof Skill>;
+export const SkillVersion = z.object({
+  version: z.number().int().min(1),
+  savedAt: z.number(),
+  description: z.string(),
+  author: z.string().nullable(),
+  body: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
 const MemoryText = z.string().trim().min(1).max(2_000);
 export const SkillSaveParams = z
   .object({
@@ -1213,6 +1221,10 @@ export const methodMap = {
   },
   "skills.list": { params: z.object({}).strict(), result: z.array(Skill) },
   "skills.get": { params: z.object({ name: z.string() }).strict(), result: Skill },
+  "skills.versions": {
+    params: z.object({ name: z.string() }).strict(),
+    result: z.array(SkillVersion),
+  },
   "skills.save": { params: SkillSaveParams, result: Skill },
   "skills.delete": {
     params: z.object({ name: z.string() }).strict(),
