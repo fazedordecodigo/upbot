@@ -86,7 +86,7 @@ Download the installer for your OS from [Releases](https://github.com/fazedordec
   normally. For unsigned builds, open System Settings → Privacy & Security and click
   **Open Anyway** (or run `xattr -cr /Applications/Boto.app`). Versions before 0.2.1 were
   reported as "damaged"; use the `xattr` command for those.
-- **Windows x64:** run the per-user `.exe` installer. Signed builds show the publisher;
+- **Windows x64 / ARM64:** run the matching per-user `.exe` installer. Signed builds show the publisher;
   SmartScreen may still warn until reputation builds, especially with OV certificates.
   For unsigned builds, SmartScreen may warn: choose **More info → Run anyway** (in Portuguese,
   **Mais informações → Executar assim mesmo**).

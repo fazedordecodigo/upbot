@@ -4,6 +4,9 @@
 
 ### Fixed
 - Linux approval notifications no longer reappear on server expiry while Boto is muted.
+- Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
+  DPAPI scripts load System.Security without `Add-Type`, a timed-out call is retried, and a
+  persistent timeout reports an error instead of writing a plaintext key.
 - Clear pending-approval badges immediately on daemon disconnect and reload on reconnect,
   ignoring snapshots and expiry callbacks from the previous connection.
 - Keep badge expiry timers bound to the browser's global timer API, preventing a WebKit
@@ -23,7 +26,7 @@
 - Pending-approval badges on the macOS Dock, Windows taskbar and supported Linux launchers,
   independent of popup notification mute.
 - Opt-in Computer Use on Windows and Linux X11, with unavailable reasons for Wayland or missing tools.
-- Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases.
+- Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases and Windows ARM64 installers.
 - Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
   Authenticode signing; releases reject incomplete signing secrets and verify signatures.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
@@ -35,6 +38,8 @@
   clicking their notification explains that instead of a generic unavailable notice.
 
 ### Changed
+- Updated Skills, Browser, Vault, Gateways, Marketplace, Mobile and Team settings to the Eco
+  design-system controls and layout, with Brazilian Portuguese labels and help text.
 - Updated remote host and email settings to Eco design-system controls and layouts, with
   Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
