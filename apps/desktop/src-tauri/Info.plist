@@ -4,5 +4,7 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>Boto uses the microphone for voice dictation to your agents.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Boto uses Apple Events for your bots to control other apps.</string>
 </dict>
 </plist>
