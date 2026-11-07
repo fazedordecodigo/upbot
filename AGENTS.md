@@ -665,6 +665,9 @@ in `default` when the user settings set `auto_edit` or `yolo`. Settings cannot s
 - `bun run build:app` — build the debug desktop bundle for the host platform (macOS app,
   Linux AppImage/deb, or Windows NSIS).
 - `bun run test` — `bun test packages/daemon packages/host apps/desktop/test` (daemon e2e and desktop browser tests).
+- Process-spawning tests need explicit timeouts beyond their internal startup/polling
+  deadlines: apps and voice e2e use 30s; updater metadata allows Python 30s and the test
+  35s for cleanup. Do not rely on Bun's 5s default for these subprocess tests on Windows.
 - Computer Use supports macOS, Windows and Linux X11. Built-in read-aloud uses `say` (macOS),
   System.Speech via Windows PowerShell (Windows) or espeak-ng/espeak/Speech Dispatcher (Linux).
   Linux uses Secret Service for the vault key when available, while Windows uses DPAPI.
