@@ -31,6 +31,8 @@ pub struct Notification {
     pub body: String,
     pub actions: Vec<NotificationButton>,
     pub muted: bool,
+    #[serde(default, rename = "expiresAt")]
+    pub expires_at: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]

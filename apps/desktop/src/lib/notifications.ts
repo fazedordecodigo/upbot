@@ -12,6 +12,7 @@ export type DecisionNotification = {
   body: string;
   actions: { id: NotificationAction; label: string }[];
   muted: boolean;
+  expiresAt?: number;
 };
 export type NotificationResponse = { id: string; action: string };
 export interface NotificationBridge {
@@ -148,6 +149,7 @@ export function decisionNotification(
     body: body.length > limits.body ? `${body.slice(0, limits.body - 1)}…` : body,
     actions,
     muted,
+    expiresAt: approval.expiresAt,
   };
 }
 

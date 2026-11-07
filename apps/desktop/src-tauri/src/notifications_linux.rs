@@ -2,6 +2,7 @@ use super::{parse_activation, Notification, NotificationResponse};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, OnceLock},
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::AppHandle;
 use zbus::{
@@ -11,6 +12,7 @@ use zbus::{
 
 static BACKEND: OnceLock<Mutex<Option<Backend>>> = OnceLock::new();
 
+#[derive(Clone)]
 struct Backend {
     proxy: Proxy<'static>,
     actions: bool,
@@ -19,16 +21,17 @@ struct Backend {
 }
 
 #[derive(Default)]
-struct Entries(HashMap<String, (u32, Vec<String>)>);
+struct Entries(HashMap<String, (u32, Vec<String>, Notification)>);
 
 impl Entries {
     fn server_id(&self, id: &str) -> u32 {
         self.0.get(id).map_or(0, |entry| entry.0)
     }
 
-    fn replace(&mut self, id: String, server: u32, actions: Vec<String>) {
+    fn replace(&mut self, notification: Notification, server: u32, actions: Vec<String>) {
         self.close(server);
-        self.0.insert(id, (server, actions));
+        self.0
+            .insert(notification.id.clone(), (server, actions, notification));
     }
 
     fn remove(&mut self, id: &str) -> Option<u32> {
@@ -37,6 +40,16 @@ impl Entries {
 
     fn close(&mut self, server: u32) {
         self.0.retain(|_, entry| entry.0 != server);
+    }
+
+    fn expired(&mut self, server: u32, reason: u32, now: u64) -> Option<Notification> {
+        let entry = self.0.values().find(|entry| entry.0 == server)?;
+        if should_repost(reason, &entry.2, now) {
+            Some(entry.2.clone())
+        } else {
+            self.close(server);
+            None
+        }
     }
 
     fn response(&self, server: u32, action: &str) -> Option<NotificationResponse> {
@@ -50,6 +63,26 @@ impl Entries {
         };
         parse_activation(&format!("{action}|{id}"))
     }
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u64::MAX as u128) as u64
+}
+
+fn timeout(expires_at: Option<u64>, now: u64) -> i32 {
+    expires_at.map_or(-1, |expires| {
+        expires.saturating_sub(now).clamp(1, i32::MAX as u64) as i32
+    })
+}
+
+fn should_repost(reason: u32, notification: &Notification, now: u64) -> bool {
+    reason == 1
+        && !notification.muted
+        && notification.expires_at.is_some_and(|expires| expires > now)
 }
 
 fn escape_body(body: &str, markup: bool) -> String {
@@ -105,6 +138,7 @@ pub fn initialize(app: AppHandle) -> bool {
         return false;
     };
     let entries = native.entries.clone();
+    let listener = native.clone();
     if std::thread::Builder::new()
         .name("boto-notifications".into())
         .spawn(move || {
@@ -120,8 +154,8 @@ pub fn initialize(app: AppHandle) -> bool {
                         }
                     }
                     Some("NotificationClosed") => {
-                        if let Ok((server, _)) = message.body().deserialize::<(u32, u32)>() {
-                            entries.lock().unwrap().close(server);
+                        if let Ok((server, reason)) = message.body().deserialize::<(u32, u32)>() {
+                            let _ = listener.closed(server, reason);
                         }
                     }
                     _ => {}
@@ -144,9 +178,30 @@ fn dbus_error(_: zbus::Error) -> String {
 impl Backend {
     fn post(&self, notification: Notification) -> Result<(), String> {
         if notification.muted {
-            return Ok(());
+            return self.remove(&notification.id);
         }
         let mut entries = self.entries.lock().unwrap();
+        let replaces = entries.server_id(&notification.id);
+        self.notify(&mut entries, notification, replaces)
+    }
+
+    fn closed(&self, server: u32, reason: u32) -> Result<(), String> {
+        let mut entries = self.entries.lock().unwrap();
+        if let Some(notification) = entries.expired(server, reason, now_ms()) {
+            if let Err(error) = self.notify(&mut entries, notification, server) {
+                entries.close(server);
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    fn notify(
+        &self,
+        entries: &mut Entries,
+        notification: Notification,
+        replaces: u32,
+    ) -> Result<(), String> {
         let action_list = actions(&notification, self.actions);
         let hints = HashMap::from([("desktop-entry", Value::from("com.boto.desktop"))]);
         let server: u32 = self
@@ -155,17 +210,17 @@ impl Backend {
                 "Notify",
                 &(
                     "Boto",
-                    entries.server_id(&notification.id),
+                    replaces,
                     "",
                     &notification.title,
                     escape_body(&notification.body, self.markup),
                     &action_list,
                     hints,
-                    -1i32,
+                    timeout(notification.expires_at, now_ms()),
                 ),
             )
             .map_err(dbus_error)?;
-        entries.replace(notification.id, server, action_list);
+        entries.replace(notification, server, action_list);
         Ok(())
     }
 
@@ -181,14 +236,22 @@ impl Backend {
 }
 
 pub fn post(notification: Notification) -> Result<(), String> {
-    let backend = BACKEND.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let backend = BACKEND
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap()
+        .clone();
     backend
         .as_ref()
         .map_or(Ok(()), |native| native.post(notification))
 }
 
 pub fn remove(id: &str) -> Result<(), String> {
-    let backend = BACKEND.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let backend = BACKEND
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap()
+        .clone();
     backend.as_ref().map_or(Ok(()), |native| native.remove(id))
 }
 
@@ -202,6 +265,7 @@ mod tests {
             title: "Boto".into(),
             body: "Um bot precisa de aprovação.".into(),
             muted: false,
+            expires_at: None,
             actions: vec![
                 super::super::NotificationButton {
                     id: "task".into(),
@@ -213,6 +277,71 @@ mod tests {
                 },
             ],
         }
+    }
+
+    fn with_id(id: &str) -> Notification {
+        Notification {
+            id: id.into(),
+            ..notification()
+        }
+    }
+
+    #[test]
+    fn notification_timeouts() {
+        assert_eq!(timeout(None, 100), -1);
+        assert_eq!(timeout(Some(200), 100), 100);
+        assert_eq!(timeout(Some(100), 100), 1);
+        assert_eq!(timeout(Some(0), 100), 1);
+        assert_eq!(timeout(Some(u64::MAX), 0), i32::MAX);
+        assert_eq!(timeout(Some(i32::MAX as u64 + 100), 100), i32::MAX);
+        let parsed: Notification = serde_json::from_str(
+            r#"{"id":"id","title":"","body":"","actions":[],"muted":false,"expiresAt":200}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.expires_at, Some(200));
+        let legacy: Notification =
+            serde_json::from_str(r#"{"id":"id","title":"","body":"","actions":[],"muted":false}"#)
+                .unwrap();
+        assert_eq!(legacy.expires_at, None);
+    }
+
+    #[test]
+    fn notification_expiry_and_muted_removal() {
+        let mut pending = notification();
+        pending.expires_at = Some(200);
+        assert!(should_repost(1, &pending, 100));
+        assert!(!should_repost(1, &pending, 200));
+        assert!(!should_repost(1, &pending, 201));
+        for reason in [0, 2, 3, 4] {
+            assert!(!should_repost(reason, &pending, 100));
+        }
+        assert!(!should_repost(1, &notification(), 100));
+        let mut muted = pending.clone();
+        muted.muted = true;
+        assert!(!should_repost(1, &muted, 100));
+
+        let mut entries = Entries::default();
+        assert!(entries.expired(1, 1, 100).is_none());
+        entries.replace(pending.clone(), 1, actions(&pending, true));
+        let repost = entries.expired(1, 1, 100).unwrap();
+        assert_eq!(repost.expires_at, pending.expires_at);
+        assert_eq!(repost.body, pending.body);
+        assert_eq!(entries.server_id(&pending.id), 1);
+        entries.replace(repost, 2, actions(&pending, true));
+        assert!(entries.expired(1, 1, 100).is_none());
+        assert_eq!(entries.server_id(&pending.id), 2);
+        entries.replace(notification(), 2, vec![]);
+        assert!(entries.expired(2, 1, 100).is_none());
+        assert!(entries.0.is_empty());
+        for reason in [1, 2, 3, 4] {
+            entries.replace(pending.clone(), 1, vec![]);
+            assert!(entries.expired(1, reason, 200).is_none());
+            assert!(entries.0.is_empty());
+        }
+        entries.replace(pending.clone(), 1, vec![]);
+        assert_eq!(entries.remove(&muted.id), Some(1));
+        assert!(entries.expired(1, 1, 100).is_none());
+        assert_eq!(entries.remove(&muted.id), None);
     }
 
     #[test]
@@ -247,7 +376,7 @@ mod tests {
         let mut entries = Entries::default();
         assert_eq!(entries.server_id("missing"), 0);
         assert_eq!(entries.remove("missing"), None);
-        entries.replace("id".into(), 1, actions(&notification(), true));
+        entries.replace(with_id("id"), 1, actions(&notification(), true));
         assert_eq!(
             entries.response(1, "default"),
             parse_activation("review|id")
@@ -256,17 +385,17 @@ mod tests {
         assert!(entries.response(2, "task").is_none());
         assert!(entries.response(1, "undo").is_none());
         assert!(entries.response(1, "always").is_none());
-        entries.replace("id".into(), 2, vec![]);
+        entries.replace(with_id("id"), 2, vec![]);
         entries.close(1);
         assert_eq!(entries.server_id("id"), 2);
         assert!(entries.response(1, "task").is_none());
         assert!(entries.response(2, "default").is_none());
         entries.close(2);
         assert_eq!(entries.server_id("id"), 0);
-        entries.replace("id".into(), 3, vec![]);
+        entries.replace(with_id("id"), 3, vec![]);
         assert_eq!(entries.remove("id"), Some(3));
         assert!(entries.0.is_empty());
-        entries.replace("bad|id".into(), 4, actions(&notification(), true));
+        entries.replace(with_id("bad|id"), 4, actions(&notification(), true));
         assert!(entries.response(4, "task").is_none());
     }
 
@@ -281,10 +410,10 @@ mod tests {
         let mut muted = notification();
         muted.muted = true;
         native.post(muted).unwrap();
-        assert_eq!(
-            native.entries.lock().unwrap().server_id("linux-test"),
-            first
-        );
+        assert_eq!(native.entries.lock().unwrap().server_id("linux-test"), 0);
+        println!("muted post removed server id: {first}");
+        native.post(notification()).unwrap();
+        let first = native.entries.lock().unwrap().server_id("linux-test");
         native.post(notification()).unwrap();
         assert_eq!(
             native.entries.lock().unwrap().server_id("linux-test"),
@@ -306,5 +435,53 @@ mod tests {
             }
         }
         native.remove("linux-test").unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires a freedesktop notification server supporting expiry"]
+    fn notifications_real_expiry() {
+        let native = connect().expect("notification server");
+        let mut signals = native.proxy.receive_all_signals().unwrap();
+        let mut pending = with_id("linux-expiry-test");
+        pending.expires_at = Some(now_ms() + 30_000);
+        native.post(pending.clone()).unwrap();
+        let first = native.entries.lock().unwrap().server_id(&pending.id);
+        let forced: u32 = native
+            .proxy
+            .call(
+                "Notify",
+                &(
+                    "Boto",
+                    first,
+                    "",
+                    &pending.title,
+                    &pending.body,
+                    actions(&pending, native.actions),
+                    HashMap::from([("transient", Value::from(true))]),
+                    100i32,
+                ),
+            )
+            .unwrap();
+        assert_eq!(forced, first);
+        for message in &mut signals {
+            if message.header().member().map(|m| m.as_str()) == Some("NotificationClosed") {
+                let (server, reason): (u32, u32) = message.body().deserialize().unwrap();
+                if server != first {
+                    continue;
+                }
+                assert_eq!(reason, 1);
+                native.closed(server, reason).unwrap();
+                let replacement = native.entries.lock().unwrap().server_id(&pending.id);
+                assert_eq!(replacement, first);
+                println!("early expiry re-presented: {first} -> {replacement}");
+                break;
+            }
+        }
+        pending.muted = true;
+        native.post(pending.clone()).unwrap();
+        assert_eq!(native.entries.lock().unwrap().server_id(&pending.id), 0);
+        native.closed(first, 1).unwrap();
+        assert_eq!(native.entries.lock().unwrap().server_id(&pending.id), 0);
+        println!("muted post closed notification; late expiry did not re-present");
     }
 }

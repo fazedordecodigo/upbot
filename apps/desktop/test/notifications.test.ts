@@ -38,6 +38,7 @@ test("one pending decision produces human Portuguese and task-only permission ac
     title: "Boto quer criar uma nota em Notas.",
     body: "",
     muted: false,
+    expiresAt: pending.expiresAt,
     actions: [
       { id: "deny", label: "Recusar" },
       { id: "task", label: "Só nesta tarefa" },
@@ -296,6 +297,8 @@ test("inline decisions use normal daemon RPC and same identifier for a truthful 
       ]);
       expect(h.posts.at(-1)?.id).toBe(pending.id);
       expect(h.posts.at(-1)?.actions).toEqual([]);
+      expect(h.posts[0]?.expiresAt).toBe(pending.expiresAt);
+      expect(h.posts.at(-1)).not.toHaveProperty("expiresAt");
       expect(h.removals).toEqual([]);
     } finally {
       h.controller.stop();
@@ -411,10 +414,12 @@ test("a real preference undo is offered for six seconds, never executed twice or
     await h.controller.start();
     await h.controller.respond({ id: pending.id, action: "task" });
     expect(h.posts.at(-1)?.actions).toEqual([{ id: "undo", label: "Desfazer" }]);
+    expect(h.posts.at(-1)).not.toHaveProperty("expiresAt");
     h.time(6999);
     await h.controller.respond({ id: pending.id, action: "undo" });
     expect(calls).toBe(1);
     expect(h.posts.at(-1)?.title).toBe("Preferência restaurada.");
+    expect(h.posts.at(-1)).not.toHaveProperty("expiresAt");
     await h.controller.respond({ id: pending.id, action: "undo" });
     expect(calls).toBe(1);
   } finally {

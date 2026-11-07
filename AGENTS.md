@@ -104,8 +104,10 @@ unbundled development is a no-op. Muting skips macOS delivery (not replayed on u
 Windows uses WinRT ToastNotification XML (reminder requests), the app's AUMID and
 per-user COM activation registration; mute uses SuppressPopup plus silent audio and
 is also in the toast context menu. General settings expose mute on every platform.
-Linux uses freedesktop D-Bus notifications with replacement by approval id; mute skips
-delivery without replay, and closing never decides. Buttons and click callbacks require
+Linux uses freedesktop D-Bus notifications with replacement by approval id. Pending requests
+use a timeout until expiresAt and are re-presented on early server expiry; closing never
+decides. Muted posts close the previous notification without delivery or replay.
+Buttons and click callbacks require
 the server's actions capability; without it notifications show but clicks cannot be reported.
 Native callbacks queue actions until the main frontend can drain them; the daemon
 remains authoritative. Optional dock/taskbar badges are not implemented.
