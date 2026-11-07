@@ -1,8 +1,8 @@
 name: Release
 
 # Push a v* tag (matching apps/desktop/src-tauri/tauri.conf.json "version") to build the
-# macOS app/dmg, Linux x64/ARM64 AppImage/deb/rpm, and an unsigned Windows x64
-# NSIS installer. The release remains
+# macOS app/dmg, Linux x64/ARM64 AppImage/deb/rpm, and unsigned Windows x64/ARM64
+# NSIS installers. The release remains
 # a draft until updater metadata has been composed from every platform's assets.
 # Dispatch requires a tag.
 # macOS signing/notarization run when the APPLE_* secrets are configured.
@@ -75,6 +75,8 @@ jobs:
           - os: ubuntu-22.04-arm
             bundles: appimage,deb,rpm
           - os: windows-latest
+            bundles: nsis
+          - os: windows-11-arm
             bundles: nsis
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
