@@ -17,7 +17,11 @@ function makeBridge(): Bridge {
     get: (id: string) => (id === agent.id ? agent : null),
     list: () => [agent],
   } as unknown as AgentStore;
-  return new Bridge(agents, () => ({}) as RuntimeManager, "/tmp/boto-shared");
+  return new Bridge(
+    agents,
+    () => ({ bridgeActivity() {} }) as unknown as RuntimeManager,
+    "/tmp/boto-shared",
+  );
 }
 
 test("failed tool calls log the tool, agent, duration and error", async () => {

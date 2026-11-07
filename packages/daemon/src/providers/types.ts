@@ -48,6 +48,7 @@ export interface ProviderSession {
   readonly configOptions: ConfigOption[];
   setConfigOption(configId: string, value: string): Promise<ConfigOption[]>;
   prompt(text: string): Promise<{ stopReason: string }>;
+  bridgeActivity?(): void;
   cancel(): Promise<void>;
   close(): Promise<void>;
 }
