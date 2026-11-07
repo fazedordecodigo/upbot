@@ -1,0 +1,7 @@
+.list { list-style: none; margin: var(--boto-space-3) 0; padding: 0; border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-md); background: var(--boto-color-surface); overflow: hidden; }
+.run { display: grid; gap: var(--boto-space-2); padding: var(--boto-space-3) var(--boto-space-4); }
+.run + .run { border-top: 1px solid var(--boto-color-border); }
+.run p { margin: 0; }
+.summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--boto-space-2); }
+.meta { color: var(--boto-color-fg-muted); font-size: var(--boto-font-size-small); line-height: var(--boto-line-height-normal); }
+.run > button { justify-self: start; }

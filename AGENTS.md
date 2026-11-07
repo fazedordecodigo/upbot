@@ -161,8 +161,10 @@ Ctrl+Shift+F elsewhere) and shortcuts in `App.tsx` (⌘N new bot, ⌘1–9 switc
 ACP providers run in Firecracker like Claude/Codex (`AcpDriver` spawns via `RemoteLaunch` and
 passes `remote.credentials` as env). MicroVM sign-in (`vmCredentials`, Settings → Hosts):
 claude (OAuth token or API key), codex (`OPENAI_API_KEY`), gemini (`GEMINI_API_KEY`), cursor
-(`CURSOR_API_KEY`). The verified five-provider image contains Claude Code 2.1.310, Codex
-0.164.0, Gemini 0.65.0, OpenCode 1.19.4, and Cursor Agent 2026.10.22-27dcf5f. Cursor installs
+(`CURSOR_API_KEY`), devin (`WINDSURF_API_KEY`), and grok (`XAI_API_KEY`). The seven-provider
+image includes the verified Claude Code 2.1.310, Codex 0.164.0, Gemini 0.65.0,
+OpenCode 1.19.4, Cursor Agent 2026.10.22-27dcf5f, Devin 3000.12.17 and Grok 1.0.77.
+Building all seven providers needs `--size-mib 8192`. Cursor installs
 under `/opt/cursor-agent-home` because `/root` is bind-mounted from persistent storage.
 Signed-out behavior: Gemini reports `gemini`, OpenCode `opencode auth login`, and Cursor
 `agent login`. OpenCode alone has a 30-second first-activity watchdog: message/thought chunks,
@@ -177,7 +179,17 @@ Firecracker provider env. Gemini invalid-key errors are explicit; Cursor's
 to `api2.cursor.sh` with a microVM credential set, since Cursor returns no explicit invalid-key
 error. `bun run test:firecracker:providers` checks these real ACP flows, credential delivery,
 placement isolation, and plaintext leaks.
-devin/grok need a custom image plus `BOTO_PROVIDER_COMMAND_<PROVIDER>`.
+The image also supports Devin 3000.12.17 (`/opt/devin-home`, `WINDSURF_API_KEY`) and
+Grok 1.0.77 (`/opt/grok-home`, `XAI_API_KEY`), linked as `devin` and `grok` in
+`/usr/local/bin`. Pins can be overridden with `DEVIN_CLI_VERSION` / `GROK_CLI_VERSION`.
+Grok's installer overwrites `/usr/local/bin/agent`; the build preserves and restores
+Cursor's link so only `grok` is exposed there for Grok.
+Remote Grok runs `grok --no-auto-update agent stdio`; with a VM key the client sends
+`authenticate {methodId:"xai.api_key", _meta:{headless:true}}` after initialize, before
+session/new or load, even though initialize advertises only grok.com authentication.
+Devin runs `devin acp`. Both credentials are configured in Settings → Hosts. Signed-out
+sessions report `devin auth login` / `grok login`; fake API keys report a rejected VM
+credential. Real-provider tests cover delivery, placement isolation and plaintext leaks.
 
 ## Layout
 
@@ -352,7 +364,13 @@ and emits `agent.created` so clients add it back to their lists. `agents.draft
 form. Memories: `memories` table, `MemoryStore` (`src/memories.ts`), RPC
 `memories.list/add/update/delete`, event `memories.changed`. Skills library:
 `<shared>/Skills/<name>/SKILL.md` with name/description/author frontmatter, previous versions
-in `.history/` (`src/skills.ts`), RPC `skills.list/get/save/delete`, event `skills.changed`.
+in `.history/` (`src/skills.ts`), RPC `skills.list/get/save/delete/versions`, event `skills.changed`.
+`skills.versions` reads only numeric `.md` history files, newest first (50 max), with
+1-based ordinals across the full history and filename-derived `savedAt`. Unknown skills
+return not_found. Desktop skill details offer read-only previous Markdown/raw versions,
+metadata and return to current; no restore action or mobile access is exposed.
+`skills.get` and `skills.versions` expose exact file contents as `raw` (including
+frontmatter) for raw viewing; Markdown uses parsed `body`. `skills.list` omits raw.
 Bridge tools: `remember`, `forget`, `list_memories`, `list_skills`, `read_skill`,
 `create_skill`, `revise_skill`, `create_agent`. The first prompt of every fresh session is
 prefixed with `<agent_memories>` and `<skills_library>` (index only). UI:
@@ -604,6 +622,14 @@ children are then deleted (stopping their process/VM). `list_subagents`, `stop_s
 Tests: `test/remote.e2e.test.ts`, `packages/host/test/host.test.ts`.
 
 ## Permissions
+
+Desktop ChatView loads `permissions.list` and refreshes on permission events and reconnects.
+Persisted unresolved permission cards absent from a successfully loaded live list are
+non-actionable; a failed list keeps cards actionable rather than inventing a resolution.
+Routine history is available in Agendadas and saved routine dialogs. `routines.runs`
+joins the queue for nullable `queueStatus` and the latest linked turn for nullable
+`turn {id,status,startedAt,endedAt}`. Skill details load `skills.get`, refresh on
+`skills.changed`, and offer Markdown or raw SKILL.md text plus `skills.versions` history.
 
 Provider agents ask for approval only when THEIR OWN config says so
 (`PROVIDER_PERMISSION_CONFIG` in `packages/protocol` maps provider -> config path).

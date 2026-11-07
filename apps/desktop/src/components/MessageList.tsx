@@ -29,9 +29,11 @@ export function messageDay(timestamp: number, now = Date.now()) {
 
 function PermissionCard({
   item,
+  livePermissionIds,
   onRespond,
 }: {
   item: Extract<ChatItem, { kind: "permission" }>;
+  livePermissionIds?: Set<string> | undefined;
   onRespond: (requestId: string, optionId: string | null) => void;
 }) {
   const resolved = item.resolution !== null;
@@ -52,6 +54,8 @@ function PermissionCard({
           <Icon name="check" />
           {selected ? `Escolhido: ${selected.name}` : "Cancelado"}
         </div>
+      ) : livePermissionIds && !livePermissionIds.has(item.requestId) ? (
+        <p>Este pedido não está mais pendente.</p>
       ) : (
         <div className="approval-actions">
           {item.options.map((option, index) => (
@@ -77,6 +81,7 @@ function PermissionCard({
 }
 
 const MessageItem = memo(function MessageItem({
+  livePermissionIds,
   item,
   separator,
   isLast,
@@ -87,6 +92,7 @@ const MessageItem = memo(function MessageItem({
   onRetry,
 }: {
   item: ChatItem;
+  livePermissionIds?: Set<string> | undefined;
   separator: boolean;
   isLast: boolean;
   canRetry: boolean;
@@ -180,7 +186,11 @@ const MessageItem = memo(function MessageItem({
       ) : item.kind === "permission" ? (
         <div className="msg-agent">
           <div className="body">
-            <PermissionCard item={item} onRespond={onPermissionRespond} />
+            <PermissionCard
+              item={item}
+              onRespond={onPermissionRespond}
+              livePermissionIds={livePermissionIds}
+            />
           </div>
         </div>
       ) : item.kind === "error" ? (
@@ -241,6 +251,7 @@ const MessageItem = memo(function MessageItem({
 });
 
 export function MessageList({
+  livePermissionIds,
   agent,
   status,
   items,
@@ -257,6 +268,7 @@ export function MessageList({
   onSuggestion,
 }: {
   agent: Agent;
+  livePermissionIds?: Set<string> | undefined;
   status: UiStatus;
   items: ChatItem[];
   hasMore: boolean;
@@ -334,6 +346,7 @@ export function MessageList({
             new Date(previous.createdAt).toDateString() !== new Date(item.createdAt).toDateString();
           return (
             <MessageItem
+              livePermissionIds={livePermissionIds}
               key={item.id}
               item={item}
               separator={separator}

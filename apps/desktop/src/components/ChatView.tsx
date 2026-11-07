@@ -1,6 +1,7 @@
 import type { Agent } from "@boto/protocol";
 import { useCallback, useEffect, useState } from "react";
 import { useChatApi } from "../hooks/useChat";
+import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { AgentOverview } from "../hooks/useOverview";
 import type { DaemonClient } from "../lib/daemon";
 import { errorMessage } from "../lib/errors";
@@ -44,6 +45,38 @@ export function ChatView({
     queueRemove,
   } = useChatApi();
   const [sendBusy, setSendBusy] = useState(false);
+  const {
+    data: permissions,
+    loaded: permissionsLoaded,
+    error: permissionsError,
+    setData: setPermissions,
+  } = useDaemonQuery(
+    client,
+    "permissions.list",
+    {},
+    {
+      events: { "permission.requested": true, "permission.resolved": true },
+      onError: (e) => logWarn("permissions.list_failed", errorFields(e)),
+    },
+  );
+  useEffect(
+    () =>
+      client.on("permission.requested", (permission) => {
+        setPermissions((previous) => [
+          ...(previous ?? []).filter((item) => item.requestId !== permission.requestId),
+          permission,
+        ]);
+      }),
+    [client, setPermissions],
+  );
+  const livePermissionIds =
+    permissionsLoaded && !permissionsError
+      ? new Set(
+          permissions
+            ?.filter((permission) => permission.agentId === agent.id)
+            .map((permission) => permission.requestId),
+        )
+      : undefined;
   const [voice, setVoice] = useState({ tts: false, stt: false });
   const [composerText, setComposerText] = useState("");
   const [modeError, setModeError] = useState<string | null>(null);
@@ -201,6 +234,7 @@ export function ChatView({
         ) : null,
       )}
       <MessageList
+        livePermissionIds={livePermissionIds}
         agent={agent}
         status={displayStatus}
         items={items}
