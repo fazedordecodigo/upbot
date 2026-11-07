@@ -506,6 +506,11 @@ export class Rpc {
         if (!s) throw new RpcError("not_found", "skill not found");
         return s;
       }
+      case "skills.versions": {
+        const versions = this.skills.versions((params as MethodParsedParams<typeof method>).name);
+        if (!versions) throw new RpcError("not_found", "skill not found");
+        return versions;
+      }
       case "skills.save": {
         const p = params as MethodParsedParams<typeof method>;
         return asBadRequest(() => {

@@ -1,4 +1,11 @@
-import type { Agent, Gateway, GatewayKind, MarketplaceItem, ProviderId } from "@boto/protocol";
+import type {
+  Agent,
+  Gateway,
+  GatewayKind,
+  MarketplaceItem,
+  ProviderId,
+  SkillVersion,
+} from "@boto/protocol";
 import { useEffect, useId, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { DaemonClient } from "../lib/daemon";
@@ -7,9 +14,148 @@ import { errorFields, type LogFields, logWarn } from "../lib/log";
 import { PROVIDERS } from "./AgentSettings";
 import { Button, Field, Select, Switch, Tag } from "./ds/controls";
 import styles from "./Library.module.css";
+import detailStyles from "./LibraryDetail.module.css";
 import { Markdown } from "./Markdown";
 
+function SkillDetail({
+  client,
+  name,
+  onBack,
+  onEdit,
+}: {
+  client: DaemonClient;
+  name: string;
+  onBack: () => void;
+  onEdit: (skill: { name: string; description: string; body: string }) => void;
+}) {
+  const [raw, setRaw] = useState(false);
+  const [version, setVersion] = useState<SkillVersion | null>(null);
+  const {
+    data: versions,
+    error: versionsError,
+    reload: reloadVersions,
+  } = useDaemonQuery(
+    client,
+    "skills.versions",
+    { name },
+    {
+      events: { "skills.changed": true },
+      onError: (e) => logWarn("skills.versions_failed", errorFields(e)),
+    },
+  );
+  const { data, error, reload } = useDaemonQuery(
+    client,
+    "skills.get",
+    { name },
+    {
+      events: { "skills.changed": true },
+      onError: (e) => logWarn("skills.get_failed", errorFields(e)),
+    },
+  );
+  if (version)
+    return (
+      <section className={`mx-auto max-w-2xl p-6 ${detailStyles.detail}`}>
+        <Button
+          onClick={() => {
+            setVersion(null);
+            setRaw(false);
+          }}
+        >
+          Voltar para a versão atual
+        </Button>
+        <header className={detailStyles.heading}>
+          <h2>
+            {name} · Versão {version.version}
+          </h2>
+          <p>{version.description}</p>
+          <div className={detailStyles.meta}>
+            {version.author && <span>Autor: {version.author}</span>}
+            <span>Salva em {new Date(version.savedAt).toLocaleString("pt-BR")}</span>
+          </div>
+        </header>
+        <div className={detailStyles.actions}>
+          <Button aria-pressed={raw} onClick={() => setRaw(!raw)}>
+            {raw ? "Ver formatado" : "Ver texto bruto"}
+          </Button>
+        </div>
+        {raw ? (
+          <pre className={detailStyles.raw}>{version.raw}</pre>
+        ) : (
+          <Markdown text={version.body} />
+        )}
+      </section>
+    );
+  return (
+    <section className={`mx-auto max-w-2xl p-6 ${detailStyles.detail}`}>
+      <Button onClick={onBack}>Voltar</Button>
+      {error ? (
+        <div role="alert">
+          <p>Não foi possível carregar a habilidade: {error}</p>
+          <Button onClick={reload}>Tentar novamente</Button>
+        </div>
+      ) : !data ? (
+        <p role="status">Carregando habilidade…</p>
+      ) : (
+        <>
+          <header className={detailStyles.heading}>
+            <h2>{data.name}</h2>
+            <p>{data.description}</p>
+            <div className={detailStyles.meta}>
+              {data.author && <span>Autor: {data.author}</span>}
+              <span>Atualizada em {new Date(data.updatedAt).toLocaleString("pt-BR")}</span>
+            </div>
+          </header>
+          <div className={detailStyles.actions}>
+            <Button
+              onClick={() =>
+                onEdit({ name: data.name, description: data.description, body: data.body })
+              }
+            >
+              Editar
+            </Button>
+            <Button aria-pressed={raw} onClick={() => setRaw(!raw)}>
+              {raw ? "Ver formatado" : "Ver texto bruto"}
+            </Button>
+          </div>
+          {raw ? <pre className={detailStyles.raw}>{data.raw}</pre> : <Markdown text={data.body} />}
+          <section className={detailStyles.versions}>
+            <h3>Versões anteriores</h3>
+            {versionsError ? (
+              <div role="alert">
+                <p>Não foi possível carregar as versões: {versionsError}</p>
+                <Button onClick={reloadVersions}>Tentar novamente</Button>
+              </div>
+            ) : !versions ? (
+              <p role="status">Carregando versões…</p>
+            ) : versions.length === 0 ? (
+              <p className={detailStyles.meta}>Nenhuma versão anterior.</p>
+            ) : (
+              <ul className={detailStyles.versionList}>
+                {versions.map((previous) => (
+                  <li key={previous.version}>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setVersion(previous);
+                        setRaw(false);
+                      }}
+                    >
+                      Versão {previous.version} ·{" "}
+                      {new Date(previous.savedAt).toLocaleString("pt-BR")}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function SkillsView({ client }: { client: DaemonClient }) {
+  const [selected, setSelected] = useState<string | null>(null);
   const [edit, setEdit] = useState<{ name: string; description: string; body: string } | null>(
     null,
   );
@@ -37,7 +183,10 @@ export function SkillsView({ client }: { client: DaemonClient }) {
           setError(null);
           client
             .request("skills.save", edit)
-            .then(() => setEdit(null))
+            .then((saved) => {
+              if (selected !== null) setSelected(saved.name);
+              setEdit(null);
+            })
             .catch(fail("skills.save_failed"));
         }}
       >
@@ -86,6 +235,15 @@ export function SkillsView({ client }: { client: DaemonClient }) {
       </form>
     );
   }
+  if (selected)
+    return (
+      <SkillDetail
+        client={client}
+        name={selected}
+        onBack={() => setSelected(null)}
+        onEdit={setEdit}
+      />
+    );
   return (
     <div className={styles.page}>
       <div className={styles.row}>
@@ -109,7 +267,9 @@ export function SkillsView({ client }: { client: DaemonClient }) {
         {skills.map((s) => (
           <li key={s.name} className={styles.card}>
             <div className={styles.row}>
-              <span className={styles.name}>{s.name}</span>
+              <Button variant="ghost" onClick={() => setSelected(s.name)}>
+                {s.name}
+              </Button>
               {s.author && <span className={styles.muted}>por {s.author}</span>}
               <Button
                 type="button"

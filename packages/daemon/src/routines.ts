@@ -53,6 +53,11 @@ type Row = {
   updated_at: number;
 };
 type RunRow = {
+  queue_status?: RoutineRun["queueStatus"];
+  turn_id?: string | null;
+  turn_status?: NonNullable<RoutineRun["turn"]>["status"];
+  turn_started_at?: number;
+  turn_ended_at?: number | null;
   id: string;
   routine_id: string;
   trigger: string;
@@ -71,6 +76,15 @@ const toRun = (r: RunRow): RoutineRun => ({
   routineId: r.routine_id,
   trigger: r.trigger as RoutineTrigger,
   queueId: r.queue_id,
+  queueStatus: r.queue_status ?? null,
+  turn: r.turn_id
+    ? {
+        id: r.turn_id,
+        status: r.turn_status!,
+        startedAt: r.turn_started_at!,
+        endedAt: r.turn_ended_at ?? null,
+      }
+    : null,
   error: r.error,
   createdAt: r.created_at,
 });
@@ -223,7 +237,11 @@ export class RoutineService {
   runs(id: string): RoutineRun[] {
     const rows = this.db
       .query(
-        "SELECT * FROM routine_runs WHERE routine_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 50",
+        `SELECT r.*, q.status AS queue_status, t.id AS turn_id, t.status AS turn_status,
+          t.started_at AS turn_started_at, t.ended_at AS turn_ended_at
+         FROM routine_runs r LEFT JOIN queue q ON q.id = r.queue_id
+         LEFT JOIN turns t ON t.id = (SELECT id FROM turns WHERE queue_id = r.queue_id ORDER BY started_at DESC, rowid DESC LIMIT 1)
+         WHERE r.routine_id = ? ORDER BY r.created_at DESC, r.rowid DESC LIMIT 50`,
       )
       .all(id) as RunRow[];
     return rows.map(toRun);

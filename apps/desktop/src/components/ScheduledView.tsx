@@ -1,6 +1,9 @@
 import type { Agent } from "@boto/protocol";
+import { useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { DaemonClient } from "../lib/daemon";
+import { Button } from "./ds/controls";
+import { RoutineRuns } from "./RoutineRuns";
 
 export function ScheduledView({
   client,
@@ -11,6 +14,7 @@ export function ScheduledView({
   agents: Agent[];
   onOpen: (id: string) => void;
 }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const {
     data: routines,
     error,
@@ -68,6 +72,27 @@ export function ScheduledView({
                           : ""}
                       </small>
                     </button>
+                    <Button
+                      small
+                      aria-expanded={expanded.has(routine.id)}
+                      onClick={() =>
+                        setExpanded((previous) => {
+                          const next = new Set(previous);
+                          if (next.has(routine.id)) next.delete(routine.id);
+                          else next.add(routine.id);
+                          return next;
+                        })
+                      }
+                    >
+                      Histórico
+                    </Button>
+                    {expanded.has(routine.id) && (
+                      <RoutineRuns
+                        client={client}
+                        routineId={routine.id}
+                        onOpenChat={bot ? () => onOpen(routine.agentId) : undefined}
+                      />
+                    )}
                   </li>
                 );
               })}
