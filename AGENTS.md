@@ -107,7 +107,9 @@ is also in the toast context menu. General settings expose mute on every platfor
 Mute changes and the persisted startup deadline sync to native on every platform. Linux
 skips expiry re-presentation while muted, dropping the entry without replay on unmute.
 Linux uses freedesktop D-Bus notifications with replacement by approval id.
-Interrupted notices are kept without a deadline and only offer review. Pending requests
+Unmuted interrupted notices are kept without a deadline and only offer review. During mute,
+retention changes local state only: every action opens review, expiry is not replayed, and
+unmuting never presents the notice again. Pending requests
 use a timeout until expiresAt and are re-presented on early server expiry; closing never
 decides. Muted posts close the previous notification without delivery or replay.
 Buttons and click callbacks require

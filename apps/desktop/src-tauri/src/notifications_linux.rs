@@ -21,7 +21,14 @@ struct Backend {
 }
 
 #[derive(Default)]
-struct Entries(HashMap<String, (u32, Vec<String>, Notification, bool)>);
+struct Entries(HashMap<String, (u32, Vec<String>, Notification, Retention)>);
+
+#[derive(PartialEq)]
+enum Retention {
+    Pending,
+    Server,
+    Local,
+}
 
 impl Entries {
     fn server_id(&self, id: &str) -> u32 {
@@ -32,18 +39,23 @@ impl Entries {
         self.close(server);
         self.0.insert(
             notification.id.clone(),
-            (server, actions, notification, false),
+            (server, actions, notification, Retention::Pending),
         );
     }
 
-    fn retained(&self, id: &str) -> Option<Notification> {
-        let entry = self.0.get(id)?;
-        if entry.3 {
+    fn retained(&mut self, id: &str, muted: bool) -> Option<Notification> {
+        let entry = self.0.get_mut(id)?;
+        if entry.3 != Retention::Pending {
             return None;
         }
         let mut notification = entry.2.clone();
         notification.expires_at = None;
         notification.actions.clear();
+        if muted {
+            entry.2 = notification;
+            entry.3 = Retention::Local;
+            return None;
+        }
         Some(notification)
     }
 
@@ -72,10 +84,12 @@ impl Entries {
     }
 
     fn response(&self, server: u32, action: &str) -> Option<NotificationResponse> {
-        let (id, _) = self.0.iter().find(|(_, entry)| {
-            entry.0 == server && entry.1.iter().step_by(2).any(|key| key == action)
+        let (id, entry) = self.0.iter().find(|(_, entry)| {
+            entry.0 == server
+                && (entry.3 == Retention::Local
+                    || entry.1.iter().step_by(2).any(|key| key == action))
         })?;
-        let action = if action == "default" {
+        let action = if action == "default" || entry.3 == Retention::Local {
             "review"
         } else {
             action
@@ -254,13 +268,20 @@ impl Backend {
             .map_err(dbus_error)?;
         let id = notification.id.clone();
         entries.replace(notification, server, action_list);
-        entries.0.get_mut(&id).unwrap().3 = retained;
+        entries.0.get_mut(&id).unwrap().3 = if retained {
+            Retention::Server
+        } else {
+            Retention::Pending
+        };
         Ok(server)
     }
 
     fn retain(&self, id: &str) -> Result<(), String> {
         let mut entries = self.entries.lock().unwrap();
-        if let Some(notification) = entries.retained(id) {
+        if let Some(notification) = entries.retained(
+            id,
+            super::MUTE_UNTIL.load(super::Ordering::SeqCst) > now_ms(),
+        ) {
             let server = entries.server_id(id);
             self.notify(&mut entries, notification, server, true)?;
         }
@@ -368,11 +389,11 @@ mod tests {
     #[test]
     fn retain_transforms_existing_entries_without_replay() {
         let mut entries = Entries::default();
-        assert!(entries.retained("missing").is_none());
+        assert!(entries.retained("missing", false).is_none());
         let mut pending = notification();
         pending.expires_at = Some(200);
         entries.replace(pending.clone(), 1, actions(&pending, true));
-        let retained = entries.retained(&pending.id).unwrap();
+        let retained = entries.retained(&pending.id, false).unwrap();
         assert_eq!(retained.title, pending.title);
         assert_eq!(retained.body, pending.body);
         assert!(retained.expires_at.is_none());
@@ -382,8 +403,8 @@ mod tests {
         assert!(!should_repost(1, &retained, 100, 0));
         for server in [1, 2] {
             entries.replace(retained.clone(), server, actions(&retained, true));
-            entries.0.get_mut(&pending.id).unwrap().3 = true;
-            assert!(entries.retained(&pending.id).is_none());
+            entries.0.get_mut(&pending.id).unwrap().3 = Retention::Server;
+            assert!(entries.retained(&pending.id, false).is_none());
             assert_eq!(entries.0.len(), 1);
             assert_eq!(entries.server_id(&pending.id), server);
             assert!(entries.response(server, "task").is_none());
@@ -394,10 +415,75 @@ mod tests {
             );
         }
         assert_eq!(entries.remove(&pending.id), Some(2));
-        assert!(entries.retained(&pending.id).is_none());
+        assert!(entries.retained(&pending.id, false).is_none());
         entries.replace(pending.clone(), 3, actions(&pending, true));
         assert!(entries.expired(3, 1, 200, 0).is_none());
-        assert!(entries.retained(&pending.id).is_none());
+        assert!(entries.retained(&pending.id, false).is_none());
+    }
+
+    #[test]
+    fn muted_retention_is_local_and_never_replayed() {
+        let mut entries = Entries::default();
+        assert!(entries.retained("missing", true).is_none());
+        let mut pending = notification();
+        pending.expires_at = Some(200);
+        entries.replace(pending.clone(), 7, actions(&pending, true));
+        assert!(entries.retained(&pending.id, true).is_none());
+        assert_eq!(entries.server_id(&pending.id), 7);
+        assert!(entries.0[&pending.id].2.expires_at.is_none());
+        assert!(!should_repost(1, &entries.0[&pending.id].2, 100, 0));
+        for action in ["default", "task", "deny", "approve", "always", "unknown"] {
+            assert_eq!(
+                entries.response(7, action),
+                parse_activation("review|linux-test")
+            );
+        }
+        assert!(entries.response(8, "task").is_none());
+        assert!(entries.retained(&pending.id, true).is_none());
+        assert!(entries.retained(&pending.id, false).is_none());
+        assert_eq!(entries.server_id(&pending.id), 7);
+        assert_eq!(entries.remove(&pending.id), Some(7));
+        entries.replace(pending.clone(), 8, actions(&pending, true));
+        assert!(entries.retained(&pending.id, true).is_none());
+        assert!(entries.expired(8, 1, 100, 0).is_none());
+        assert!(entries.0.is_empty());
+        assert!(entries.retained(&pending.id, false).is_none());
+    }
+
+    #[test]
+    #[ignore = "requires a freedesktop notification server; monitor Notify calls"]
+    fn notifications_real_muted_retention() {
+        struct ResetMute;
+        impl Drop for ResetMute {
+            fn drop(&mut self) {
+                super::super::notifications_set_mute(0);
+            }
+        }
+        let _reset = ResetMute;
+        let native = connect().expect("notification server");
+        let mut pending = with_id("linux-muted-retain-test");
+        pending.expires_at = Some(now_ms() + 30_000);
+        native.post(pending.clone()).unwrap();
+        let first = native.entries.lock().unwrap().server_id(&pending.id);
+        super::super::notifications_set_mute(now_ms() + 60_000);
+        native.retain(&pending.id).unwrap();
+        super::super::notifications_set_mute(0);
+        native.retain(&pending.id).unwrap();
+        {
+            let entries = native.entries.lock().unwrap();
+            assert_eq!(entries.server_id(&pending.id), first);
+            assert!(entries.0[&pending.id].2.expires_at.is_none());
+            for action in ["default", "task", "deny", "approve"] {
+                assert_eq!(
+                    entries.response(first, action),
+                    parse_activation("review|linux-muted-retain-test")
+                );
+            }
+        }
+        println!("muted retain and unmute kept server id {first}; all actions route to review");
+        native.remove(&pending.id).unwrap();
+        assert!(native.entries.lock().unwrap().0.is_empty());
+        println!("remove closed locally retained notice");
     }
 
     #[test]
