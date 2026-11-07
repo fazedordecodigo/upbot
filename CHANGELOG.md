@@ -9,6 +9,8 @@
 - Refreshed the desktop with the Eco palette, packaged Host Grotesk and DM Mono fonts,
   dark theme, responsive navigation and keyboard/accessibility improvements.
 - Improved chat streaming performance and rendered bot replies as Markdown.
+- Updated remote host and email settings to Eco design-system controls and layouts, with
+  Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
 ### Fixed
 - Keep already delivered interrupted-approval notifications in Notification Center until
@@ -22,6 +24,7 @@
   Gemini API key or Vertex AI, including when a cached Google sign-in fails.
 
 ### Added
+- Opt-in Computer Use on Windows and Linux X11, with unavailable reasons for Wayland or missing tools.
 - Linux x64/ARM64 RPM releases and ARM64 AppImage/deb releases.
 - Optional macOS signing with Bun entitlements and app/DMG notarization, and Windows PFX
   Authenticode signing; releases reject incomplete signing secrets and verify signatures.
