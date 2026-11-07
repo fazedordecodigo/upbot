@@ -15,6 +15,8 @@
   Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
 ### Fixed
+- macOS Computer Use types Unicode text via paste instead of layout-dependent keystrokes,
+  preserving accents and emoji and restoring the previous clipboard contents.
 - Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
   DPAPI scripts load System.Security without `Add-Type`, a timed-out call is retried, and a
   persistent timeout reports an error instead of writing a plaintext key.
@@ -24,7 +26,6 @@
   exception from stopping pending-approval notification delivery.
 - Request macOS badge authorization so pending-approval Dock counts can appear. Existing
   installations may need to enable Badge application icon in Boto's notification settings.
-
 - Keep already delivered interrupted-approval notifications in Notification Center until
   reviewed, so clicking them after a restart opens the specific interrupted notice.
 - OpenCode turns waiting on bridge tools or user approvals no longer fail with a spurious

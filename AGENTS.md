@@ -434,7 +434,10 @@ optional service-account token); `connector.bitwarden` -> `bitwarden_get` (`bw g
 BW_SESSION). `BOTO_OP_COMMAND`/`BOTO_BW_COMMAND` override the CLIs.
 Computer Use (`src/computer.ts`, `src/computer-platform.ts`): off per agent until `computer.setAccess`; bridge
 `computer_screenshot` (screencapture), `computer_click` (CoreGraphics via JXA),
-`computer_type`, `computer_key` (System Events, whitelisted keys/modifiers);
+`computer_type` (macOS Unicode clipboard paste with prior clipboard contents restored),
+`computer_key` (System Events on macOS, whitelisted keys/modifiers);
+macOS refuses typing before changing the clipboard if a type cannot be materialized
+(for example, an unreadable file promise); promised provider callbacks cannot be restored.
 Windows uses PowerShell/.NET System.Drawing, user32 mouse input and Unicode SendInput.
 Linux requires X11, xdotool and import (ImageMagick), scrot or gnome-screenshot.
 `computer.access` includes an unavailable reason for Wayland/missing tools/display; the UI shows it.
