@@ -124,9 +124,9 @@ function secretServiceKey(dataDir: string): Buffer | null {
   return Buffer.from(hex, "hex");
 }
 
-// Windows PowerShell autoloads Microsoft.PowerShell.Utility for cmdlets such as Add-Type, and
-// that module import can stall for tens of seconds on a fresh machine (measured on Windows
-// ARM64). The DPAPI scripts therefore use .NET calls only, with autoloading turned off.
+// `Add-Type -AssemblyName` took 25-36 s per cold call on Windows ARM64, while process start,
+// Import-Module Microsoft.PowerShell.Utility and a reflection assembly load each took under
+// a second. The DPAPI scripts therefore use .NET calls only, with autoloading turned off.
 const DPAPI_PRELUDE = [
   "$ErrorActionPreference = 'Stop'",
   "$PSModuleAutoLoadingPreference = 'None'",

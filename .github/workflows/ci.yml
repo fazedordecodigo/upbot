@@ -54,27 +54,6 @@ jobs:
         run: |
           bunx --no-install playwright-core install --with-deps chromium
           bun -e 'import { chromium } from "playwright-core"; console.log(`CHROME_PATH=${chromium.executablePath()}`)' >> "$GITHUB_ENV"
-      - name: Temporary Windows ARM64 DPAPI diagnostics
-        if: matrix.os == 'windows-11-arm'
-        shell: pwsh
-        timeout-minutes: 10
-        run: |
-          $load = "[void][Reflection.Assembly]::Load('System.Security, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a')"
-          $trip = '$b = [byte[]]::new(32); $p = [Security.Cryptography.ProtectedData]::Protect($b, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser); [void][Security.Cryptography.ProtectedData]::Unprotect($p, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)'
-          $cases = [ordered]@{
-            'new-dpapi-cold' = @('-Command', "`$ErrorActionPreference = 'Stop'; `$PSModuleAutoLoadingPreference = 'None'; $load; $trip")
-            'exit' = @('-Command', 'exit 0')
-            'import-utility-bypass' = @('-ExecutionPolicy', 'Bypass', '-Command', "`$ErrorActionPreference = 'Stop'; Import-Module Microsoft.PowerShell.Utility")
-            'import-utility' = @('-Command', "`$ErrorActionPreference = 'Stop'; Import-Module Microsoft.PowerShell.Utility")
-            'old-add-type' = @('-Command', "`$ErrorActionPreference = 'Stop'; Add-Type -AssemblyName System.Security; $trip")
-            'new-dpapi-again' = @('-Command', "`$ErrorActionPreference = 'Stop'; `$PSModuleAutoLoadingPreference = 'None'; $load; $trip")
-          }
-          foreach ($name in $cases.Keys) {
-            $timer = [Diagnostics.Stopwatch]::StartNew()
-            $null = & powershell.exe -NoProfile -NonInteractive @($cases[$name]) 2>&1
-            Write-Output "$name exit=$LASTEXITCODE ms=$($timer.ElapsedMilliseconds)"
-          }
-          & powershell.exe -NoProfile -NonInteractive -Command 'Get-ExecutionPolicy -List | Format-Table -AutoSize | Out-String'
       - run: bun run test
       - run: bun run build:daemon
       - run: cargo check --locked

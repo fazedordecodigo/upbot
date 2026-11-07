@@ -360,8 +360,8 @@ an existing `<data-dir>/vault.key`, then Windows DPAPI or Linux Secret Service. 
 `vault.key.location` after a successful Secret Service store so a locked/unavailable keyring
 cannot silently orphan secrets; when secure storage is unavailable, a 0600 plaintext key file
 is used with a warning. Windows DPAPI runs `powershell.exe` with .NET-only scripts and
-`$PSModuleAutoLoadingPreference = 'None'`: `Add-Type` autoloads Microsoft.PowerShell.Utility,
-which took 25-36 s per cold call on `windows-11-arm`. A timed-out call is retried once
+`$PSModuleAutoLoadingPreference = 'None'`: `Add-Type -AssemblyName` took 25-36 s per cold call
+on `windows-11-arm` (process start and the Utility module import were under 1 s). A timed-out call is retried once
 (`DPAPI_TIMEOUTS_MS`, 30 s then 90 s); a persistent timeout throws and never writes a plaintext
 key, while a missing `powershell.exe`, non-zero exit or write failure keeps the warned
 fallback. Warnings and errors name only an error code, exit status or timeout, never

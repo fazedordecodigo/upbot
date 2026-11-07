@@ -11,7 +11,7 @@
 
 ### Fixed
 - Windows vault key storage no longer falls back to a plaintext key when DPAPI is slow: the
-  DPAPI scripts skip PowerShell module autoloading, a timed-out call is retried, and a
+  DPAPI scripts load System.Security without `Add-Type`, a timed-out call is retried, and a
   persistent timeout reports an error instead of writing a plaintext key.
 
 ## 0.3.0
