@@ -241,7 +241,7 @@ export function keyCommand(backend: ComputerBackend, key: string, modifiers: unk
     case "win32":
       return powershell(
         backend,
-        `${WINDOWS_INPUT}\n[BotoInput]::Key(${code ? code[2] : lower.toUpperCase().charCodeAt(0)}, ${code?.[3] ?? 0}, [ushort[]]@(${mods.map((mod) => (MODIFIERS[mod] as [string, number])[1]).join(",")}))`,
+        `${WINDOWS_INPUT}\n[BotoInput]::Key(${code ? code[2] : lower.toUpperCase().charCodeAt(0)}, ${code?.[3] ?? 0}, [uint16[]]@(${mods.map((mod) => (MODIFIERS[mod] as [string, number])[1]).join(",")}))`,
       );
     case "linux":
       return [

@@ -69,9 +69,56 @@ describe("computer platform commands", () => {
     expect(decode(screenshotCommand(backend, "C:\\a'b.png"))).toContain("C:\\a''b.png");
     expect(decode(screenshotCommand(backend, "a.png"))).toContain("SetProcessDPIAware()");
     expect(decode(keyCommand(backend, "left", ["command", "shift"]))).toContain(
-      "::Key(37, 1, [ushort[]]@(91,16))",
+      "::Key(37, 1, [uint16[]]@(91,16))",
     );
   });
+  test("Windows scripts avoid PowerShell 6.2 numeric aliases", () => {
+    const backend: ComputerBackend = { platform: "win32", powershell: "powershell.exe" };
+    for (const command of [
+      screenshotCommand(backend, "a.png"),
+      clickCommand(backend, 10, 20, true),
+      typeCommand(backend, "text"),
+      keyCommand(backend, "return", []),
+      keyCommand(backend, "a", ["control"]),
+    ]) {
+      const script = Buffer.from(command.at(-1) ?? "", "base64").toString("utf16le");
+      expect(script).not.toMatch(/\[(?:short|ushort|uint|ulong)(?:\[\])?\]/i);
+    }
+  });
+  test.skipIf(process.platform !== "win32")(
+    "Windows PowerShell parses scripts and resolves key types without sending input",
+    () => {
+      const backend: ComputerBackend = { platform: "win32", powershell: "powershell.exe" };
+      for (const command of [
+        screenshotCommand(backend, "a.png"),
+        clickCommand(backend, 10, 20, true),
+        typeCommand(backend, ""),
+        keyCommand(backend, "return", []),
+        keyCommand(backend, "a", ["control"]),
+      ]) {
+        const script = Buffer.from(command.at(-1) ?? "", "base64").toString("utf16le");
+        const check = `$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$script = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${command.at(-1)}'))
+$tokens = $null; $errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseInput($script, [ref]$tokens, [ref]$errors)
+if ($errors.Count) { throw ($errors | Out-String) }
+${script.slice(0, script.indexOf("\n'@") + 3)}
+Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Windows.Forms
+foreach ($node in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.TypeExpressionAst] -or $n -is [System.Management.Automation.Language.TypeConstraintAst] }, $true)) {
+  if ($null -eq $node.TypeName.GetReflectionType()) { throw ('Unresolved type: ' + $node.TypeName.FullName) }
+}`;
+        const result = Bun.spawnSync([
+          ...command.slice(0, -1),
+          Buffer.from(check, "utf16le").toString("base64"),
+        ]);
+        expect(result.stderr.toString()).toBe("");
+        expect(result.exitCode).toBe(0);
+      }
+    },
+    30_000,
+  );
   test("availability explains Wayland, missing display and tools", () => {
     for (const [env, reason] of [
       [{ WAYLAND_DISPLAY: "wayland-0", DISPLAY: ":0" }, "Wayland"],
