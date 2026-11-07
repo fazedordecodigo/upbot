@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { Skill } from "@boto/protocol";
+import type { Skill, SkillVersion } from "@boto/protocol";
 
 // Local skills library shared by all agents: <shared>/Skills/<name>/SKILL.md with a
 // `name`/`description`/`author` frontmatter. Revisions keep the previous file in .history/.
@@ -58,16 +58,48 @@ export class SkillLibrary {
     return readdirSync(this.root)
       .filter((n) => NAME_RE.test(n) && existsSync(this.file(n)))
       .sort()
-      .map((n) => this.get(n)!)
-      .filter(Boolean);
+      .map((n) => {
+        const skill = this.get(n);
+        if (!skill) return null;
+        const { raw: _, ...summary } = skill;
+        return summary;
+      })
+      .filter((skill) => skill !== null);
   }
 
-  get(name: string): Skill | null {
+  get(name: string): (Skill & { raw: string }) | null {
     const slug = skillSlug(name);
     if (!NAME_RE.test(slug)) return null;
     const f = this.file(slug);
     if (!existsSync(f)) return null;
-    return parse(slug, readFileSync(f, "utf8"), statSync(f).mtimeMs);
+    const raw = readFileSync(f, "utf8");
+    return { ...parse(slug, raw, statSync(f).mtimeMs), raw };
+  }
+
+  versions(name: string): SkillVersion[] | null {
+    const current = this.get(name);
+    if (!current) return null;
+    const history = join(this.root, current.name, ".history");
+    if (!existsSync(history)) return [];
+    const files = readdirSync(history, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /^\d+\.md$/.test(entry.name))
+      .map((entry) => ({ name: entry.name, savedAt: Number(entry.name.slice(0, -3)) }))
+      .sort((a, b) => a.savedAt - b.savedAt || a.name.localeCompare(b.name));
+    return files
+      .slice(-50)
+      .map((entry, index) => {
+        const raw = readFileSync(join(history, entry.name), "utf8");
+        const skill = parse(current.name, raw, entry.savedAt);
+        return {
+          version: Math.max(0, files.length - 50) + index + 1,
+          raw,
+          savedAt: entry.savedAt,
+          description: skill.description,
+          author: skill.author,
+          body: skill.body,
+        };
+      })
+      .reverse();
   }
 
   save(
