@@ -1126,7 +1126,11 @@ export const methodMap = {
   "vault.delete": { params: z.object({ name: VaultName }).strict(), result: Ok },
   "computer.access": {
     params: z.object({}).strict(),
-    result: z.object({ available: z.boolean(), agentIds: z.array(z.string()) }),
+    result: z.object({
+      available: z.boolean(),
+      reason: z.string().optional(),
+      agentIds: z.array(z.string()),
+    }),
   },
   "computer.setAccess": {
     params: z.object({ agentIds: z.array(z.string()) }).strict(),

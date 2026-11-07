@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Opt-in Computer Use on Windows and Linux X11, with unavailable reasons for Wayland or missing tools.
 - Windows x64 per-user installer and Linux x64 AppImage/deb releases, alongside macOS builds.
 - Cross-platform daemon builds, Windows CLI spawning and PATH resolution, browser discovery,
   and platform-secure vault key storage.

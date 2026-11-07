@@ -416,13 +416,13 @@ export const BRIDGE_TOOLS = [
       ],
       [
         "computer_screenshot",
-        "Computer Use: screenshot the main display into your workspace.",
+        "Computer Use: screenshot the main display (Linux: X11 desktop) into your workspace.",
         {},
         [],
       ],
       [
         "computer_click",
-        "Computer Use: click at screen point x,y (double=true for a double click).",
+        "Computer Use: click at x,y (macOS: screen points; Windows/Linux: screen pixels; double=true for a double click).",
         { x: { type: "number" }, y: { type: "number" }, double: { type: "boolean" } },
         ["x", "y"],
       ],
@@ -434,7 +434,7 @@ export const BRIDGE_TOOLS = [
       ],
       [
         "computer_key",
-        "Computer Use: press a key (letter/digit, return, tab, escape, arrows, ...) with optional modifiers.",
+        "Computer Use: press a key (letter/digit, return, tab, escape, arrows, ...) with optional command/control/option/shift modifiers (command is Win/Super and option is Alt on Windows/Linux).",
         { key: { type: "string" }, modifiers: { type: "array", items: { type: "string" } } },
         ["key"],
       ],

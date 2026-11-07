@@ -89,8 +89,13 @@ Download the installer for your OS from [Releases](https://github.com/fazedordec
 
 On Linux, install `libsecret-tools` to store the vault key in Secret Service. Otherwise
 Boto uses a plaintext key file with owner-only permissions and warns at startup. Windows
-stores new keys using DPAPI, and macOS uses Keychain. Computer Use and the built-in `say`
-voice are macOS-only.
+stores new keys using DPAPI, and macOS uses Keychain. Computer Use supports macOS, Windows and Linux X11, and remains opt-in per bot with approval gating.
+On Linux install `xdotool` and one of ImageMagick (`import`), `scrot` or `gnome-screenshot`;
+Wayland and missing tools/display are reported as unavailable in bot settings. Windows uses
+Windows PowerShell/.NET and cannot control elevated windows or UAC prompts. macOS requires
+Screen Recording and Accessibility permission. Coordinates are screen points on macOS and
+screen pixels on Windows/Linux (Linux captures the X11 desktop). The built-in `say` voice
+remains macOS-only.
 
 Boto was called BobAgent until 0.3.0; updating moves `~/BobAgent` to `~/Boto` and keeps
 your bots, chats and vault.
