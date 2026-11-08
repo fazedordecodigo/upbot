@@ -90,6 +90,12 @@ test("kit switch tracks contain knobs on and off in both themes", async () => {
     await page
       .getByRole("button", { name: theme === "light" ? "Tema claro" : "Tema escuro", exact: true })
       .click();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
     const daily = page.getByRole("switch", { name: "Resumo diário às 8h" });
     for (const checked of [false, true]) {
       if ((await daily.getAttribute("aria-checked")) !== String(checked)) await daily.click();
@@ -109,8 +115,14 @@ test("kit switch tracks contain knobs on and off in both themes", async () => {
   }
 });
 
-test("theme persists, focus is visible, colors invert, reduced motion stops pulse", async () => {
+test("theme persists, focus is visible, colors invert, reduced motion uses 1ms", async () => {
   await page.getByRole("button", { name: "Tema escuro" }).click();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("dark");
   expect(await page.evaluate(() => localStorage.getItem("boto.theme"))).toBe("dark");
   await page.reload();
@@ -128,7 +140,7 @@ test("theme persists, focus is visible, colors invert, reduced motion stops puls
     };
   });
   expect(style.outline).toBe("2px");
-  expect(style.offset).toBe("3px");
+  expect(style.offset).toBe("2px");
   expect(style.background).not.toBe(style.color);
   await page.emulateMedia({ reducedMotion: "reduce" });
   expect(
@@ -136,9 +148,15 @@ test("theme persists, focus is visible, colors invert, reduced motion stops puls
       .getByText("Em execução", { exact: true })
       .first()
       .locator("svg")
-      .evaluate((el) => getComputedStyle(el).animationName),
-  ).toBe("none");
+      .evaluate((el) => getComputedStyle(el).animationDuration),
+  ).toBe("0.001s");
   await page.getByRole("button", { name: "Tema claro" }).click();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
 });
 
@@ -196,6 +214,9 @@ test("kit controls use Rio Negro height, radius and focus tokens", () => {
   expect(controls).toContain("var(--boto-radius-md)");
   expect(controls).toContain('data-tone="run"');
   expect(controls).not.toContain("pillDot");
+  expect(controls.slice(controls.indexOf("@media (pointer: coarse)"))).toContain(
+    ".iconSegments button",
+  );
 });
 
 test("Library screens use the kit and scoped Rio Negro tokens", () => {
@@ -230,6 +251,12 @@ test("all authored colors are token-based and dark controls retain visible focus
     await page
       .getByRole("button", { name: theme === "light" ? "Tema claro" : "Tema escuro", exact: true })
       .click();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
     await page.keyboard.press("Tab");
     await all.focus();
     const computed = await all.evaluate((element) => {
@@ -244,8 +271,8 @@ test("all authored colors are token-based and dark controls retain visible focus
       };
     });
     expect(computed.outline).toBe("2px");
-    expect(computed.offset).toBe("3px");
-    expect(computed.transition).toBe("0s");
+    expect(computed.offset).toBe("2px");
+    expect(computed.transition).toBe("0.001s");
     expect(computed.width).toBeGreaterThanOrEqual(36);
     expect(computed.height).toBe(36);
     const out = process.env.PHASE6_SCREEN_DIR;
@@ -302,8 +329,15 @@ test("Rio Negro palette meets AA contrast from computed colors in both themes", 
     await page
       .getByRole("button", { name: theme === "light" ? "Tema claro" : "Tema escuro", exact: true })
       .click();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
     const measured = await page.evaluate(() => {
       const probe = document.createElement("div");
+      probe.style.setProperty("transition", "none", "important");
       document.body.append(probe);
       const read = (name: string) => {
         probe.style.color = `var(${name})`;
@@ -400,6 +434,12 @@ test("every custom property used in the desktop app resolves on the kit", async 
 test("kit titles are semibold and the Rio Negro palette is on the page", async () => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Tema claro", exact: true }).click();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   expect(await page.locator("h1").evaluate((element) => getComputedStyle(element).fontWeight)).toBe(
     "600",
   );
@@ -416,6 +456,12 @@ test("kit titles are semibold and the Rio Negro palette is on the page", async (
     .evaluate((element) => getComputedStyle(element).backgroundColor);
   expect(parseRgb(accent)).toEqual([194, 69, 107]);
   await page.getByRole("button", { name: "Tema escuro", exact: true }).click();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   const darkAccent = await swatch
     .getByRole("listitem", { name: "Destaque", exact: true })
     .evaluate((element) => getComputedStyle(element).backgroundColor);
@@ -429,6 +475,12 @@ test("danger button outline differs from the primary button in both themes", asy
     await page
       .getByRole("button", { name: theme === "light" ? "Tema claro" : "Tema escuro", exact: true })
       .click();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
     const read = (name: string) =>
       page
         .getByRole("button", { name, exact: true })

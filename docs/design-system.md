@@ -49,6 +49,7 @@ O código novo lê o nome semântico. A ponte mantém o nome antigo para `boto.c
 | `primary-foreground` / `on-accent` | `#ffffff` | `#0c1416` | `--on-accent` |
 | `ring` / `focus` | `#c2456b` | `#f08aa6` | `--focus` |
 | `destructive` / `danger` | `#b8382a` | `#ef7b6c` | `--st-err` |
+| `danger-text` → `destructive` | `#b8382a` | `#ef7b6c` | texto de erro / `red-*` |
 | `success` / `status-run` | `#1a7d6f` | `#3bb7a5` | `--st-run` |
 | `status-wait` | `#c2456b` | `#f08aa6` | `--st-wait` |
 | `status-muted` / `status-idle` | `#55676a` | `#93a3a5` | parado / na fila |
@@ -76,7 +77,7 @@ A ponte também define `--ink`, `--pill-mix`, `--pill-ink`, `--container`, `--gu
 | Início | 1160 px |
 | Coluna do chat | 760 px |
 
-`prefers-reduced-motion: reduce` zera as durações e para as animações.
+`prefers-reduced-motion: reduce` reduz as durações de animações e transições para 1 ms.
 
 ## Tipografia
 
@@ -85,7 +86,8 @@ A ponte também define `--ink`, `--pill-mix`, `--pill-ink`, `--container`, `--gu
 | Títulos e saudações | Bricolage Grotesque | 500 a 700 |
 | Interface e relatos | Inter | 400 a 600 |
 | Horários, comandos, código | JetBrains Mono | 400 a 500 |
-| Corpo | `--fs-body` | 16 px |
+
+O corpo usa `--fs-body` (`--boto-font-size-base`), 16 px.
 
 As faces estão em `apps/desktop/src/fonts/` (woff2 variável, subset latin e latin-ext), com `OFL-BricolageGrotesque.txt`, `OFL-Inter.txt` e `OFL-JetBrainsMono.txt`. Não há CDN. O `@font-face` fica no `tokens.css` gerado. `--font-display` aponta para Bricolage Grotesque; `--font-body` aponta para Inter.
 
@@ -97,7 +99,7 @@ Alguns módulos ainda declaram peso 700 ou 800 por cima da regra global (`AgentC
 
 - nenhum hex fora de `tokens.css`;
 - contraste AA a partir do estilo computado (`--fg`/`--bg`, `--fg`/`--surface`, `--muted`/`--bg` e `--on-accent`/`--accent` ≥ 4,5:1; `--focus`/`--bg` ≥ 3:1);
-- anel de foco de 2 px com folga de 3 px (`--boto-size-focus-ring` e `--boto-size-focus-offset`);
+- anel de foco de 2 px com folga de 2 px (`--boto-size-focus-ring` e `--boto-size-focus-offset`);
 - altura de controle de 36 px (`--boto-size-control`; a pequena é 32 px) e 44 px em `pointer: coarse`;
 - `bun scripts/build-tokens.ts` sem diff no CSS commitado.
 
