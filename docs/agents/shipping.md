@@ -1,7 +1,7 @@
 # CI, releases, updates, branding
 
 - `.github/workflows/ci.yml`: lint/typecheck on Ubuntu; tests, daemon build, Rust check and
-  desktop build on macOS ARM64 and Linux/Windows x64 and ARM64.
+  desktop build on macOS ARM64 and Linux/Windows x64.
 - `.github/workflows/release.yml`: on `v*` tags, tauri-action builds macOS `.app`/`.dmg`,
   Linux x64/ARM64 `.AppImage`/`.deb`/`.rpm` and per-user Windows x64/ARM64 NSIS
   `.exe` into a draft release. Linux uses Ubuntu 22.04 on both architectures for the same
