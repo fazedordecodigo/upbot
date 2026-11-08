@@ -36,13 +36,13 @@ export const ST = {
 
 export type UiStatus = keyof typeof ST;
 
-/** Tons do DESIGN. `queue` cai em `wait`; `err` cai em `muted`. */
+/** Tons do DESIGN (§7). `wait` só para aprovação ou permissão; `queue` e `err` caem em `muted`. */
 export type StatusTone = "run" | "wait" | "muted" | "done";
 
 const STATUS_TONE: Record<UiStatus, StatusTone> = {
   run: "run",
   wait: "wait",
-  queue: "wait",
+  queue: "muted",
   err: "muted",
   ok: "done",
   idle: "done",
@@ -51,7 +51,7 @@ const STATUS_TONE: Record<UiStatus, StatusTone> = {
 const STATUS_ICON: Record<UiStatus, IconName> = {
   run: "load",
   wait: "hand",
-  queue: "hand",
+  queue: "circle-pause",
   err: "alert",
   ok: "check",
   idle: "check",
@@ -62,7 +62,7 @@ export function statusTone(status: UiStatus): StatusTone {
 }
 
 export function statusIcon(status: UiStatus, paused = false): IconName {
-  if (paused && status !== "run" && status !== "wait") return "pause";
+  if (paused && status !== "run" && status !== "wait") return "circle-pause";
   return STATUS_ICON[status];
 }
 
@@ -100,10 +100,9 @@ export function status(
   latestTurn: Turn | null,
   pendingApprovals = 0,
 ): UiStatus {
+  if (live === "awaiting_permission" || pendingApprovals > 0) return "wait";
   if (live === "starting" || live === "running") return "run";
-  if (live === "awaiting_permission") return "wait";
   if (live === "error") return "err";
-  if (pendingApprovals > 0) return "wait";
   if (queued > 0) return "queue";
   if (latestTurn?.status === "completed") return "ok";
   if (latestTurn?.status === "failed") return "err";
@@ -161,7 +160,7 @@ export function MonoAv({
 
 export function Pill({ st }: { st: UiStatus }) {
   return (
-    <span className="rn-status" data-tone={statusTone(st)}>
+    <span className="status" data-tone={statusTone(st)}>
       <Icon name={statusIcon(st)} size={13} />
       {ST[st]}
     </span>

@@ -154,6 +154,7 @@ export function AgentPanel({
             type="button"
             className="icon-btn"
             aria-label="Fechar painel do agente"
+            title="Fechar painel do agente"
             onClick={() => dialogRef.current?.close()}
           >
             <Icon name="x" />
@@ -177,9 +178,14 @@ export function AgentPanel({
               <div className="ap-machine">
                 <b>{workspace.machine}</b>
                 <span>
-                  {placement?.isolation === "firecracker"
-                    ? `MicroVM${host ? ` · ${host.name}` : ""} · ${placement.vcpus} vCPU · ${placement.memMib} MiB`
-                    : "Sem microVM. A sessão roda neste computador."}
+                  {placement?.isolation === "firecracker" ? (
+                    <>
+                      {`MicroVM${host ? ` · ${host.name}` : ""} · `}
+                      <span className="ap-machine-size">{`${placement.vcpus} vCPU · ${placement.memMib} MiB`}</span>
+                    </>
+                  ) : (
+                    "Sem microVM. A sessão roda neste computador."
+                  )}
                 </span>
                 <span>{statusLabel}</span>
               </div>
@@ -213,6 +219,7 @@ export function AgentPanel({
                   <button
                     type="button"
                     aria-label="Remover da fila"
+                    title="Remover da fila"
                     disabled={busy}
                     onClick={() => void remove(item.id)}
                   >
