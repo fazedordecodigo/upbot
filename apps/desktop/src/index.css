@@ -28,7 +28,7 @@ button { min-width: var(--boto-size-control); }
   }
   button { min-width: var(--boto-size-target) !important; }
 }
-:focus-visible { outline: 2px solid var(--focus) !important; outline-offset: 3px !important; }
+:focus-visible { outline: var(--boto-size-focus-ring) solid var(--focus) !important; outline-offset: var(--boto-size-focus-offset) !important; }
 
 .hint.is-err,
 .notice.is-err {
