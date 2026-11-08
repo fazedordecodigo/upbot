@@ -431,6 +431,21 @@ test("every custom property used in the desktop app resolves on the kit", async 
   expect(missing).toEqual([]);
 });
 
+async function waitForAccent(rgb: [number, number, number]) {
+  await page
+    .waitForFunction(
+      (expected) => {
+        const item = document.querySelector(
+          '[aria-label="Paleta Rio Negro"] [aria-label="Destaque"]',
+        );
+        return item ? getComputedStyle(item).backgroundColor === expected : false;
+      },
+      `rgb(${rgb.join(", ")})`,
+      { timeout: 3000 },
+    )
+    .catch(() => {});
+}
+
 test("kit titles are semibold and the Rio Negro palette is on the page", async () => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Tema claro", exact: true }).click();
@@ -451,6 +466,7 @@ test("kit titles are semibold and the Rio Negro palette is on the page", async (
   ).toBe("600");
   expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe("16px");
   const swatch = page.getByRole("list", { name: "Paleta Rio Negro" });
+  await waitForAccent([194, 69, 107]);
   const accent = await swatch
     .getByRole("listitem", { name: "Destaque", exact: true })
     .evaluate((element) => getComputedStyle(element).backgroundColor);
@@ -462,6 +478,7 @@ test("kit titles are semibold and the Rio Negro palette is on the page", async (
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       ),
   );
+  await waitForAccent([240, 138, 166]);
   const darkAccent = await swatch
     .getByRole("listitem", { name: "Destaque", exact: true })
     .evaluate((element) => getComputedStyle(element).backgroundColor);
