@@ -121,12 +121,12 @@ dialog::backdrop { background: var(--overlay); }
 .dialog-close { position: absolute; top: var(--space-2); right: var(--space-2); }
 .dialog-header { padding-right: var(--space-8); }
 .dialog-title { font-size: var(--text-xl); }
-.dropdown-menu { position: fixed; z-index: 40; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--popover); box-shadow: var(--boto-shadow-md); }
+.dropdown-menu { position: fixed; z-index: 40; padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--popover); box-shadow: var(--boto-shadow-lg); }
 .dropdown-item { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; font-size: var(--text-sm); }
 .dropdown-item:hover { background: var(--accent); }
 .dropdown-label, .item-desc { font-size: var(--text-xs); color: var(--muted-foreground); }
 .dropdown-separator { border-top: 1px solid var(--border); margin-block: var(--space-2); }
-.toaster { position: fixed; bottom: var(--space-6); right: var(--space-6); z-index: 60; max-width: calc(100% - var(--space-12)); padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--popover); box-shadow: var(--boto-shadow-md); }
+.toaster { position: fixed; bottom: var(--space-6); right: var(--space-6); z-index: 60; max-width: calc(100% - var(--space-12)); padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--popover); box-shadow: var(--boto-shadow-lg); }
 @keyframes eye-pulse { 50% { opacity: .4; } }
 
 /* Navegação visual, sem o motor de simulação do export original. */
