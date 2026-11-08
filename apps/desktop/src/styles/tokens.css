@@ -65,6 +65,7 @@
   --boto-font-weight-regular: 400;
   --boto-font-weight-medium: 500;
   --boto-font-weight-semibold: 600;
+  --boto-font-weight-bold: 700;
   --boto-font-size-xs: 12px;
   --boto-font-size-sm: 14px;
   --boto-font-size-base: 16px;
@@ -91,7 +92,6 @@
   --boto-letter-spacing-label: 0.06em;
   --boto-letter-spacing-normal: 0;
   --boto-space-0: 0px;
-  --boto-space-0-5: 2px;
   --boto-space-1: 4px;
   --boto-space-2: 8px;
   --boto-space-3: 12px;
@@ -133,13 +133,24 @@
   --boto-size-avatar-md: 32px;
   --boto-size-avatar-lg: 40px;
   --boto-size-focus-ring: 2px;
-  --boto-size-focus-offset: 3px;
+  --boto-size-focus-offset: 2px;
   --boto-size-container: 1120px;
   --boto-size-gutter: 32px;
   --boto-size-bp-mobile: 767px;
   --boto-size-bp-sheet: 1023px;
   --boto-size-bp-dense: 479px;
-  --boto-size-bp-wide: 1180px;
+  --boto-size-bp-dense-sm: 380px;
+  --boto-size-menu: 248px;
+  --boto-size-dialog: 520px;
+  --boto-size-switch-track: 40px;
+  --boto-size-switch-height: 22px;
+  --boto-size-switch-thumb: 18px;
+  --boto-size-switch-inset: 3px;
+  --boto-size-badge: 22px;
+  --boto-size-icon: 16px;
+  --boto-size-icon-status: 13px;
+  --boto-size-input-halo: 3px;
+  --boto-size-textarea: 120px;
   --boto-color-rio-negro: #0c1416;
   --boto-color-igapo: #131d20;
   --boto-color-nevoa: #e8eeee;
@@ -187,7 +198,7 @@
   --boto-color-accent-pressed: var(--boto-color-primary-hover);
   --boto-color-on-accent: var(--boto-color-primary-foreground);
   --boto-color-accent-text: var(--boto-color-primary);
-  --boto-color-accent-soft: color-mix(in srgb, #f08aa6 16%, #0c1416);
+  --boto-color-accent-soft: color-mix(in srgb, var(--boto-color-primary) 16%, var(--boto-color-background));
   --boto-color-focus: var(--boto-color-ring);
   --boto-color-bubble-user: var(--boto-color-secondary);
   --boto-color-on-bubble-user: var(--boto-color-foreground);
@@ -195,10 +206,10 @@
   --boto-color-logo-echo: var(--boto-color-success);
   --boto-color-danger: var(--boto-color-destructive);
   --boto-color-danger-text: var(--boto-color-destructive);
-  --boto-color-danger-soft: color-mix(in srgb, #ef7b6c 16%, #0c1416);
+  --boto-color-danger-soft: color-mix(in srgb, var(--boto-color-destructive) 16%, var(--boto-color-background));
   --boto-color-danger-btn-bg: var(--boto-color-popover);
   --boto-color-danger-btn-bg-hover: var(--boto-color-danger-soft);
-  --boto-color-danger-btn-bg-pressed: color-mix(in srgb, #ef7b6c 24%, #151f22);
+  --boto-color-danger-btn-bg-pressed: color-mix(in srgb, var(--boto-color-destructive) 24%, var(--boto-color-popover));
   --boto-color-danger-btn-border: var(--boto-color-destructive);
   --boto-color-danger-btn-fg: var(--boto-color-destructive);
   --boto-color-status-run: var(--boto-color-success);
@@ -219,7 +230,6 @@
   --boto-color-scrim: var(--boto-color-overlay);
   --boto-color-shadow-color: rgb(0 0 0 / 0.45);
   --boto-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
-  --boto-shadow-md: 0 8px 24px rgb(0 0 0 / 0.35);
   --boto-shadow-lg: 0 16px 40px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.3);
   --boto-mix-pill-bg: 18%;
   --boto-mix-pill-ink: 60%;
@@ -274,7 +284,7 @@
   --boto-color-accent-pressed: var(--boto-color-primary-hover);
   --boto-color-on-accent: var(--boto-color-primary-foreground);
   --boto-color-accent-text: var(--boto-color-primary);
-  --boto-color-accent-soft: color-mix(in srgb, #c2456b 12%, #f6f8f7);
+  --boto-color-accent-soft: color-mix(in srgb, var(--boto-color-primary) 12%, var(--boto-color-background));
   --boto-color-focus: var(--boto-color-ring);
   --boto-color-bubble-user: var(--boto-color-secondary);
   --boto-color-on-bubble-user: var(--boto-color-foreground);
@@ -282,10 +292,10 @@
   --boto-color-logo-echo: var(--boto-color-success);
   --boto-color-danger: var(--boto-color-destructive);
   --boto-color-danger-text: var(--boto-color-destructive);
-  --boto-color-danger-soft: color-mix(in srgb, #b8382a 12%, #f6f8f7);
+  --boto-color-danger-soft: color-mix(in srgb, var(--boto-color-destructive) 12%, var(--boto-color-background));
   --boto-color-danger-btn-bg: var(--boto-color-popover);
   --boto-color-danger-btn-bg-hover: var(--boto-color-danger-soft);
-  --boto-color-danger-btn-bg-pressed: color-mix(in srgb, #b8382a 20%, #ffffff);
+  --boto-color-danger-btn-bg-pressed: color-mix(in srgb, var(--boto-color-destructive) 20%, var(--boto-color-popover));
   --boto-color-danger-btn-border: var(--boto-color-destructive);
   --boto-color-danger-btn-fg: var(--boto-color-destructive);
   --boto-color-status-run: var(--boto-color-success);
@@ -306,22 +316,21 @@
   --boto-color-scrim: var(--boto-color-overlay);
   --boto-color-shadow-color: rgb(12 20 22 / 0.14);
   --boto-shadow-sm: 0 1px 2px rgb(12 20 22 / 0.08);
-  --boto-shadow-md: 0 8px 24px rgb(12 20 22 / 0.1);
   --boto-shadow-lg: 0 16px 40px rgb(12 20 22 / 0.14), 0 2px 6px rgb(12 20 22 / 0.08);
   --boto-mix-pill-bg: 14%;
   --boto-mix-pill-ink: 70%;
 }
 
-/* Movimento reduzido (WCAG 2.3.3, preferência do sistema): durações zeradas e animações paradas. */
+/* Movimento reduzido (WCAG 2.3.3, preferência do sistema): durações de 1ms. */
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --boto-duration-fast: 0ms;
-    --boto-duration-base: 0ms;
-    --boto-duration-panel: 0ms;
-    --boto-duration-exit: 0ms;
-    --boto-duration-slow: 0ms;
-    --boto-duration-pulse: 0ms;
-    --boto-duration-preview: 0ms;
+    --boto-duration-fast: 1ms;
+    --boto-duration-base: 1ms;
+    --boto-duration-panel: 1ms;
+    --boto-duration-exit: 1ms;
+    --boto-duration-slow: 1ms;
+    --boto-duration-pulse: 1ms;
+    --boto-duration-preview: 1ms;
   }
-  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }

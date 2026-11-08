@@ -516,8 +516,9 @@ test("multiple real pending items stay secondary after first; light/dark capture
     const viewport = await scroller.boundingBox();
     await lastBot.scrollIntoViewIfNeeded();
     const after = await lastBot.boundingBox();
-    expect(Math.ceil((after?.y ?? 0) + (after?.height ?? 0))).toBeLessThanOrEqual(
-      Math.ceil((viewport?.y ?? 0) + (viewport?.height ?? 0)),
+    // Scroll offsets round to CSS pixels; row bounds can remain fractional.
+    expect((after?.y ?? 0) + (after?.height ?? 0)).toBeLessThanOrEqual(
+      (viewport?.y ?? 0) + (viewport?.height ?? 0) + 1,
     );
     if (out) await page.screenshot({ path: join(out, `menubar-running-scrolled-${theme}.png`) });
     await scroller.evaluate((element) => {

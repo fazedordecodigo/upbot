@@ -34,6 +34,7 @@ import { role, statusProvider } from "./lib/ui";
 type View =
   | "home"
   | "scheduled"
+  | "templates"
   | "chat"
   | "agents"
   | "tasks"
@@ -88,7 +89,7 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [sideOpen, setSideOpen] = useState(false);
   const sideRef = useRef<HTMLElement>(null);
-  const narrow = useMediaQuery("(max-width: 759px)");
+  const narrow = useMediaQuery("(max-width: 1023px)");
   useLayerFocus(sideRef, sideOpen && narrow);
   useEffect(() => {
     if (!narrow) setSideOpen(false);
@@ -426,6 +427,7 @@ export default function App() {
   const appView =
     view === "home" ||
     view === "scheduled" ||
+    view === "templates" ||
     view === "channel" ||
     view === "pages" ||
     view === "agent-settings" ||
@@ -464,6 +466,7 @@ export default function App() {
         onHome={() => navigate("home")}
         onAgents={() => navigate("agents")}
         onScheduled={() => navigate("scheduled")}
+        onTemplates={() => navigate("templates")}
         onMarketplace={() => {
           setSettingsTab("marketplace");
           navigate("settings");
@@ -526,6 +529,22 @@ export default function App() {
             </section>
           ) : view === "scheduled" ? (
             <ScheduledView client={client} agents={agents} onOpen={openAgent} />
+          ) : view === "templates" ? (
+            <section className="view on" aria-labelledby="templates-title">
+              <div className="page">
+                <div className="page-inner">
+                  <div className="page-top">
+                    <div>
+                      <h1 id="templates-title">Modelos</h1>
+                      <p>Os modelos de tarefa ainda não estão disponíveis.</p>
+                    </div>
+                    <button type="button" className="btn btn-outline" onClick={newTask}>
+                      Tarefa em branco
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
           ) : view === "home" ? (
             <HomeView
               client={client}

@@ -1,18 +1,18 @@
 # Barra lateral, Início e Agentes
 
-A navegação principal segue o Rio Negro (`DESIGN.md`). A largura é `--boto-size-sidebar` (272 px). Até 759 px a barra vira um painel com o nome acessível "Barra lateral", aberto por "Abrir barra lateral".
+A navegação principal segue o Rio Negro (`DESIGN.md`). A largura padrão é `--boto-size-sidebar` (272 px). O DESIGN.md prevê ajuste de 220 a 400 px, com largura salva no navegador; o app ainda não implementa o redimensionamento. Até 1023 px a barra vira um Sheet com o nome acessível "Barra lateral", aberto por "Abrir barra lateral".
 
 ## Barra lateral
 
 `Sidebar.tsx` mostra, nesta ordem:
 
 1. Marca Boto, que volta ao Início.
-2. Nova tarefa, Início, Agentes, Rotinas, Marketplace e Buscar.
-3. Tarefas agrupadas em Em andamento, Aguardando você, Pausadas e Recentes. Cada linha é o título da tarefa, o nome do agente e a hora. Não há lista "SEUS AGENTES" nem ponto de status só com cor.
+2. Nova tarefa, Início, Agentes, Rotinas, Modelos, Marketplace e Buscar.
+3. Tarefas agrupadas em Em execução, Aguardando você, Pausadas, Com erro e Concluídas, com ícone, tom e texto. Cada linha é o título da tarefa, o nome do agente e a hora; falhas também mostram o erro. Concluídas mostra as oito entregas mais recentes. Não há lista "SEUS AGENTES" nem ponto de status só com cor.
 4. Conversas em grupo, quando existem.
 5. Rodapé com as iniciais, o nome da pessoa e Configurações.
 
-Agentes mostra a contagem de quem está trabalhando ou aguardando você. Rotinas mostra quantas rotinas existem. Não há item Modelos, seletor de tema nem botão "Novo bot" nesta barra. O tema fica em Configurações → Geral (Claro, Escuro, Automático). O tema padrão, sem preferência salva, é o escuro.
+Agentes mostra a contagem de quem está trabalhando ou aguardando você. Rotinas mostra quantas rotinas existem. Os dois contadores usam selos neutros e texto com contexto para leitores de tela; o rosa fica reservado a Aguardando você. Modelos abre uma tela própria: o catálogo de modelos de tarefa ainda não está disponível, e a tela informa essa limitação e oferece Tarefa em branco. Não há seletor de tema nem botão "Novo bot" nesta barra. O tema fica em Configurações → Geral (Claro, Escuro, Automático). O tema padrão, sem preferência salva, é o escuro.
 
 Nova tarefa abre o agente selecionado. Sem agente selecionado, abre o diálogo Novo agente. Uma sessão nova continua no atalho correspondente; o marcador "Nova sessão" aparece na linha do tempo, não como botão da barra.
 
