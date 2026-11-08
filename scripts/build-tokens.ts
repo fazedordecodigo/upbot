@@ -48,13 +48,7 @@ function face(
 }
 
 const FONT_FACES = [
-  face(
-    "Bricolage Grotesque",
-    "bricolage-grotesque-latin-ext.woff2",
-    "500 700",
-    LATIN_EXT,
-    "100%",
-  ),
+  face("Bricolage Grotesque", "bricolage-grotesque-latin-ext.woff2", "500 700", LATIN_EXT, "100%"),
   face("Bricolage Grotesque", "bricolage-grotesque-latin.woff2", "500 700", LATIN, "100%"),
   face("Inter", "inter-latin-ext.woff2", "400 600", LATIN_EXT),
   face("Inter", "inter-latin.woff2", "400 600", LATIN),
