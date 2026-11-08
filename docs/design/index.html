@@ -266,7 +266,7 @@
               <span>Tarefa privada: ela não fica no histórico nem nas entregas.</span>
             </p>
 
-            <div class="composer" id="composer">
+            <div class="composer" id="composer" data-when="now">
               <div class="composer-files" id="composer-files" hidden></div>
               <label class="sr-only" for="composer-input">Tarefa para o Boto</label>
               <textarea class="composer-input" id="composer-input" rows="2" placeholder="Descreva a tarefa e o resultado esperado" autocomplete="off"></textarea>
@@ -356,7 +356,7 @@
         <section aria-labelledby="tpl-repeat-title">
           <div class="section-head od-row"><h2 class="section-title" id="tpl-repeat-title">Rotinas</h2></div>
           <div class="templates">
-            <button type="button" class="template" data-template="sales">
+            <button type="button" class="template" data-template="sales" data-template-when="weekly">
               <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-sheet"></use></svg>
               <span class="od-field od-fill">
                 <span class="template-name">Toda segunda, consolidar as vendas da semana numa planilha</span>
@@ -364,7 +364,7 @@
                 <span class="template-meta">Rotina · segunda às 9h</span>
               </span>
             </button>
-            <button type="button" class="template" data-template="inbox">
+            <button type="button" class="template" data-template="inbox" data-template-when="daily">
               <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-repeat"></use></svg>
               <span class="od-field od-fill">
                 <span class="template-name">Todo dia, resumir o que chegou na minha caixa de entrada</span>
@@ -1163,6 +1163,15 @@
     if ($('#sheet').open) $('#sheet').close();
     $(`#view-${view} h1`)?.focus();
   };
+  const startTask = (text = '', when = 'now') => {
+    $('#composer-input').value = text;
+    $('#composer').dataset.when = when;
+    $('#when-label').textContent = $(`#when-menu [data-when="${when}"] .item-name`).textContent;
+    all('#when-menu [data-when]').forEach((button) => {
+      button.setAttribute('aria-checked', String(button.dataset.when === when));
+    });
+    navigate('new');
+  };
   applyTheme(document.documentElement.dataset.theme);
   const actions = {
     'go-home': () => navigate('home'),
@@ -1171,7 +1180,7 @@
     'go-templates': () => navigate('templates'),
     'go-marketplace': () => navigate('marketplace'),
     'go-settings': () => navigate('settings'),
-    'new-task': () => navigate('new'),
+    'new-task': () => startTask(),
     'open-sheet': () => $('#sheet').showModal(),
     'close-sheet': () => $('#sheet').close(),
     'collapse-sidebar': () => { $('#app').dataset.collapsed = 'true'; $('.topbar-expand').hidden = false; },
@@ -1181,8 +1190,7 @@
     if (actions[button.dataset.action]) button.addEventListener('click', actions[button.dataset.action]);
   });
   all('[data-template]').forEach((button) => button.addEventListener('click', () => {
-    $('#composer-input').value = button.querySelector('.template-name').textContent;
-    navigate('new');
+    startTask(button.querySelector('.template-name').textContent, button.dataset.templateWhen);
   }));
   all('[data-theme-toggle]').forEach((button) => button.addEventListener('click', () => {
     changeTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
