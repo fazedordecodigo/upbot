@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Boto — seu colega de trabalho virtual</title>
 <meta name="description" content="Boto, a plataforma de agentes de IA que trabalham num computador próprio na nuvem e executam tarefas de ponta a ponta.">
-<link rel="icon" href="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/favicon.svg?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np" type="image/svg+xml">
+<link rel="icon" href="../../apps/desktop/public/assets/favicon.svg" type="image/svg+xml">
 <style>
 /* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio, geometry.
    Put this @layer first; product CSS outside the layer wins ordinary layout rules.
@@ -16,15 +16,15 @@
 
   :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
 
-  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
-  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
-  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
-  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, var(--boto-space-2)); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, var(--boto-space-2)); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, var(--boto-space-2)); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, var(--boto-space-2)); }
   .od-fill    { flex: 1 1 0; min-width: 0; }
   .od-fixed   { flex: none; }
-  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+  .od-grid    { display: grid; gap: var(--od-gap, var(--boto-space-3)); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
 
-  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, var(--boto-space-1)); }
   :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
   .od-tile { display: grid; grid-template-rows: auto 1fr; }
   :where(.od-tile) > :where(*) { display: block; }
@@ -45,23 +45,20 @@
   .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
   .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
 
-  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
-             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail { display: flex; gap: var(--od-gap, var(--boto-space-2)); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, var(--boto-space-4)); scroll-padding-inline: var(--od-rail-pad, var(--boto-space-4)); }
   .od-rail::-webkit-scrollbar { display: none; }
   :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
-  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, var(--boto-space-4)); }
 
   .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
-  .od-touch  { min-width: 44px; min-height: 44px; }
+  .od-touch  { min-width: var(--boto-size-target); min-height: var(--boto-size-target); }
 }
 :root [hidden]:where(:not([hidden="until-found" i])) { display: none; }
 /* /OD-LAYOUT-PRIMITIVES v1 */
 </style>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/boto-ui.css?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np">
-<link rel="stylesheet" href="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/app.css?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np">
+<link rel="stylesheet" href="../../apps/desktop/src/styles/tokens.css">
+<link rel="stylesheet" href="assets/boto-ui.css">
 <script>
   (function () {
     try {
@@ -77,47 +74,47 @@
 <template id="sidebar-tpl">
   <div class="sb">
     <div class="sb-head od-row">
-      <button type="button" class="sb-brand" data-action="go-home" aria-label="Boto, ir para o início">
-        <svg class="sb-logo" viewBox="0 0 200 64" width="88" height="28" aria-hidden="true"><use href="#boto-logo"></use></svg>
+      <button type="button" class="sb-brand" data-action="go-home" aria-label="Boto, ir para o início" data-tip="Boto, ir para o início" title="Boto, ir para o início">
+        <img class="sb-logo" width="88" height="28" src="../../apps/desktop/public/assets/boto-logo.svg" alt="" data-theme-logo>
       </button>
       <span class="od-fill"></span>
-      <button type="button" class="btn btn-ghost btn-icon sb-collapse" data-action="collapse-sidebar" data-tip="Recolher barra lateral" aria-label="Recolher barra lateral">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-panel-left"></use></svg>
+      <button type="button" class="btn btn-ghost btn-icon sb-collapse" data-action="collapse-sidebar" data-tip="Recolher barra lateral" aria-label="Recolher barra lateral" title="Recolher barra lateral">
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-panel-left"></use></svg>
       </button>
-      <button type="button" class="btn btn-ghost btn-icon sb-close" data-action="close-sheet" aria-label="Fechar menu">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+      <button type="button" class="btn btn-ghost btn-icon sb-close" data-action="close-sheet" aria-label="Fechar menu" data-tip="Fechar menu" title="Fechar menu">
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-x"></use></svg>
       </button>
     </div>
 
     <div class="sb-actions od-stack">
       <button type="button" class="btn btn-outline sb-new" data-action="new-task" data-nav="new">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-plus"></use></svg>
         <span class="od-fill">Nova tarefa</span>
       </button>
       <button type="button" class="sb-item od-row" data-action="go-home" data-nav="home">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-home"></use></svg>
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-home"></use></svg>
         <span class="od-fill">Início</span>
       </button>
       <button type="button" class="sb-item od-row" data-action="go-agents" data-nav="agents">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-users"></use></svg>
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-users"></use></svg>
         <span class="od-fill">Agentes</span>
         <span class="sb-count" data-agent-count></span>
       </button>
       <button type="button" class="sb-item od-row" data-action="go-routines" data-nav="routines">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-repeat"></use></svg>
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-repeat"></use></svg>
         <span class="od-fill">Rotinas</span>
         <span class="sb-count" data-routine-count></span>
       </button>
       <button type="button" class="sb-item od-row" data-action="go-templates" data-nav="templates">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-layout-template"></use></svg>
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-layout-template"></use></svg>
         <span class="od-fill">Modelos</span>
       </button>
       <button type="button" class="sb-item od-row" data-action="go-marketplace" data-nav="marketplace">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-store"></use></svg>
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-store"></use></svg>
         <span class="od-fill">Marketplace</span>
       </button>
       <button type="button" class="sb-item od-row" data-action="open-command">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-search"></use></svg>
         <span class="od-fill">Buscar tarefas</span>
         <span class="kbd" data-shortcut-label>⌘K</span>
       </button>
@@ -128,13 +125,13 @@
     <div class="sb-foot">
       <hr class="separator">
       <div class="sb-foot-row od-row">
-        <button type="button" class="sb-user od-row od-fill" data-menu="user-menu" aria-haspopup="menu" aria-expanded="false" data-menu-align="start" aria-label="Menu da conta">
+        <button type="button" class="sb-user od-row od-fill" data-menu="user-menu" aria-haspopup="menu" aria-expanded="false" data-menu-align="start" aria-label="Menu da conta" data-tip="Menu da conta" title="Menu da conta">
           <span class="avatar" aria-hidden="true" data-user-avatar></span>
           <span class="sb-user-name od-truncate od-fill" data-user-name>Você</span>
-          <svg class="od-icon" aria-hidden="true"><use href="#i-chevron-up-down"></use></svg>
+          <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-chevron-up-down"></use></svg>
         </button>
-        <button type="button" class="btn btn-ghost btn-icon sb-settings" data-action="go-settings" data-nav="settings" data-tip="Configurações" aria-label="Configurações">
-          <svg class="od-icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+        <button type="button" class="btn btn-ghost btn-icon sb-settings" data-action="go-settings" data-nav="settings" data-tip="Configurações" aria-label="Configurações" title="Configurações">
+          <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-settings"></use></svg>
         </button>
       </div>
     </div>
@@ -148,21 +145,23 @@
 
   <main class="main" id="main" tabindex="-1" data-view="home">
     <header class="topbar od-row">
-      <button type="button" class="btn btn-ghost btn-icon topbar-menu" data-action="open-sheet" aria-label="Abrir menu" aria-haspopup="dialog">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-menu"></use></svg>
+      <button type="button" class="btn btn-ghost btn-icon topbar-menu" data-action="open-sheet" aria-label="Abrir menu" aria-haspopup="dialog" data-tip="Abrir menu" title="Abrir menu">
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-menu"></use></svg>
       </button>
-      <button type="button" class="btn btn-ghost btn-icon topbar-expand" data-action="expand-sidebar" data-tip="Mostrar barra lateral" aria-label="Mostrar barra lateral" hidden>
-        <svg class="od-icon" aria-hidden="true"><use href="#i-panel-left"></use></svg>
+      <button type="button" class="btn btn-ghost btn-icon topbar-expand" data-action="expand-sidebar" data-tip="Mostrar barra lateral" aria-label="Mostrar barra lateral" hidden title="Mostrar barra lateral">
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-panel-left"></use></svg>
       </button>
       <span class="od-fill"></span>
       <div class="private-toggle od-row">
         <span class="private-label" id="private-label">Privada</span>
-        <button type="button" class="switch" role="switch" aria-checked="false" aria-labelledby="private-label" id="private-switch" data-tip="Tarefas privadas não ficam no histórico"></button>
+        <button type="button" class="switch" role="switch" aria-checked="false" aria-labelledby="private-label" id="private-switch" data-tip="Tarefas privadas não ficam no histórico" title="Tarefas privadas não ficam no histórico"></button>
       </div>
-      <button type="button" class="btn btn-ghost btn-icon" data-theme-toggle aria-label="Tema escuro" aria-pressed="true" data-tip="Alternar tema">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-moon"></use></svg>
+      <button type="button" class="btn btn-ghost btn-icon" data-theme-toggle aria-label="Tema escuro" aria-pressed="true" data-tip="Alternar tema" title="Alternar tema">
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-moon"></use></svg>
       </button>
     </header>
+
+    <p class="card prototype-note" role="note">Protótipo visual: navegação, tema e abas disponíveis. A simulação de tarefas, máquinas e integrações do export original não está incluída nesta versão local.</p>
 
     <!-- Início -->
     <section class="view home od-scroll" id="view-home" aria-labelledby="home-title">
@@ -173,7 +172,7 @@
             <h1 class="home-title" id="home-title" tabindex="-1">O trabalho do Boto hoje</h1>
           </div>
           <button type="button" class="btn btn-primary home-new" data-action="new-task">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-plus"></use></svg>
             Nova tarefa
           </button>
         </div>
@@ -215,7 +214,7 @@
             <p class="page-sub">O quadro de todos os agentes do Boto. Cada agente tem uma especialidade, trabalha em instâncias próprias no computador na nuvem e puxa a próxima tarefa da fila quando uma instância fica livre.</p>
           </div>
           <button type="button" class="btn btn-primary" data-action="new-agent" id="new-agent">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-plus"></use></svg>
             Novo agente
           </button>
         </div>
@@ -237,7 +236,7 @@
       <div class="chat-scroll od-scroll">
         <div class="chat-inner" role="log" aria-label="Conversa com o Boto">
           <div class="chat-msg">
-            <span class="chat-avatar" aria-hidden="true"><svg viewBox="0 0 64 64" width="20" height="20"><use href="#boto-mark"></use></svg></span>
+            <span class="chat-avatar" aria-hidden="true"><img width="20" height="20" src="../../apps/desktop/public/assets/boto-simbolo.svg" alt=""></span>
             <div class="chat-body">
               <p class="chat-label">Boto</p>
               <p class="chat-greeting" id="chat-greeting">Boa noite.</p>
@@ -245,13 +244,13 @@
               <p class="chat-text">Descreva a tarefa e o resultado esperado. Trabalho no meu computador na nuvem, mostro cada etapa e peço sua aprovação antes de ações externas.</p>
               <div class="chat-mem" id="chat-greet-mem"></div>
               <button type="button" class="btn btn-outline btn-sm chat-link" data-action="go-templates">
-                <svg class="od-icon" aria-hidden="true"><use href="#i-layout-template"></use></svg>
+                <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-layout-template"></use></svg>
                 Começar de um modelo
               </button>
             </div>
           </div>
           <div class="chat-msg" id="chat-template-note" hidden>
-            <span class="chat-avatar" aria-hidden="true"><svg viewBox="0 0 64 64" width="20" height="20"><use href="#boto-mark"></use></svg></span>
+            <span class="chat-avatar" aria-hidden="true"><img width="20" height="20" src="../../apps/desktop/public/assets/boto-simbolo.svg" alt=""></span>
             <div class="chat-body">
               <p class="chat-label">Boto</p>
               <p class="chat-text" id="chat-template-text"></p>
@@ -263,7 +262,7 @@
 
       <div class="chat-compose">
             <p class="hero-private od-row" id="hero-private" hidden>
-              <svg class="od-icon" aria-hidden="true"><use href="#i-eye-off"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-eye-off"></use></svg>
               <span>Tarefa privada: ela não fica no histórico nem nas entregas.</span>
             </p>
 
@@ -272,24 +271,24 @@
               <label class="sr-only" for="composer-input">Tarefa para o Boto</label>
               <textarea class="composer-input" id="composer-input" rows="2" placeholder="Descreva a tarefa e o resultado esperado" autocomplete="off"></textarea>
               <div class="composer-bar">
-                <button type="button" class="btn btn-ghost btn-icon composer-attach" data-action="attach" data-tip="Anexar arquivo" aria-label="Anexar arquivo">
-                  <svg class="od-icon" aria-hidden="true"><use href="#i-paperclip"></use></svg>
+                <button type="button" class="btn btn-ghost btn-icon composer-attach" data-action="attach" data-tip="Anexar arquivo" aria-label="Anexar arquivo" title="Anexar arquivo">
+                  <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-paperclip"></use></svg>
                 </button>
                 <input type="file" id="file-input" class="sr-only" tabindex="-1" aria-hidden="true">
                 <button type="button" class="btn btn-ghost btn-sm opt-trigger" id="when-trigger" data-menu="when-menu" aria-haspopup="menu" aria-expanded="false" data-menu-align="start">
-                  <svg class="od-icon" aria-hidden="true"><use href="#i-clock"></use></svg>
+                  <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-clock"></use></svg>
                   <span class="opt-key">Quando</span>
                   <span class="opt-value" id="when-label">Agora</span>
-                  <svg class="od-icon opt-chevron" aria-hidden="true"><use href="#i-chevron-down"></use></svg>
+                  <svg class="od-icon opt-chevron" aria-hidden="true"><use href="assets/icons.svg#i-chevron-down"></use></svg>
                 </button>
                 <button type="button" class="btn btn-ghost btn-sm opt-trigger" id="where-trigger" data-menu="where-menu" aria-haspopup="menu" aria-expanded="false" data-menu-align="start">
-                  <svg class="od-icon" aria-hidden="true"><use href="#i-monitor"></use></svg>
+                  <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-monitor"></use></svg>
                   <span class="opt-key">Onde</span>
                   <span class="opt-value" id="where-label">Navegador e terminal</span>
-                  <svg class="od-icon opt-chevron" aria-hidden="true"><use href="#i-chevron-down"></use></svg>
+                  <svg class="od-icon opt-chevron" aria-hidden="true"><use href="assets/icons.svg#i-chevron-down"></use></svg>
                 </button>
                 <div class="opt-approval od-row">
-                  <svg class="od-icon" aria-hidden="true"><use href="#i-shield-check"></use></svg>
+                  <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-shield-check"></use></svg>
                   <span id="approval-label">Pedir aprovação</span>
                   <button type="button" class="switch" role="switch" aria-checked="true" aria-labelledby="approval-label" aria-describedby="approval-help" id="approval-switch"></button>
                   <span class="sr-only" id="approval-help">O Boto para e pergunta antes de ações externas, como enviar e-mail, publicar ou abrir um PR.</span>
@@ -297,7 +296,7 @@
                 <span class="composer-spacer"></span>
                 <button type="button" class="btn btn-primary btn-pill composer-send" id="send" disabled>
                   <span id="send-label">Delegar</span>
-                  <svg class="od-icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+                  <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-arrow-right"></use></svg>
                 </button>
               </div>
             </div>
@@ -313,7 +312,7 @@
             <p class="page-sub">Tarefas prontas para começar. Escolha um modelo: ele abre uma nova tarefa já preenchida, e você ajusta o texto e as opções antes de delegar.</p>
           </div>
           <button type="button" class="btn btn-outline" data-action="new-task">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-plus"></use></svg>
             Tarefa em branco
           </button>
         </div>
@@ -321,7 +320,7 @@
           <div class="section-head od-row"><h2 class="section-title" id="tpl-now-title">Executar uma vez</h2></div>
           <div class="templates">
             <button type="button" class="template" data-template="ci">
-              <svg class="od-icon" aria-hidden="true"><use href="#i-git-pull-request"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-git-pull-request"></use></svg>
               <span class="od-field od-fill">
                 <span class="template-name">Corrigir o teste que falha no CI e abrir um PR</span>
                 <span class="template-desc">Reproduz a falha no terminal, corrige o código e abre o PR com a descrição da causa.</span>
@@ -329,7 +328,7 @@
               </span>
             </button>
             <button type="button" class="template" data-template="email">
-              <svg class="od-icon" aria-hidden="true"><use href="#i-mail"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-mail"></use></svg>
               <span class="od-field od-fill">
                 <span class="template-name">Resumir a reunião de produto e enviar ao time por e-mail</span>
                 <span class="template-desc">Lê a transcrição, escreve as decisões e os próximos passos e prepara o e-mail.</span>
@@ -337,7 +336,7 @@
               </span>
             </button>
             <button type="button" class="template" data-template="deps">
-              <svg class="od-icon" aria-hidden="true"><use href="#i-terminal"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-terminal"></use></svg>
               <span class="od-field od-fill">
                 <span class="template-name">Atualizar as dependências desatualizadas e abrir um PR</span>
                 <span class="template-desc">Lista o que está velho, atualiza, ajusta a configuração e roda os testes.</span>
@@ -345,7 +344,7 @@
               </span>
             </button>
             <button type="button" class="template" data-template="research">
-              <svg class="od-icon" aria-hidden="true"><use href="#i-globe"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-globe"></use></svg>
               <span class="od-field od-fill">
                 <span class="template-name">Comparar planos de hospedagem e recomendar um</span>
                 <span class="template-desc">Pesquisa as fontes oficiais e entrega um relatório com prós e contras.</span>
@@ -358,7 +357,7 @@
           <div class="section-head od-row"><h2 class="section-title" id="tpl-repeat-title">Rotinas</h2></div>
           <div class="templates">
             <button type="button" class="template" data-template="sales">
-              <svg class="od-icon" aria-hidden="true"><use href="#i-sheet"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-sheet"></use></svg>
               <span class="od-field od-fill">
                 <span class="template-name">Toda segunda, consolidar as vendas da semana numa planilha</span>
                 <span class="template-desc">Baixa os relatórios do painel, junta os dados e salva a planilha no Drive.</span>
@@ -366,7 +365,7 @@
               </span>
             </button>
             <button type="button" class="template" data-template="inbox">
-              <svg class="od-icon" aria-hidden="true"><use href="#i-repeat"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-repeat"></use></svg>
               <span class="od-field od-fill">
                 <span class="template-name">Todo dia, resumir o que chegou na minha caixa de entrada</span>
                 <span class="template-desc">Separa o que pede resposta do que pode esperar e escreve um resumo curto.</span>
@@ -382,7 +381,7 @@
     <section class="view task" id="view-task" aria-labelledby="task-title" hidden>
       <header class="task-head">
         <button type="button" class="btn btn-ghost btn-sm task-back" data-action="go-home">
-          <svg class="od-icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
+          <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-arrow-left"></use></svg>
           <span class="ctl-label">Início</span>
         </button>
         <div class="od-field od-fill task-heading">
@@ -391,19 +390,19 @@
         </div>
         <div class="task-controls od-row">
           <button type="button" class="btn btn-ghost btn-sm ctl-live" id="ctl-live" aria-pressed="true" aria-controls="pc-pane">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-monitor"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-monitor"></use></svg>
             <span class="ctl-label">Área de trabalho ao vivo</span>
           </button>
           <button type="button" class="btn btn-outline btn-sm" id="ctl-pause">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-pause"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-pause"></use></svg>
             <span class="ctl-label">Pausar</span>
           </button>
           <button type="button" class="btn btn-outline btn-sm" id="ctl-takeover">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-mouse-pointer"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-mouse-pointer"></use></svg>
             <span class="ctl-label">Assumir o controle</span>
           </button>
           <button type="button" class="btn btn-ghost btn-sm ctl-stop" id="ctl-stop">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-power"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-power"></use></svg>
             <span class="ctl-label">Encerrar</span>
           </button>
         </div>
@@ -412,11 +411,11 @@
       <div class="task-tabs">
         <div class="tabs-list" role="tablist" aria-label="Painéis da tarefa" id="pane-tabs">
           <button type="button" class="tabs-trigger" role="tab" id="pane-tab-activity" data-pane="activity" aria-controls="tl-pane" aria-selected="true">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-list-checks"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-list-checks"></use></svg>
             Atividade
           </button>
           <button type="button" class="tabs-trigger" role="tab" id="pane-tab-computer" data-pane="computer" aria-controls="pc-pane" aria-selected="false" tabindex="-1">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-monitor"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-monitor"></use></svg>
             Área de trabalho
           </button>
         </div>
@@ -431,8 +430,8 @@
             <div class="composer composer-sm">
               <label class="sr-only" for="instruct-input">Instrução para o Boto</label>
               <textarea class="composer-input" id="instruct-input" rows="1" placeholder="Mande uma instrução sem interromper o trabalho" autocomplete="off"></textarea>
-              <button type="button" class="btn btn-secondary btn-icon btn-pill" id="instruct-send" aria-label="Enviar instrução" disabled>
-                <svg class="od-icon" aria-hidden="true"><use href="#i-send"></use></svg>
+              <button type="button" class="btn btn-secondary btn-icon btn-pill" id="instruct-send" aria-label="Enviar instrução" disabled data-tip="Enviar instrução" title="Enviar instrução">
+                <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-send"></use></svg>
               </button>
             </div>
           </div>
@@ -455,7 +454,7 @@
             <p class="page-sub">Tarefas que o Boto executa sozinho no horário marcado, no computador dele na nuvem. Você recebe a entrega quando ficar pronta.</p>
           </div>
           <button type="button" class="btn btn-primary" data-action="new-routine" id="new-routine">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-plus"></use></svg>
             Nova rotina
           </button>
         </div>
@@ -483,7 +482,7 @@
         <div class="mk-toolbar">
           <div class="tabs-list mk-tabs" role="tablist" aria-label="Tipo de item" id="mk-tabs"></div>
           <div class="mk-search od-row">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-search"></use></svg>
             <input class="mk-search-input od-fill" id="mk-search" type="search" placeholder="Buscar por nome ou função" aria-label="Buscar no marketplace" autocomplete="off">
           </div>
         </div>
@@ -515,19 +514,19 @@
         <div class="st-layout">
           <div class="st-nav" role="tablist" aria-orientation="vertical" aria-label="Seções das configurações" id="st-tabs">
             <button type="button" class="st-tab od-row" role="tab" id="st-tab-provider" data-st="provider" aria-controls="st-provider" aria-selected="true">
-              <svg class="od-icon" aria-hidden="true"><use href="#i-cpu"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-cpu"></use></svg>
               <span class="od-fill">Provedor de IA</span>
             </button>
             <button type="button" class="st-tab od-row" role="tab" id="st-tab-memory" data-st="memory" aria-controls="st-memory" aria-selected="false" tabindex="-1">
-              <svg class="od-icon" aria-hidden="true"><use href="#i-user-check"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-user-check"></use></svg>
               <span class="od-fill">Você e a memória</span>
             </button>
             <button type="button" class="st-tab od-row" role="tab" id="st-tab-appearance" data-st="appearance" aria-controls="st-appearance" aria-selected="false" tabindex="-1">
-              <svg class="od-icon" aria-hidden="true"><use href="#i-palette"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-palette"></use></svg>
               <span class="od-fill">Aparência</span>
             </button>
             <button type="button" class="st-tab od-row" role="tab" id="st-tab-privacy" data-st="privacy" aria-controls="st-privacy" aria-selected="false" tabindex="-1">
-              <svg class="od-icon" aria-hidden="true"><use href="#i-shield-check"></use></svg>
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-shield-check"></use></svg>
               <span class="od-fill">Privacidade</span>
             </button>
           </div>
@@ -542,7 +541,7 @@
                     <p class="st-desc">Ferramentas de linha de comando dos provedores de IA. O Boto usa as que estão instaladas e mostra como instalar as outras que ele suporta.</p>
                   </div>
                   <button type="button" class="btn btn-outline btn-sm od-fixed" id="st-scan">
-                    <svg class="od-icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
+                    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-refresh-cw"></use></svg>
                     <span id="st-scan-label">Procurar de novo</span>
                   </button>
                 </div>
@@ -604,7 +603,7 @@
                 </div>
                 <div class="st-actions">
                   <button type="button" class="btn btn-outline st-danger" id="st-forget">
-                    <svg class="od-icon" aria-hidden="true"><use href="#i-trash"></use></svg>
+                    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-trash"></use></svg>
                     Apagar memória
                   </button>
                   <span class="od-fill"></span>
@@ -615,9 +614,9 @@
               <div class="st-note">
                 <h3 class="st-subtitle">Como o Boto usa a memória</h3>
                 <ul class="st-points">
-                  <li><svg class="od-icon" aria-hidden="true"><use href="#i-check"></use></svg><span>O nome aparece na saudação e no menu da conta.</span></li>
-                  <li><svg class="od-icon" aria-hidden="true"><use href="#i-check"></use></svg><span>O texto entra no contexto de cada tarefa nova. A tela da tarefa mostra o selo “Usando sua memória”.</span></li>
-                  <li><svg class="od-icon" aria-hidden="true"><use href="#i-check"></use></svg><span>Nada sai deste navegador além do que vai junto com a tarefa para o provedor de IA.</span></li>
+                  <li><svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg><span>O nome aparece na saudação e no menu da conta.</span></li>
+                  <li><svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg><span>O texto entra no contexto de cada tarefa nova. A tela da tarefa mostra o selo “Usando sua memória”.</span></li>
+                  <li><svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg><span>Nada sai deste navegador além do que vai junto com a tarefa para o provedor de IA.</span></li>
                 </ul>
               </div>
             </section>
@@ -702,27 +701,27 @@
 <div class="dropdown-menu" id="when-menu" role="menu" aria-label="Quando executar" hidden>
   <p class="dropdown-label">Quando executar</p>
   <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="true" data-when="now" tabindex="-1">
-    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <svg class="od-icon item-check" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg>
     <span class="od-field od-fill"><span class="item-name">Agora</span><span class="item-desc">O Boto começa assim que você delegar</span></span>
   </button>
   <div class="dropdown-separator" role="separator"></div>
   <p class="dropdown-label">Uma vez</p>
   <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-when="in1h" tabindex="-1">
-    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <svg class="od-icon item-check" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg>
     <span class="od-field od-fill"><span class="item-name">Daqui a 1 hora</span></span>
   </button>
   <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-when="tomorrow" tabindex="-1">
-    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <svg class="od-icon item-check" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg>
     <span class="od-field od-fill"><span class="item-name">Amanhã às 8h</span></span>
   </button>
   <div class="dropdown-separator" role="separator"></div>
   <p class="dropdown-label">Repetir</p>
   <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-when="daily" tabindex="-1">
-    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <svg class="od-icon item-check" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg>
     <span class="od-field od-fill"><span class="item-name">Todo dia às 8h</span></span>
   </button>
   <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-when="weekly" tabindex="-1">
-    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <svg class="od-icon item-check" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg>
     <span class="od-field od-fill"><span class="item-name">Toda segunda às 9h</span></span>
   </button>
 </div>
@@ -731,15 +730,15 @@
 <div class="dropdown-menu" id="where-menu" role="menu" aria-label="Onde trabalhar" hidden>
   <p class="dropdown-label">Ferramentas do computador</p>
   <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="true" data-where="both" tabindex="-1">
-    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <svg class="od-icon item-check" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg>
     <span class="od-field od-fill"><span class="item-name">Navegador e terminal</span><span class="item-desc">O Boto escolhe o que cada etapa pede</span></span>
   </button>
   <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-where="browser" tabindex="-1">
-    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <svg class="od-icon item-check" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg>
     <span class="od-field od-fill"><span class="item-name">Só navegador</span><span class="item-desc">Sites, e-mail, painéis e planilhas online</span></span>
   </button>
   <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-where="terminal" tabindex="-1">
-    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <svg class="od-icon item-check" aria-hidden="true"><use href="assets/icons.svg#i-check"></use></svg>
     <span class="od-field od-fill"><span class="item-name">Só terminal</span><span class="item-desc">Código, scripts e arquivos</span></span>
   </button>
 </div>
@@ -748,29 +747,29 @@
 <div class="dropdown-menu" id="user-menu" role="menu" aria-label="Conta" hidden>
   <p class="dropdown-label" data-user-label>Você</p>
   <button type="button" class="dropdown-item" role="menuitem" data-action="go-settings" tabindex="-1">
-    <svg class="od-icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-settings"></use></svg>
     <span class="od-fill">Configurações</span>
   </button>
   <button type="button" class="dropdown-item" role="menuitem" data-action="go-memory" tabindex="-1">
-    <svg class="od-icon" aria-hidden="true"><use href="#i-user-check"></use></svg>
+    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-user-check"></use></svg>
     <span class="od-fill">Você e a memória</span>
   </button>
   <div class="dropdown-separator" role="separator"></div>
   <button type="button" class="dropdown-item" role="menuitem" data-action="toggle-theme" tabindex="-1">
-    <svg class="od-icon" aria-hidden="true"><use href="#i-sun"></use></svg>
+    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-sun"></use></svg>
     <span class="od-fill">Alternar tema</span>
   </button>
   <button type="button" class="dropdown-item" role="menuitem" data-action="open-shortcuts" tabindex="-1">
-    <svg class="od-icon" aria-hidden="true"><use href="#i-keyboard"></use></svg>
+    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-keyboard"></use></svg>
     <span class="od-fill">Atalhos de teclado</span>
   </button>
   <div class="dropdown-separator" role="separator"></div>
   <button type="button" class="dropdown-item" role="menuitem" data-action="open-onboarding" tabindex="-1">
-    <svg class="od-icon" aria-hidden="true"><use href="#i-info"></use></svg>
+    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-info"></use></svg>
     <span class="od-fill">Conhecer o Boto</span>
   </button>
   <a class="dropdown-item" role="menuitem" href="identidade.html" tabindex="-1">
-    <svg class="od-icon" aria-hidden="true"><use href="#i-book-open"></use></svg>
+    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-book-open"></use></svg>
     <span class="od-fill">Guia da marca</span>
   </a>
 </div>
@@ -781,7 +780,7 @@
 <!-- Dialog: paleta de comandos -->
 <dialog class="dialog command" id="command" aria-label="Buscar tarefas, rotinas e ações">
   <div class="command-search od-row">
-    <svg class="od-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-search"></use></svg>
     <input class="command-input od-fill" id="command-input" type="text" placeholder="Buscar tarefas, rotinas e ações" aria-label="Buscar tarefas, rotinas e ações" role="combobox" aria-expanded="true" aria-controls="command-list" aria-autocomplete="list" autocomplete="off">
     <span class="kbd">Esc</span>
   </div>
@@ -807,8 +806,8 @@
       <button type="button" class="btn btn-primary" data-action="close-dialog">Entendi</button>
     </div>
   </div>
-  <button type="button" class="btn btn-ghost btn-icon btn-sm dialog-close" data-action="close-dialog" aria-label="Fechar">
-    <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+  <button type="button" class="btn btn-ghost btn-icon btn-sm dialog-close" data-action="close-dialog" aria-label="Fechar" data-tip="Fechar" title="Fechar">
+    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-x"></use></svg>
   </button>
 </dialog>
 
@@ -829,13 +828,13 @@
 <!-- Máquina livre de um agente, usada por você -->
 <dialog class="dialog vm-dialog" id="vm-dialog" aria-labelledby="vm-title" aria-describedby="vm-sub">
   <header class="vm-head od-row">
-    <span class="vm-head-icon" aria-hidden="true"><svg class="od-icon"><use href="#i-monitor"></use></svg></span>
+    <span class="vm-head-icon" aria-hidden="true"><svg class="od-icon"><use href="assets/icons.svg#i-monitor"></use></svg></span>
     <div class="od-field od-fill">
       <h2 class="vm-title od-truncate" id="vm-title">Máquina</h2>
       <p class="vm-sub od-truncate" id="vm-sub"></p>
     </div>
-    <button type="button" class="btn btn-ghost btn-icon btn-sm" data-action="close-dialog" aria-label="Fechar e devolver a máquina">
-      <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+    <button type="button" class="btn btn-ghost btn-icon btn-sm" data-action="close-dialog" aria-label="Fechar e devolver a máquina" data-tip="Fechar e devolver a máquina" title="Fechar e devolver a máquina">
+      <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-x"></use></svg>
     </button>
   </header>
   <div class="desk" id="vm-desk" data-desk="vm"></div>
@@ -846,8 +845,8 @@
   <div class="ap">
     <header class="ap-head">
       <div class="ap-head-main" id="ap-head"></div>
-      <button type="button" class="btn btn-ghost btn-icon btn-sm ap-close" data-action="close-dialog" aria-label="Fechar painel do agente">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+      <button type="button" class="btn btn-ghost btn-icon btn-sm ap-close" data-action="close-dialog" aria-label="Fechar painel do agente" data-tip="Fechar painel do agente" title="Fechar painel do agente">
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-x"></use></svg>
       </button>
     </header>
     <div class="ap-body od-scroll">
@@ -863,7 +862,7 @@
         <div class="ap-add-foot od-row">
           <button type="button" class="btn btn-primary" id="ap-add-btn">
             <span id="ap-add-label">Delegar agora</span>
-            <svg class="od-icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-arrow-right"></use></svg>
           </button>
         </div>
       </section>
@@ -877,8 +876,8 @@
   <div class="ap">
     <header class="ap-head">
       <div class="ap-head-main" id="mkp-head"></div>
-      <button type="button" class="btn btn-ghost btn-icon btn-sm ap-close" data-action="close-dialog" aria-label="Fechar detalhes">
-        <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+      <button type="button" class="btn btn-ghost btn-icon btn-sm ap-close" data-action="close-dialog" aria-label="Fechar detalhes" data-tip="Fechar detalhes" title="Fechar detalhes">
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-x"></use></svg>
       </button>
     </header>
     <div class="ap-body od-scroll" id="mkp-body"></div>
@@ -927,8 +926,8 @@
       <button type="button" class="btn btn-primary" id="an-create">Criar agente</button>
     </div>
   </div>
-  <button type="button" class="btn btn-ghost btn-icon btn-sm dialog-close" data-action="close-dialog" aria-label="Fechar">
-    <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+  <button type="button" class="btn btn-ghost btn-icon btn-sm dialog-close" data-action="close-dialog" aria-label="Fechar" data-tip="Fechar" title="Fechar">
+    <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-x"></use></svg>
   </button>
 </dialog>
 
@@ -943,17 +942,17 @@
         <circle cx="170" cy="128" r="166"/>
         <circle cx="170" cy="128" r="196"/>
       </svg>
-      <svg class="ob-hero-mark" viewBox="0 0 64 64" width="120" height="120"><use href="#boto-mark"></use></svg>
+      <img class="ob-hero-mark" width="120" height="120" src="../../apps/desktop/public/assets/boto-simbolo.svg" alt="">
       <p class="ob-equation">
         <span>bot</span><span class="ob-eq-op">+</span><span class="ob-eq-o">o</span><span class="ob-eq-op">=</span>
-        <svg viewBox="0 0 120 40" width="72" height="24"><use href="#boto-wordmark"></use></svg>
+        <img width="72" height="24" src="../../apps/desktop/public/assets/boto-logo.svg" alt="Boto" data-theme-logo>
       </p>
     </div>
 
     <div class="ob-scene" data-ob-scene="2" hidden>
       <div class="ob-mock ob-memory">
         <div class="ob-mock-head od-row">
-          <span class="ob-mock-avatar"><svg viewBox="0 0 64 64" width="15" height="15"><use href="#boto-mark"></use></svg></span>
+          <span class="ob-mock-avatar"><img width="15" height="15" src="../../apps/desktop/public/assets/boto-simbolo.svg" alt=""></span>
           <div class="od-field od-fill"><p class="ob-mock-title">Memória do Boto</p><p class="ob-mock-meta">Usada em todas as sessões</p></div>
         </div>
         <dl class="ob-memory-list">
@@ -973,7 +972,7 @@
 
     <div class="ob-scene" data-ob-scene="4" hidden>
       <div class="ob-mini">
-        <svg class="ob-mini-mark" viewBox="0 0 64 64" width="48" height="48"><use href="#boto-mark"></use></svg>
+        <img class="ob-mini-mark" width="48" height="48" src="../../apps/desktop/public/assets/boto-simbolo.svg" alt="">
         <p class="ob-mini-sub" id="ob-mini-greeting">Boa noite.</p>
         <p class="ob-mini-title">O que o Boto deve fazer hoje?</p>
         <div class="ob-mini-composer">
@@ -981,10 +980,10 @@
           <div class="ob-mini-bar od-row">
             <span class="badge badge-secondary ob-mini-mode" id="ob-mini-mode"></span>
             <span class="badge badge-outline ob-mini-mode" id="ob-mini-private" hidden>
-              <svg class="od-icon" aria-hidden="true"><use href="#i-eye-off"></use></svg>Privada
+              <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-eye-off"></use></svg>Privada
             </span>
             <span class="od-fill"></span>
-            <span class="ob-mini-send"><svg class="od-icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></span>
+            <span class="ob-mini-send"><svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-arrow-right"></use></svg></span>
           </div>
         </div>
       </div>
@@ -994,10 +993,10 @@
   <div class="ob-panel">
     <div class="ob-head od-row">
       <ol class="ob-progress" aria-label="Passos da apresentação">
-        <li><button type="button" class="ob-dot" data-ob-go="1" aria-label="Passo 1: Boas-vindas"></button></li>
-        <li><button type="button" class="ob-dot" data-ob-go="2" aria-label="Passo 2: Sobre você"></button></li>
-        <li><button type="button" class="ob-dot" data-ob-go="3" aria-label="Passo 3: Três jeitos de delegar"></button></li>
-        <li><button type="button" class="ob-dot" data-ob-go="4" aria-label="Passo 4: Do seu jeito"></button></li>
+        <li><button type="button" class="ob-dot" data-ob-go="1" aria-label="Passo 1: Boas-vindas" data-tip="Passo 1: Boas-vindas" title="Passo 1: Boas-vindas"></button></li>
+        <li><button type="button" class="ob-dot" data-ob-go="2" aria-label="Passo 2: Sobre você" data-tip="Passo 2: Sobre você" title="Passo 2: Sobre você"></button></li>
+        <li><button type="button" class="ob-dot" data-ob-go="3" aria-label="Passo 3: Três jeitos de delegar" data-tip="Passo 3: Três jeitos de delegar" title="Passo 3: Três jeitos de delegar"></button></li>
+        <li><button type="button" class="ob-dot" data-ob-go="4" aria-label="Passo 4: Do seu jeito" data-tip="Passo 4: Do seu jeito" title="Passo 4: Do seu jeito"></button></li>
       </ol>
       <p class="ob-count od-nowrap" id="ob-count">Passo 1 de 4</p>
       <span class="od-fill"></span>
@@ -1014,15 +1013,15 @@
         </div>
         <ul class="ob-points">
           <li>
-            <svg class="od-icon" aria-hidden="true"><use href="#i-circle-check"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-circle-check"></use></svg>
             <span>Você acompanha cada etapa e a tela do meu computador enquanto eu trabalho.</span>
           </li>
           <li>
-            <svg class="od-icon" aria-hidden="true"><use href="#i-circle-check"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-circle-check"></use></svg>
             <span>Peço sua aprovação antes de ações externas, como enviar e-mail, publicar ou abrir um PR.</span>
           </li>
           <li class="ob-point-note">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-info"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-info"></use></svg>
             <span>Posso errar. Confira as entregas antes de usar.</span>
           </li>
         </ul>
@@ -1056,7 +1055,7 @@
         </div>
         <div class="ob-options" role="radiogroup" aria-label="Jeito de delegar" id="ob-modes">
           <button type="button" class="ob-option" role="radio" aria-checked="false" data-ob-mode="agora" tabindex="-1">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-play"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-play"></use></svg>
             <span class="od-field od-fill">
               <span class="ob-option-name">Executar agora</span>
               <span class="ob-option-desc">Começa assim que você delega e segue até o fim sem parar.</span>
@@ -1064,7 +1063,7 @@
             <span class="ob-radio" aria-hidden="true"></span>
           </button>
           <button type="button" class="ob-option" role="radio" aria-checked="false" data-ob-mode="agendar" tabindex="-1">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-calendar"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-calendar"></use></svg>
             <span class="od-field od-fill">
               <span class="ob-option-name">Agendar</span>
               <span class="ob-option-desc">Você marca o horário ou a repetição, e o Boto executa sozinho.</span>
@@ -1072,7 +1071,7 @@
             <span class="ob-radio" aria-hidden="true"></span>
           </button>
           <button type="button" class="ob-option" role="radio" aria-checked="true" data-ob-mode="aprovacao">
-            <svg class="od-icon" aria-hidden="true"><use href="#i-shield-check"></use></svg>
+            <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-shield-check"></use></svg>
             <span class="od-field od-fill">
               <span class="ob-option-name">Pedir aprovação</span>
               <span class="ob-option-desc">Começa na hora, mas para e pergunta antes de enviar, publicar ou abrir um PR.</span>
@@ -1116,7 +1115,7 @@
           <button type="button" class="switch od-fixed" role="switch" aria-checked="false" aria-labelledby="ob-private-label" aria-describedby="ob-private-help" id="ob-private"></button>
         </div>
         <p class="ob-tip od-row">
-          <svg class="od-icon" aria-hidden="true"><use href="#i-keyboard"></use></svg>
+          <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-keyboard"></use></svg>
           <span class="od-fill">Busque tarefas, rotinas e ações a qualquer momento.</span>
           <span class="kbd" data-shortcut-label>⌘K</span>
         </p>
@@ -1127,13 +1126,105 @@
       <button type="button" class="btn btn-outline" id="ob-back" hidden>Voltar</button>
       <button type="button" class="btn btn-primary" id="ob-next">
         <span class="ob-next-label">Continuar</span>
-        <svg class="od-icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+        <svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-arrow-right"></use></svg>
       </button>
     </div>
   </div>
 </dialog>
 
-<script src="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/boto-ui.js?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np"></script>
-<script src="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/app.js?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np"></script>
+<script>
+(() => {
+  const $ = (selector) => document.querySelector(selector);
+  const all = (selector) => [...document.querySelectorAll(selector)];
+  all('[data-sidebar-slot]').forEach((slot) => slot.append($('#sidebar-tpl').content.cloneNode(true)));
+  const applyTheme = (theme) => {
+    document.documentElement.dataset.theme = theme;
+    all('[data-theme-logo]').forEach((image) => {
+      image.src = `../../apps/desktop/public/assets/boto-logo${theme === 'light' ? '-claro' : ''}.svg`;
+    });
+    all('[data-theme-toggle]').forEach((button) => button.setAttribute('aria-pressed', String(theme === 'dark')));
+    all('[data-st-theme]').forEach((button) => {
+      const selected = button.dataset.stTheme === theme;
+      button.setAttribute('aria-checked', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    });
+  };
+  const changeTheme = (theme) => {
+    applyTheme(theme);
+    try { localStorage.setItem('boto-theme', theme); } catch {}
+  };
+  const navigate = (view) => {
+    all('.view').forEach((section) => { section.hidden = section.id !== `view-${view}`; });
+    $('#main').dataset.view = view;
+    all('[data-nav]').forEach((button) => {
+      if (button.dataset.nav === view) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    if ($('#sheet').open) $('#sheet').close();
+    $(`#view-${view} h1`)?.focus();
+  };
+  applyTheme(document.documentElement.dataset.theme);
+  const actions = {
+    'go-home': () => navigate('home'),
+    'go-agents': () => navigate('agents'),
+    'go-routines': () => navigate('routines'),
+    'go-templates': () => navigate('templates'),
+    'go-marketplace': () => navigate('marketplace'),
+    'go-settings': () => navigate('settings'),
+    'new-task': () => navigate('new'),
+    'open-sheet': () => $('#sheet').showModal(),
+    'close-sheet': () => $('#sheet').close(),
+    'collapse-sidebar': () => { $('#app').dataset.collapsed = 'true'; $('.topbar-expand').hidden = false; },
+    'expand-sidebar': () => { $('#app').dataset.collapsed = 'false'; $('.topbar-expand').hidden = true; },
+  };
+  all('[data-action]').forEach((button) => {
+    if (actions[button.dataset.action]) button.addEventListener('click', actions[button.dataset.action]);
+  });
+  all('[data-template]').forEach((button) => button.addEventListener('click', () => {
+    $('#composer-input').value = button.querySelector('.template-name').textContent;
+    navigate('new');
+  }));
+  all('[data-theme-toggle]').forEach((button) => button.addEventListener('click', () => {
+    changeTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  }));
+  all('[data-st-theme]').forEach((button) => {
+    button.addEventListener('click', () => changeTheme(button.dataset.stTheme));
+    button.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      event.preventDefault();
+      const next = button.dataset.stTheme === 'dark' ? 'light' : 'dark';
+      changeTheme(next);
+      $(`[data-st-theme="${next}"]`).focus();
+    });
+  });
+  const tabs = all('#st-tabs [role="tab"]');
+  const selectTab = (tab) => {
+    tabs.forEach((button) => {
+      const selected = button === tab;
+      button.setAttribute('aria-selected', String(selected));
+      button.tabIndex = selected ? 0 : -1;
+      document.getElementById(button.getAttribute('aria-controls')).hidden = !selected;
+    });
+  };
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => selectTab(tab));
+    tab.addEventListener('keydown', (event) => {
+      const offset = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+      if (!offset) return;
+      event.preventDefault();
+      const next = tabs[(index + offset + tabs.length) % tabs.length];
+      selectTab(next); next.focus();
+    });
+  });
+  all('button').forEach((button) => {
+    const interactive = actions[button.dataset.action] || button.hasAttribute('data-template') ||
+      button.hasAttribute('data-theme-toggle') || button.hasAttribute('data-st-theme') || tabs.includes(button);
+    if (!interactive) {
+      button.disabled = true;
+      button.title ||= 'Demonstração visual; ação não incluída na versão local.';
+    }
+  });
+})();
+</script>
 </body>
 </html>
