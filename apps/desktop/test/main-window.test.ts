@@ -675,7 +675,9 @@ test("Buscar matches instructions without exposing them and shows live overview 
   const target = await browser.newPage();
   try {
     await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-    await target.getByRole("button", { name: "Início", exact: true }).waitFor();
+    // Scope to the sidebar: ChatView also renders an "Início" control when a prior
+    // test left boto.view=chat in the shared browser context.
+    await target.locator(".side").getByRole("button", { name: "Início", exact: true }).waitFor();
     await target.getByRole("button", { name: "Buscar", exact: false }).click();
     const input = target.getByRole("textbox", { name: "Buscar comandos" });
     const result = target
