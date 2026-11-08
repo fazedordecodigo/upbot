@@ -64,7 +64,6 @@ export function CreateAgentDialog({
   return (
     <dialog
       ref={dialogRef}
-      className="agent-new"
       aria-labelledby="dlgTitle"
       aria-describedby="dlgDesc"
       data-od-id="new-agent-dialog"
@@ -181,9 +180,7 @@ export function CreateAgentDialog({
           </div>
           <div className="an-row">
             <span>
-              <span className="ap-row-name" id="an-approval-label">
-                Pedir aprovação
-              </span>
+              <span className="ap-row-name">Pedir aprovação</span>
               <span className="field-help" id={approvalHelp}>
                 {askApproval
                   ? "Para e pergunta antes de cada ação."
