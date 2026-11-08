@@ -49,7 +49,7 @@ Claude Code, Codex, Devin, Cursor, Grok, OpenCode and Gemini (ACP).
   microVMs.
 
 | Approvals | Group chats |
-|---|---|
+| --- | --- |
 | ![Approvals](docs/screenshots/approvals.png) | ![Group chat](docs/screenshots/group-chat.png) |
 | **Connected apps** | **Marketplace** |
 | ![Connected apps](docs/screenshots/apps.png) | ![Marketplace](docs/screenshots/marketplace.png) |
@@ -93,7 +93,7 @@ Quit the old app before starting Boto. It moves `~/UpBot` (or `~/BobAgent`) to `
 repoints bot workspaces, migrates the app data directory to `com.boto.desktop` and keeps
 your vault readable. Custom `UPBOT_*` environment variables become `BOTO_*`; for remote
 hosts, reinstall from Settings → Hosts and rebuild the microVM rootfs. Details and edge
-cases: [AGENTS.md](AGENTS.md#bots-general-purpose).
+cases: [docs/agents/product.md](docs/agents/product.md#bots-general-purpose).
 
 ## Run bots on your own server
 
