@@ -1,10 +1,12 @@
 # Boto · Design system
 
-Referência única da linguagem visual do Boto, para quem desenha ou escreve código novo. Os valores abaixo são os mesmos de `assets/boto-ui.css` (tokens e componentes base) e `assets/app.css` (padrões do app). Se um valor aqui divergir do CSS, o CSS vale e este arquivo deve ser corrigido.
+Referência única da linguagem visual do Boto, para quem desenha ou escreve código novo. Este documento define as regras; os tokens da implementação ficam em `apps/desktop/src/styles/tokens.json`, com CSS gerado por `bun scripts/build-tokens.ts`. Se o código ou os protótipos divergirem desta referência, corrija a implementação.
 
 - Guia de marca visual: `docs/design/identidade.html`
 - Protótipo: `docs/design/index.html`
 - Arquitetura técnica: `docs/design/system-design.html`
+
+As três páginas usam os tokens e as fontes locais de `apps/desktop/src/styles/tokens.css`, com um adaptador mínimo de componentes em `docs/design/assets/boto-ui.css`. Os assets originais do export não estão disponíveis: os protótipos preservam a navegação e as demonstrações essenciais, não a simulação completa de tarefas e máquinas.
 
 ## 1. Conceito
 
@@ -61,6 +63,8 @@ Use sempre o token semântico no código, nunca o valor da paleta direto.
 | `--ring` | `#f08aa6` | `#c2456b` | Anel de foco |
 | `--sidebar` | `#0f191b` | `#eef2f1` | Barra lateral e Sheet |
 | `--overlay` | `rgb(4 8 9 / .66)` | `rgb(12 20 22 / .4)` | Fundo de diálogos |
+| `--tabs-active` | `#2a3b3f` | `#ffffff` | Fundo da aba ativa na lista segmentada |
+| `--logo-tile` | `#ffffff` | `#ffffff` | Placa de logos de terceiros |
 
 O tema é escolhido por `data-theme="light"` no elemento `html`; sem o atributo vale o escuro.
 
@@ -162,14 +166,14 @@ Pilhas completas, para quando a fonte não carregar:
 
 ## 6. Componentes
 
-Os componentes seguem a anatomia e os nomes de variáveis do shadcn/ui, recriados em HTML e CSS em `assets/boto-ui.css`.
+Os componentes seguem a anatomia e os nomes de variáveis do shadcn/ui. Nos protótipos, `docs/design/assets/boto-ui.css` adapta esses nomes aos tokens `--boto-*` da implementação.
 
 | Componente | Classes | Notas |
 |---|---|---|
 | Button | `.btn` + `.btn-primary`, `.btn-secondary`, `.btn-outline`, `.btn-ghost`, `.btn-destructive`, `.btn-link` | Tamanhos `.btn-sm`, `.btn-lg`, `.btn-icon`; `.btn-pill` só no envio de tarefa. Um primário por área |
 | Badge | `.badge`, `.badge-secondary`, `.badge-outline`, `.badge-success` | Altura 22 px, pílula, 12 px peso 600 |
 | Status | `.status[data-tone]` | Ver seção 7 |
-| Progress | `.progress > span` com `--p` de 0 a 1 | Trilho de 4 px em `--muted`, preenchimento em `--success` |
+| Progress | `.progress > span` com `--p` de 0 a 1 | Variável local, sem unidade: fração concluída (padrão 0), não uma cor. Trilho de 4 px em `--muted`, preenchimento em `--success` |
 | Input, Textarea, Label | `.input`, `.textarea`, `.label` | Campo de 40 px; foco troca a borda para `--ring` e mostra halo de 3 px |
 | Card | `.card`, `.card-header`, `.card-title`, `.card-description`, `.card-content`, `.card-footer` | Raio 12 px, padding 20 px |
 | Tabs | `.tabs-list`, `.tabs-trigger` | Lista segmentada; a aba ativa ganha `--tabs-active` e sombra pequena |
@@ -222,19 +226,21 @@ O olho do símbolo segue a mesma lógica: apagado quando o agente está parado, 
 ## 9. Ícones
 
 - Uma única família, Lucide, a mesma do shadcn: contorno de 2 px, pontas e junções arredondadas, nunca preenchidos.
-- Sprite em `assets/boto-ui.js`, usado com `<svg class="od-icon"><use href="#i-nome"></use></svg>`.
+- Sprite Lucide dos protótipos em `docs/design/assets/icons.svg`, usado com `<svg class="od-icon" aria-hidden="true"><use href="assets/icons.svg#i-nome"></use></svg>`.
 - Tamanho controlado por `--od-icon-size`: 16 px em botões, 12 px em selos, 13 px em status.
 - Ícones decorativos levam `aria-hidden="true"`. Botões só com ícone levam `aria-label` e tooltip.
 - Nada de emoji no lugar de ícone, e nada de ícone ao lado de todo título.
+
+O prefixo `od-` identifica apenas as primitivas de layout dos protótipos (`.od-truncate`, `.od-icon`, `--od-gap`, `--od-icon-size`). Não é uma segunda escala de tokens: elas usam os tokens semânticos acima, adaptados aos `--boto-*` do app pelo CSS local.
 
 ## 10. Logo
 
 | Arquivo | Uso |
 |---|---|
-| `assets/boto-logo.svg` | Principal, fundo escuro (Boto-rosa e Névoa) |
-| `assets/boto-logo-claro.svg` | Fundo claro (Boto-rosa fundo e Rio Negro) |
-| `assets/boto-simbolo.svg` | Avatar, ícone de app, espaços pequenos |
-| `assets/favicon.svg` | Favicon, placa Rio Negro com raio 14/64 |
+| `apps/desktop/public/assets/boto-logo.svg` | Principal, fundo escuro (Boto-rosa e Névoa) |
+| `apps/desktop/public/assets/boto-logo-claro.svg` | Fundo claro (Boto-rosa fundo e Rio Negro) |
+| `apps/desktop/public/assets/boto-simbolo.svg` | Avatar, ícone de app, espaços pequenos |
+| `apps/desktop/public/assets/favicon.svg` | Favicon, placa Rio Negro com raio 14/64 |
 
 - O símbolo é a cabeça do boto formando um balão de relato: o focinho é a ponta do balão e o olho é o indicador de status.
 - O nome "boto" é desenhado em minúsculas, com o "o" final na cor do símbolo.
