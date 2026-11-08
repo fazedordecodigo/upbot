@@ -5,6 +5,7 @@
 `src/providers/index.ts` routes providers: `claude` -> `ClaudeDriver` (`claude.ts`),
 `codex` -> `CodexDriver` (`codex.ts`), everything else -> ACP (`acp.ts`). Shared spawn,
 stderr tail, JSONL and auth helpers live in `process.ts`.
+
 - Claude: `claude --output-format stream-json --input-format stream-json --verbose
   --include-partial-messages --permission-prompt-tool stdio --permission-mode default`
   plus `--session-id <uuid>` (new) or `--resume <id>`; a failed resume falls back to a
