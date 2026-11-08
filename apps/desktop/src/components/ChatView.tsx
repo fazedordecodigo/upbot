@@ -1,5 +1,5 @@
 import type { Agent } from "@boto/protocol";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useChatApi } from "../hooks/useChat";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { useMediaQuery } from "../hooks/useLayerFocus";
@@ -170,6 +170,11 @@ export function ChatView({
   const [stopOpen, setStopOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const tabsId = useId();
+  const activityTab = `${tabsId}-tab-activity`;
+  const deskTab = `${tabsId}-tab-desk`;
+  const activityPane = `${tabsId}-pane-activity`;
+  const deskPane = `${tabsId}-pane-desk`;
   const { data: placements } = useDaemonQuery(
     client,
     "placements.list",
@@ -335,13 +340,14 @@ export function ChatView({
             type="button"
             className="icon-btn"
             aria-label="Configurar agente"
+            title="Configurar agente"
             onClick={onOpenSettings}
           >
             <Icon name="gear" />
           </button>
           <button
             type="button"
-            className="btn rn-btn-danger btn-sm"
+            className="btn btn-destructive btn-sm"
             onClick={() => setStopOpen(true)}
           >
             <Icon name="power" />
@@ -355,6 +361,8 @@ export function ChatView({
             type="button"
             className="tabs-trigger"
             role="tab"
+            id={activityTab}
+            aria-controls={activityPane}
             aria-selected={pane === "activity"}
             onClick={() => setPane("activity")}
           >
@@ -364,6 +372,8 @@ export function ChatView({
             type="button"
             className="tabs-trigger"
             role="tab"
+            id={deskTab}
+            aria-controls={deskPane}
             aria-selected={pane === "desk"}
             onClick={() => setPane("desk")}
           >
@@ -379,6 +389,8 @@ export function ChatView({
       >
         <div
           className="task-tl"
+          id={activityPane}
+          {...(narrow ? { role: "tabpanel", "aria-labelledby": activityTab } : {})}
           style={!narrow && deskOpen ? { flexBasis: `${split}%` } : undefined}
         >
           {modeError && <div className="notice is-err">{modeError}</div>}
@@ -435,7 +447,12 @@ export function ChatView({
             {notice && (
               <div className="notice">
                 {notice}
-                <button type="button" aria-label="Dispensar aviso" onClick={onNoticeDismiss}>
+                <button
+                  type="button"
+                  aria-label="Dispensar aviso"
+                  title="Dispensar aviso"
+                  onClick={onNoticeDismiss}
+                >
                   ×
                 </button>
               </div>
@@ -449,6 +466,7 @@ export function ChatView({
                     <button
                       type="button"
                       aria-label="Remover da fila"
+                      title="Remover da fila"
                       onClick={() => void queueRemove(item.id)}
                     >
                       ×
@@ -489,11 +507,18 @@ export function ChatView({
             event.preventDefault();
           }}
         />
-        <section className="task-desk-pane" aria-label="Área de trabalho do agente">
+        <section
+          className="task-desk-pane"
+          id={deskPane}
+          {...(narrow
+            ? { role: "tabpanel", "aria-labelledby": deskTab }
+            : { "aria-label": "Área de trabalho do agente" })}
+        >
           <AgentDesk
             mode={userControl ? "user" : "boto"}
             machine={workspace.machine}
             statusLabel={statusLabel}
+            situation={{ status: displayStatus, paused }}
             task={overview?.task ?? null}
             apps={apps}
             note={
@@ -539,7 +564,7 @@ function StopTaskDialog({ onConfirm, onCancel }: { onConfirm: () => void; onCanc
         >
           Continuar a tarefa
         </button>
-        <button type="button" className="btn rn-btn-danger" onClick={onConfirm}>
+        <button type="button" className="btn btn-destructive" onClick={onConfirm}>
           Encerrar tarefa
         </button>
       </div>

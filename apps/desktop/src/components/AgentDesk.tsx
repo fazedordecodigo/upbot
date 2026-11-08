@@ -1,4 +1,6 @@
+import type { UiStatus } from "../lib/ui";
 import { BotoSimboloCurrentcolorIcon } from "./ds/icons";
+import { SituationStatus } from "./SituationStatus";
 
 export function AgentDesk({
   mode,
@@ -7,6 +9,7 @@ export function AgentDesk({
   task,
   apps,
   note,
+  situation,
   variant = "full",
   onReturn,
 }: {
@@ -16,6 +19,7 @@ export function AgentDesk({
   task: string | null;
   apps: string[];
   note?: string | null;
+  situation?: { status: UiStatus; paused: boolean };
   variant?: "full" | "thumb";
   onReturn?: () => void;
 }) {
@@ -38,7 +42,11 @@ export function AgentDesk({
       )}
       <div className="desk-top">
         <span className="od-truncate">{machine}</span>
-        <span>{statusLabel}</span>
+        {situation ? (
+          <SituationStatus status={situation.status} paused={situation.paused} />
+        ) : (
+          <span>{statusLabel}</span>
+        )}
       </div>
       <div className="desk-stage">
         <div className="desk-mark" aria-hidden="true">

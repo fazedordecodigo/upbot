@@ -28,7 +28,7 @@ function Lane({
     <section className="lane" aria-labelledby={headingId}>
       <div className="section-head">
         <h2 id={headingId}>{title}</h2>
-        <span className="rn-badge">{agents.length}</span>
+        <span className="badge">{agents.length}</span>
       </div>
       {agents.length === 0 ? (
         <p className="lane-empty">{empty}</p>
@@ -101,6 +101,10 @@ export function HomeView({
   const hello = name ? `${greeting().replace(/\.$/, "")}, ${name}.` : greeting();
   const working = agents.filter((agent) => agentSituation(overview[agent.id]) === "working");
   const waiting = agents.filter((agent) => agentSituation(overview[agent.id]) === "waiting");
+  const active = agents.filter((agent) => {
+    const status = overview[agent.id]?.status;
+    return status === "run" || status === "wait";
+  });
   const recent = agents
     .filter((agent) => {
       const item = overview[agent.id];
@@ -180,18 +184,18 @@ export function HomeView({
         </section>
         <aside className="card pc-card" aria-labelledby="pc-card-title">
           <div className="section-head">
-            <h2 id="pc-card-title">Áreas de trabalho dos agentes</h2>
+            <h2 id="pc-card-title">Áreas de trabalho ativas</h2>
           </div>
           <p className="pc-card-help">
             Miniaturas ilustradas no Rio Negro, com o estado real de cada agente. Não é a tela da
             máquina.
           </p>
           {placementError && <p className="err">Não foi possível carregar as máquinas.</p>}
-          {agents.length === 0 ? (
-            <p className="lane-empty">Nenhum agente ainda.</p>
+          {active.length === 0 ? (
+            <p className="lane-empty">Nenhuma área de trabalho ativa agora.</p>
           ) : (
             <div className="pc-thumbs">
-              {agents.map((agent) => {
+              {active.map((agent) => {
                 const item = overview[agent.id];
                 const workspace = workspaceOf(agent.id, placements, hosts, item?.status);
                 const apps = item?.apps.map((app) => app.name) ?? [];
@@ -206,7 +210,7 @@ export function HomeView({
                       variant="thumb"
                       mode="boto"
                       machine={workspace.machine}
-                      statusLabel={item?.paused ? "Fila pausada" : (item?.task ?? role(agent))}
+                      statusLabel={item?.task ?? role(agent)}
                       task={item?.task ?? null}
                       apps={apps}
                     />

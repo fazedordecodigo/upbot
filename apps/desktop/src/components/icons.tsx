@@ -43,6 +43,7 @@ const I = {
   monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
   pause:
     '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  "circle-pause": '<circle cx="12" cy="12" r="8.5"/><path d="M10 15V9M14 15V9"/>',
   play: '<path d="m8 5 11 7-11 7z"/>',
   power: '<path d="M12 3v9"/><path d="M7.5 5.5a8 8 0 1 0 9 0"/>',
   pointer: '<path d="m4 4 7.5 16 2.2-6.3L20 11.5z"/>',
