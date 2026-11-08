@@ -9,9 +9,9 @@ import { ChatView } from "./components/ChatView";
 import { CommandPalette, type PaletteItem } from "./components/CommandPalette";
 import { CreateAgentDialog, type NewAgentForm } from "./components/CreateAgentDialog";
 import { IconButton } from "./components/ds/controls";
+import { HomeView } from "./components/HomeView";
 import { Icon } from "./components/icons";
 import { PagesView } from "./components/PagesView";
-import { RunPanel } from "./components/RunPanel";
 import { ScheduledView } from "./components/ScheduledView";
 import { SettingsView } from "./components/SettingsView";
 import { Sidebar } from "./components/Sidebar";
@@ -86,8 +86,6 @@ export default function App() {
   const [palette, setPalette] = useState<{ group?: string } | null>(null);
   const [paletteItems, setPaletteItems] = useState<PaletteItem[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
-  const [noPanel, setNoPanel] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const sideRef = useRef<HTMLElement>(null);
   const narrow = useMediaQuery("(max-width: 759px)");
@@ -196,6 +194,14 @@ export default function App() {
     }
   }, [client, newBot, openAgent, selected]);
 
+  const newTask = useCallback(() => {
+    if (!selected) {
+      newBot();
+      return;
+    }
+    openAgent(selected.id);
+  }, [newBot, openAgent, selected]);
+
   const reviewNotification = useCallback(
     (target: string, message?: string) => {
       if (message) setNotice(message);
@@ -258,15 +264,13 @@ export default function App() {
       else if (creating) setCreating(false);
       else if (document.querySelector("dialog[open]")) return;
       else if (sideOpen) setSideOpen(false);
-      else if (panelOpen) setPanelOpen(false);
       else return;
       e.preventDefault();
       return;
     }
     if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
     const key = e.key.toLowerCase();
-    if (key === "." && view === "chat" && selectedId) togglePanel();
-    else if (key === "k") setPalette({});
+    if (key === "k") setPalette({});
     else if (key === "f" && e.shiftKey) setPalette({ group: "Bots" });
     else if (key === "n" && e.shiftKey) newBot();
     else if (key === "n") void newSession();
@@ -419,11 +423,6 @@ export default function App() {
     [client, navigate, setAgents],
   );
 
-  const togglePanel = () => {
-    if (window.matchMedia("(max-width: 1180px)").matches) setPanelOpen((open) => !open);
-    else setNoPanel((hidden) => !hidden);
-  };
-
   const appView =
     view === "home" ||
     view === "scheduled" ||
@@ -437,8 +436,7 @@ export default function App() {
     "app",
     `view-${appView}`,
     view === "agent-settings" ? "agent-config-shell" : "",
-    noPanel && view === "chat" ? "no-panel" : "",
-    panelOpen && view === "chat" ? "panel-open" : "",
+    view === "chat" ? "no-panel" : "",
     sideOpen ? "side-open" : "",
   ]
     .filter(Boolean)
@@ -456,18 +454,18 @@ export default function App() {
         selectedId={selectedId}
         agentNameOverride={agentNameDraft}
         channelId={channelId}
-        current={view === "settings" && settingsTab === "apps" ? "apps" : view}
+        current={view === "settings" && settingsTab === "marketplace" ? "marketplace" : view}
         profileName={profileName}
         drawer={sideOpen && narrow}
         sideRef={sideRef}
         onClose={() => setSideOpen(false)}
-        onNewSession={() => void newSession()}
-        onNewBot={newBot}
+        onNewTask={newTask}
         onSearch={() => setPalette({})}
         onHome={() => navigate("home")}
+        onAgents={() => navigate("agents")}
         onScheduled={() => navigate("scheduled")}
-        onApps={() => {
-          setSettingsTab("apps");
+        onMarketplace={() => {
+          setSettingsTab("marketplace");
           navigate("settings");
         }}
         onSettings={() => {
@@ -529,14 +527,15 @@ export default function App() {
           ) : view === "scheduled" ? (
             <ScheduledView client={client} agents={agents} onOpen={openAgent} />
           ) : view === "home" ? (
-            <section className="view on">
-              <div className="empty">
-                <h2>Escolha um bot ou crie um novo.</h2>
-                <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
-                  Criar bot
-                </button>
-              </div>
-            </section>
+            <HomeView
+              client={client}
+              profileName={profileName}
+              agents={agents}
+              overview={overview}
+              statuses={statuses}
+              onNewTask={newTask}
+              onOpen={openAgent}
+            />
           ) : view === "chat" ? (
             selected ? (
               <ChatView
@@ -545,9 +544,9 @@ export default function App() {
                 agent={selected}
                 overview={selectedOverview}
                 onOpenSettings={() => navigate("agent-settings")}
+                onHome={() => navigate("home")}
                 notice={notice}
                 onNoticeDismiss={() => setNotice(null)}
-                onPanelToggle={togglePanel}
               />
             ) : (
               <section className="view on">
@@ -565,8 +564,10 @@ export default function App() {
             )
           ) : view === "agents" ? (
             <AgentsView
+              client={client}
               agents={agents}
               overview={overview}
+              statuses={statuses}
               onCreate={() => setCreating(true)}
               onOpen={openAgent}
             />
@@ -639,20 +640,6 @@ export default function App() {
             </section>
           )}
         </main>
-
-        {view === "chat" && selected && selectedOverview && (
-          <RunPanel
-            client={client}
-            agent={selected}
-            overview={selectedOverview}
-            overlayOpen={panelOpen && !sideOpen}
-            onClose={togglePanel}
-            onOpenApps={() => {
-              setSettingsTab("apps");
-              navigate("settings");
-            }}
-          />
-        )}
       </ChatProvider>
 
       {creating && (

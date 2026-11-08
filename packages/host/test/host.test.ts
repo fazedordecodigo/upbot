@@ -117,10 +117,23 @@ describe("boto-host", () => {
       const response = await new Promise<string>((resolve, reject) => {
         const client = createConnection({ path: socketPath });
         let text = "";
-        client.setTimeout(3000, () => client.destroy(new Error("proxy response timeout")));
-        client.on("data", (data) => (text += data.toString()));
-        client.on("end", () => resolve(text));
-        client.on("error", reject);
+        let settled = false;
+        const finish = (value: string | Error) => {
+          if (settled) return;
+          settled = true;
+          client.destroy();
+          if (value instanceof Error) reject(value);
+          else resolve(value);
+        };
+        // Windows AF_UNIX often keeps the peer half-open after `end()`, so wait for
+        // the response headers instead of the socket close (same pattern as below).
+        client.setTimeout(3000, () => finish(new Error("proxy response timeout")));
+        client.on("data", (data) => {
+          text += data.toString();
+          if (text.includes("\r\n\r\n")) finish(text);
+        });
+        client.on("end", () => finish(text));
+        client.on("error", (error) => finish(error));
         client.on("connect", () =>
           client.write(`CONNECT 2130706433:${port} HTTP/1.1\r\nHost: proxy\r\n\r\n`),
         );

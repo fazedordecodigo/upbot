@@ -1,117 +1,229 @@
-import type { Agent, ProviderId } from "@boto/protocol";
-import { useMemo, useState } from "react";
+import type { Agent, AgentStatusInfo } from "@boto/protocol";
+import { useState } from "react";
+import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { AgentOverview } from "../hooks/useOverview";
-import { MonoAv, Pill, role, statusProvider } from "../lib/ui";
+import { type AgentFilter, agentSituation, matchesFilter, workspaceOf } from "../lib/agent-surface";
+import type { DaemonClient } from "../lib/daemon";
+import { errorMessage } from "../lib/errors";
+import { moveControlFocus } from "../lib/keyboard";
+import { role } from "../lib/ui";
+import { AgentDesk } from "./AgentDesk";
+import { AgentPanel } from "./AgentPanel";
 import { Icon } from "./icons";
+import { SituationStatus } from "./SituationStatus";
 
-function isAskMode(agent: Agent) {
-  return (
-    (agent.provider === "claude" && agent.config.mode === "plan") ||
-    (agent.provider === "codex" && agent.config.mode === "read-only")
-  );
-}
+const FILTERS: { id: AgentFilter; label: string }[] = [
+  { id: "all", label: "Todos" },
+  { id: "working", label: "Trabalhando" },
+  { id: "waiting", label: "Aguardando você" },
+  { id: "idle", label: "Livres" },
+  { id: "paused", label: "Fila pausada" },
+];
 
 export function AgentsView({
+  client,
   agents,
   overview,
+  statuses,
   onCreate,
   onOpen,
 }: {
+  client: DaemonClient;
   agents: Agent[];
   overview: Record<string, AgentOverview>;
+  statuses: Record<string, AgentStatusInfo>;
   onCreate: () => void;
   onOpen: (id: string) => void;
 }) {
-  const providers = useMemo(() => [...new Set(agents.map((agent) => agent.provider))], [agents]);
-  const [filter, setFilter] = useState<ProviderId | "all">("all");
-  const shown = filter === "all" ? agents : agents.filter((agent) => agent.provider === filter);
+  const [filter, setFilter] = useState<AgentFilter>("all");
+  const [panelId, setPanelId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const { data: placements, error: placementError } = useDaemonQuery(
+    client,
+    "placements.list",
+    {},
+    { events: { "placement.updated": true } },
+  );
+  const { data: hosts } = useDaemonQuery(
+    client,
+    "hosts.list",
+    {},
+    {
+      events: { "hosts.changed": true },
+    },
+  );
+  const situations = agents.map((agent) => ({
+    agent,
+    situation: agentSituation(overview[agent.id]),
+  }));
+  const counts = {
+    working: situations.filter((item) => item.situation === "working").length,
+    waiting: situations.filter((item) => item.situation === "waiting").length,
+    idle: situations.filter((item) => item.situation === "idle").length,
+    paused: situations.filter((item) => item.situation === "paused").length,
+  };
+  const shown = situations.filter((item) => matchesFilter(filter, item.situation));
+  const panelAgent = agents.find((agent) => agent.id === panelId) ?? null;
+
+  const toggleQueue = async (agentId: string, paused: boolean) => {
+    setActionError(null);
+    setBusyId(agentId);
+    try {
+      await client.request(paused ? "queue.resume" : "queue.pause", { agentId });
+    } catch (e) {
+      setActionError(errorMessage(e));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
-    <section className="view on">
-      <div className="page">
-        <div className="page-inner">
-          <div className="page-top">
-            <div>
-              <h1>Bots</h1>
-              <p>
-                Cada bot tem uma função, as ferramentas que pode usar e o quanto pode agir sem
-                perguntar.
-              </p>
-            </div>
-            <button type="button" className="btn btn-primary" onClick={onCreate}>
-              Criar bot
-            </button>
+    <section className="view on agents-cockpit">
+      <div className="agents-inner">
+        <div className="page-head">
+          <div>
+            <h1 id="agents-title">Agentes</h1>
+            <p>
+              Cada agente tem uma especialidade, uma instância e uma fila. A miniatura é ilustrada:
+              o Boto não transmite a tela da máquina.
+            </p>
           </div>
-          <fieldset className="filters">
-            <legend className="sr">Filtrar bots</legend>
-            <button
-              type="button"
-              className="chip"
-              aria-pressed={filter === "all"}
-              onClick={() => setFilter("all")}
-            >
-              Todos
-            </button>
-            {providers.map((provider) => (
-              <button
-                key={provider}
-                type="button"
-                className="chip"
-                aria-pressed={filter === provider}
-                onClick={() => setFilter(provider)}
-              >
-                {statusProvider(provider)}
-              </button>
-            ))}
-          </fieldset>
-          <div className="grid" id="agentGrid">
-            {shown.map((agent) => {
-              const info = overview[agent.id];
-              const appTags = info?.apps.flatMap((app) => app.tools.map((tool) => tool.name)) ?? [];
-              const tools = [
-                statusProvider(agent.provider),
-                ...appTags,
-                ...(info?.emailAccounts.length ? ["E-mail"] : []),
-              ];
-              return (
-                <article className="a-card" key={agent.id}>
-                  <div className="top">
-                    <MonoAv agent={agent} status={info?.status ?? "idle"} lg />
-                    <Pill st={info?.status ?? "idle"} />
-                  </div>
-                  <div>
-                    <h3>{agent.name}</h3>
-                    <p style={{ marginTop: 4 }}>{role(agent)}</p>
-                  </div>
-                  <div className="tags">
-                    {tools.map((tool) => (
-                      <span className="tag" key={tool}>
-                        {tool}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="foot">
-                    <span className="meta">
-                      {isAskMode(agent) ? "Só sugere" : "Age e pede aprovação"}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => onOpen(agent.id)}
-                    >
-                      Abrir conversa
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-            <button type="button" className="a-card new" onClick={onCreate}>
-              <Icon name="plus" />
-              <h3>Novo bot</h3>
-              <span style={{ fontSize: 13 }}>Defina função, ferramentas e autonomia</span>
-            </button>
-          </div>
+          <button type="button" className="btn rn-btn-primary" onClick={onCreate}>
+            <Icon name="plus" />
+            Novo agente
+          </button>
         </div>
+        <section className="ag-stats" aria-label="Resumo dos agentes">
+          <div>
+            <b>{counts.working}</b>
+            <span>Trabalhando</span>
+          </div>
+          <div>
+            <b>{counts.waiting}</b>
+            <span>Aguardando você</span>
+          </div>
+          <div>
+            <b>{counts.idle}</b>
+            <span>Livres</span>
+          </div>
+          <div>
+            <b>{counts.paused}</b>
+            <span>Fila pausada</span>
+          </div>
+        </section>
+        {placementError && (
+          <p className="err" role="alert">
+            Não foi possível carregar as máquinas: {placementError}
+          </p>
+        )}
+        {actionError && (
+          <p className="err" role="alert">
+            {actionError}
+          </p>
+        )}
+        <section aria-labelledby="ag-board-title">
+          <div className="ag-toolbar">
+            <h2 id="ag-board-title">Quadro</h2>
+            <fieldset className="tabs-list ag-filter" onKeyDown={moveControlFocus}>
+              <legend className="sr">Filtrar agentes pela situação</legend>
+              {FILTERS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={filter === item.id}
+                  tabIndex={filter === item.id ? 0 : -1}
+                  onClick={() => setFilter(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </fieldset>
+          </div>
+          {shown.length === 0 ? (
+            <p className="lane-empty">Nenhum agente nesta situação.</p>
+          ) : (
+            <div className="ag-grid">
+              {shown.map(({ agent }) => {
+                const info = overview[agent.id];
+                const workspace = workspaceOf(agent.id, placements, hosts, info?.status);
+                const apps = info?.apps.map((app) => app.name) ?? [];
+                return (
+                  <article className="ag-card" key={agent.id}>
+                    <header>
+                      <h3>{agent.name}</h3>
+                      <p>{role(agent)}</p>
+                      <SituationStatus
+                        status={info?.status ?? "idle"}
+                        paused={info?.paused ?? false}
+                        detail={statuses[agent.id]?.error}
+                      />
+                    </header>
+                    <AgentDesk
+                      variant="thumb"
+                      mode="boto"
+                      machine={workspace.machine}
+                      statusLabel={info?.paused ? "Fila pausada" : role(agent)}
+                      task={info?.task ?? null}
+                      apps={apps}
+                    />
+                    <dl className="ag-facts">
+                      <div>
+                        <dt>Instâncias</dt>
+                        <dd>{workspace.slots}</dd>
+                      </div>
+                      <div>
+                        <dt>Fila</dt>
+                        <dd>{info?.queued ?? 0}</dd>
+                      </div>
+                      <div>
+                        <dt>Máquina</dt>
+                        <dd>{workspace.machine}</dd>
+                      </div>
+                    </dl>
+                    <footer>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setPanelId(agent.id)}
+                      >
+                        Abrir painel
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={busyId === agent.id}
+                        onClick={() => void toggleQueue(agent.id, info?.paused ?? false)}
+                      >
+                        {info?.paused ? "Retomar fila" : "Pausar fila"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => onOpen(agent.id)}
+                      >
+                        Ver área
+                      </button>
+                    </footer>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
+      {panelAgent && (
+        <AgentPanel
+          client={client}
+          agent={panelAgent}
+          overview={overview[panelAgent.id]}
+          placements={placements}
+          hosts={hosts}
+          machinesError={placementError}
+          onClose={() => setPanelId(null)}
+          onOpen={onOpen}
+        />
+      )}
     </section>
   );
 }

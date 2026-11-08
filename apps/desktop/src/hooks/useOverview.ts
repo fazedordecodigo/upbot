@@ -18,6 +18,7 @@ export type AgentOverview = {
   updated: string;
   latestTurn: Turn | null;
   queued: number;
+  paused: boolean;
   pending: number;
   status: UiStatus;
   apps: ConnectedApp[];
@@ -173,6 +174,7 @@ export function useOverview(
         updated: fmtTime(latestTurn?.endedAt ?? latestTurn?.startedAt),
         latestTurn,
         queued: queue?.items.length ?? 0,
+        paused: queue?.paused ?? false,
         pending,
         status: status(statuses[agent.id]?.status, queue?.items.length ?? 0, latestTurn, pending),
         apps: connectedApps,

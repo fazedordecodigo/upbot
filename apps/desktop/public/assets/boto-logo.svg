@@ -1,1 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 4 154 50" role="img" aria-label="Boto"><g transform="translate(-5.7 4.5) scale(.92)"><path d="M9.2 24V29a10 10 0 0 0 20 0V14" fill="none" stroke="#2a67bd" stroke-width="6" stroke-linecap="round"/><circle cx="38.2" cy="9.5" r="3.6" fill="#2a67bd"/></g><g transform="translate(42 0)"><g fill="none" stroke="#0e1217" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8V40H13a8 8 0 0 0 0-16H2.5M2.5 8H12a8 8 0 0 1 0 16"/><circle cx="41" cy="30" r="10"/><path d="M66 12V32a8 8 0 0 0 8 8M59 20H73"/><circle cx="96" cy="30" r="10"/></g></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 64" width="200" height="64" role="img" aria-label="boto">
+  <!-- Versão para fundos escuros (Rio Negro #0c1416) -->
+  <path fill="#f08aa6" fill-rule="evenodd" d="M20 43C14 34 20 6 40 6C52 6 60 16 60 28C60 41 50 50 38 50L28 50C21 50 14 54 8 57.6C6.4 58.5 5.2 56.6 6.6 55.5C10.5 52.5 15.5 47.5 20 43ZM26.2 38a2.8 2.8 0 1 0 5.6 0a2.8 2.8 0 1 0-5.6 0Z"/>
+  <g transform="translate(78 12)" fill="none" stroke-width="7">
+    <rect x="0" y="0" width="7" height="40" fill="#e8eeee"/>
+    <circle cx="18.5" cy="26" r="10.5" stroke="#e8eeee"/>
+    <circle cx="51.5" cy="26" r="10.5" stroke="#e8eeee"/>
+    <path d="M77.5 4V30q0 6.5 6.5 6.5H88M70 15H87" stroke="#e8eeee"/>
+    <circle cx="106" cy="26" r="10.5" stroke="#f08aa6"/>
+  </g>
+</svg>

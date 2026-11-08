@@ -3,6 +3,7 @@
 ## 0.5.0 (Unreleased)
 
 ### Changed
+
 - Renamed UpBot to Boto, with migration of existing UpBot workspaces, app data and vault keys.
 - Updated repository, updater and marketplace URLs to `fazedordecodigo/boto`; saved legacy
   marketplace sources still migrate automatically without duplicating entries.
@@ -15,6 +16,7 @@
   Brazilian Portuguese labels and help text. Composer draft cards are unchanged.
 
 ### Fixed
+
 - Renomear uma habilidade move seu histórico e remove o nome antigo, sem sobrescrever outra habilidade.
 - Keep Linux interrupted-approval notices until reviewed without presenting replacements
   during mute or replaying them on unmute.
@@ -41,6 +43,7 @@
   Gemini API key or Vertex AI, including when a cached Google sign-in fails.
 
 ### Added
+
 - Native Linux approval notifications via freedesktop D-Bus, with actions when supported.
 - Versões anteriores das habilidades, com leitura de Markdown ou texto bruto e retorno à versão atual.
 - Histórico de execuções das rotinas em Agendadas e nas configurações do bot, com estado da fila e do turno.
@@ -72,16 +75,19 @@
 Released as **UpBot v0.4.0** (commit `f7e53ec`).
 
 ### Changed
+
 - Redesigned the desktop to the UpBot mockup: navigation, overview, chat, composer,
   bot settings, tools and a new run panel.
 
 ### Fixed
+
 - Corrected desktop feedback regressions, retry and microphone state.
 - Describe configured microVM placement without implying that the VM is running.
 
 ## 0.3.0
 
 ### Changed
+
 - Renamed BobAgent to UpBot and repositioned it as a hub for general-purpose bots that work
   together (web, files, email, apps), not only coding agents. Existing data is migrated:
   `~/BobAgent` -> `~/UpBot`, the app data folder, and the vault key in the Keychain.
@@ -89,6 +95,7 @@ Released as **UpBot v0.4.0** (commit `f7e53ec`).
   and get an `<upbot_context>` with collaboration and safety rules.
 
 ### Added
+
 - Email (IMAP/SMTP) with bot drafts that only the user can send.
 - Connected apps: daemon-hosted MCP servers (catalog + custom) shared with chosen bots.
 - Approvals: ask-first/allow rules, expiry for background requests, secure secret requests,
@@ -99,12 +106,14 @@ Released as **UpBot v0.4.0** (commit `f7e53ec`).
 ## 0.2.1
 
 ### Fixed
+
 - macOS: the app bundle is now ad-hoc signed, so a downloaded unsigned build is no longer
   reported as "damaged"; Gatekeeper offers Open Anyway instead.
 
 ## 0.2.0
 
 ### New
+
 - MicroVM sign-in: save a Claude token/API key or an OpenAI API key (encrypted in the vault)
   and Boto passes it to Claude/Codex inside Firecracker sessions only.
 - Settings & tools: Skills, Marketplace, Browser, Vault, Gateways, Mobile, Team and Hosts in
@@ -121,6 +130,7 @@ Released as **UpBot v0.4.0** (commit `f7e53ec`).
 First public release.
 
 ### New
+
 - Run Claude Code, Codex (native drivers) and ACP agents (Devin, Cursor, Grok, OpenCode, Gemini) side by side, each with its own workspace, queue, permissions and resumable session.
 - Agents message each other, share files and collaborate in channels with an owner and delegation.
 - Track context usage and cost per agent; long conversations compact automatically.

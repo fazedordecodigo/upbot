@@ -1,0 +1,50 @@
+{
+  "note": "Logos de marca usados para identificar apps, MCPs e provedores no protótipo do Boto. As marcas pertencem aos seus donos.",
+  "sources": [
+    {
+      "files": [
+        "anthropic-icon.svg",
+        "claude-icon.svg",
+        "cursor-icon.svg",
+        "figma.svg",
+        "gemini-icon.svg",
+        "github-icon.svg",
+        "google-drive.svg",
+        "google-gmail.svg",
+        "grok-icon.svg",
+        "jira.svg",
+        "linear-icon.svg",
+        "notion-icon.svg",
+        "openai-icon.svg",
+        "opencode-icon.svg",
+        "openrouter-icon.svg",
+        "playwright.svg",
+        "postgresql.svg",
+        "sentry-icon.svg",
+        "slack-icon.svg",
+        "vercel-icon.svg"
+      ],
+      "source": "https://github.com/gilbarbara/logos",
+      "author": "Gil Barbara e colaboradores",
+      "license": "CC0 1.0 (coleção); marcas registradas pertencem aos donos"
+    },
+    {
+      "files": ["stripe-icon.svg"],
+      "source": "https://github.com/simple-icons/simple-icons (stripe.svg), recolorido para #635BFF, a cor da marca",
+      "author": "Simple Icons e colaboradores",
+      "license": "CC0 1.0 (coleção); marca registrada da Stripe"
+    },
+    {
+      "files": ["context7.png"],
+      "source": "https://context7.com/favicon.ico",
+      "author": "Upstash / Context7",
+      "license": "Ícone oficial do site, usado só para identificar o produto"
+    }
+  ],
+  "missing": [
+    {
+      "name": "Aider",
+      "reason": "O site oficial só publica o logotipo por extenso, sem símbolo quadrado. O protótipo usa um monograma."
+    }
+  ]
+}

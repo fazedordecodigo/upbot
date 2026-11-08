@@ -1,0 +1,1433 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boto — system design</title>
+<meta name="description" content="Arquitetura técnica do Boto: agentes autônomos que executam tarefas de ponta a ponta, cada um num computador próprio, com filas, permissões, aprovações, memória e rotinas.">
+<link rel="icon" href="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/favicon.svg?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np" type="image/svg+xml">
+<style>
+/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio, geometry.
+   Put this @layer first; product CSS outside the layer wins ordinary layout rules.
+   Native hidden and closed-dialog states take precedence over component display rules. */
+@layer od-layout {
+  [hidden]:not([hidden="until-found" i]) { display: none !important; }
+  dialog:not([open]) { display: none !important; }
+
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+
+  .od-icon { display: inline-block; inline-size: var(--od-icon-size, 1em); block-size: var(--od-icon-size, 1em); flex: none; }
+
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }
+  .od-nowrap  { white-space: nowrap; }
+  .od-keep    { word-break: keep-all; overflow-wrap: anywhere; }
+
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch  { min-width: 44px; min-height: 44px; }
+}
+:root [hidden]:where(:not([hidden="until-found" i])) { display: none; }
+/* /OD-LAYOUT-PRIMITIVES v1 */
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/boto-ui.css?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np">
+<style>
+  :root {
+    --measure: 72ch;
+    --doc-col: 840px;
+    --toc-w: 240px;
+    --nav-h: 64px;
+  }
+  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + var(--space-6)); }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { line-height: 1.65; }
+
+  /* Navegação */
+  .d-nav { position: sticky; top: 0; z-index: 20; background: var(--background); border-bottom: 1px solid var(--border); }
+  .d-nav-inner {
+    display: flex; align-items: center; gap: var(--space-4);
+    max-width: 1200px; min-height: var(--nav-h); margin: 0 auto; padding: 0 var(--space-6);
+  }
+  .d-brand { display: inline-flex; align-items: center; gap: var(--space-3); color: var(--foreground); text-decoration: none; border-radius: var(--radius-md); }
+  .d-brand svg { display: block; width: 88px; height: 28px; }
+  .d-brand-sub { display: block; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted-foreground); padding-left: var(--space-3); border-left: 1px solid var(--border); }
+  .d-nav-links { display: flex; align-items: center; gap: var(--space-1); margin-left: auto; }
+  .d-nav-links a {
+    display: inline-flex; align-items: center; height: 36px; padding: 0 var(--space-3);
+    border-radius: var(--radius-md); color: var(--muted-foreground); text-decoration: none; font-size: var(--text-sm); font-weight: 500;
+    transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+  }
+  .d-nav-links a:hover { color: var(--foreground); background: var(--accent); }
+  .d-theme {
+    display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px;
+    border: 1px solid var(--border); border-radius: var(--radius-md); background: transparent; color: var(--foreground);
+    transition: background-color var(--dur-fast) var(--ease-out);
+  }
+  .d-theme:hover { background: var(--accent); }
+  .d-theme .od-icon { --od-icon-size: 16px; }
+  [data-theme="light"] .i-sun, [data-theme="dark"] .i-moon { display: none; }
+
+  /* Estrutura */
+  .d-shell {
+    display: grid; grid-template-columns: var(--toc-w) minmax(0, var(--doc-col));
+    gap: var(--space-12); justify-content: center;
+    max-width: 1200px; margin: 0 auto; padding: var(--space-12) var(--space-6) var(--space-20);
+  }
+  .d-aside { position: sticky; top: calc(var(--nav-h) + var(--space-8)); align-self: start; max-height: calc(100vh - var(--nav-h) - var(--space-12)); overflow-y: auto; }
+  .toc-box > summary { display: none; }
+  .toc-title { display: block; font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-foreground); margin-bottom: var(--space-3); }
+  .toc ol { list-style: none; margin: 0; padding: 0; }
+  .toc ol ol { padding-left: var(--space-4); margin: var(--space-1) 0 var(--space-2); }
+  .toc a {
+    display: block; padding: 6px var(--space-3); border-radius: var(--radius-md);
+    color: var(--muted-foreground); text-decoration: none; font-size: var(--text-sm); line-height: 1.4;
+    transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+  }
+  .toc a:hover { color: var(--foreground); background: var(--accent); }
+  .toc a[aria-current="true"] { color: var(--foreground); background: var(--secondary); font-weight: 500; }
+  .toc .n { font-family: var(--font-mono); font-size: var(--text-xs); margin-right: var(--space-2); }
+
+  /* Artigo */
+  .doc { min-width: 0; }
+  .doc > header { padding-bottom: var(--space-10); border-bottom: 1px solid var(--border); margin-bottom: var(--space-10); }
+  .eyebrow { display: block; font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-foreground); }
+  .doc h1 { font-size: clamp(36px, 5vw, var(--text-4xl)); letter-spacing: -0.02em; margin: var(--space-3) 0 var(--space-5); max-width: 20ch; }
+  .lead { font-size: var(--text-lg); color: var(--muted-foreground); max-width: 62ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); margin-top: var(--space-6); font-size: var(--text-sm); color: var(--muted-foreground); }
+  .meta b { color: var(--foreground); font-weight: 500; }
+  .legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-6); font-size: var(--text-sm); color: var(--muted-foreground); }
+
+  .doc section { padding-top: var(--space-4); margin-bottom: var(--space-16); }
+  .doc h2 { font-size: var(--text-2xl); margin-bottom: var(--space-5); display: flex; align-items: baseline; gap: var(--space-3); }
+  .doc h2 .n { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 500; color: var(--primary); }
+  .doc h3 { font-size: var(--text-xl); margin: var(--space-10) 0 var(--space-4); }
+  .doc h4 { font-size: var(--text-base); font-family: var(--font-sans); font-weight: 600; margin: var(--space-6) 0 var(--space-2); }
+  .doc p, .doc ul, .doc ol:not(.seq-steps) { max-width: var(--measure); }
+  .doc p + p { margin-top: var(--space-4); }
+  .doc ul, .doc ol { margin: var(--space-4) 0; padding-left: var(--space-6); }
+  .doc li + li { margin-top: var(--space-2); }
+  .doc li > ul { margin: var(--space-2) 0; }
+  .doc a { color: var(--primary); text-underline-offset: 3px; }
+  .doc a:hover { text-decoration-thickness: 2px; }
+  .doc strong { font-weight: 600; }
+  code, .mono { font-family: var(--font-mono); font-size: 0.875em; }
+  .doc :not(pre) > code { padding: 1px 6px; border-radius: var(--radius-sm); background: var(--secondary); white-space: nowrap; }
+
+  /* Selos de origem */
+  .tag {
+    display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 var(--space-2);
+    border: 1px solid var(--border); border-radius: var(--radius-full);
+    font-family: var(--font-mono); font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; vertical-align: 2px;
+    color: var(--foreground); background: var(--card);
+  }
+  .tag::before { content: ""; width: 7px; height: 7px; flex: none; }
+  .tag-proto::before { background: var(--success); border-radius: 50%; }
+  .tag-rec::before { background: var(--primary); border-radius: 2px; }
+  .tag-tbd { border-style: dashed; color: var(--muted-foreground); }
+  .tag-tbd::before { border: 1.5px solid var(--muted-foreground); border-radius: 50%; width: 5px; height: 5px; }
+
+  /* Nota */
+  .note {
+    max-width: var(--measure); margin: var(--space-6) 0; padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card);
+  }
+  .note-label { display: block; font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-foreground); margin-bottom: var(--space-2); }
+  .note p { font-size: 15px; }
+
+  /* Tabelas */
+  .table-wrap { margin: var(--space-6) 0; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+  .table-wrap:focus-visible { outline-offset: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); line-height: 1.5; }
+  caption {
+    caption-side: top; text-align: left; padding: var(--space-3) var(--space-4);
+    font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground);
+    border-bottom: 1px solid var(--border);
+  }
+  th, td { padding: var(--space-3) var(--space-4); text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+  tbody tr:last-child > * { border-bottom: 0; }
+  thead th { font-weight: 600; background: var(--muted); white-space: nowrap; }
+  tbody th { font-weight: 600; }
+  td code, th code { white-space: nowrap; }
+  .t-min { min-width: 640px; }
+  .t-wide { min-width: 760px; }
+  .col-id { width: 72px; white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted-foreground); }
+
+  /* Figuras e diagramas */
+  figure.fig { margin: var(--space-8) 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+  .fig-scroll { overflow-x: auto; padding: var(--space-5); }
+  .fig-scroll svg { display: block; width: 100%; height: auto; }
+  figure.fig figcaption { padding: var(--space-3) var(--space-5) var(--space-4); border-top: 1px solid var(--border); font-size: var(--text-sm); color: var(--muted-foreground); }
+  figure.fig figcaption b { color: var(--foreground); font-weight: 600; }
+
+  .dg text { font-family: var(--font-sans); font-size: 13px; fill: var(--foreground); }
+  .dg .t-b { font-weight: 600; }
+  .dg .t-h { font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+  .dg .t-s { font-family: var(--font-mono); font-size: 11px; fill: var(--muted-foreground); }
+  .dg .t-z { font-family: var(--font-mono); font-size: 11px; fill: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.06em; }
+  .dg .t-l { font-family: var(--font-mono); font-size: 11px; fill: var(--muted-foreground); paint-order: stroke; stroke: var(--card); stroke-width: 4px; stroke-linejoin: round; }
+  .dg .zone { fill: var(--muted); stroke: var(--border); stroke-dasharray: 4 4; }
+  .dg .box { fill: var(--background); stroke: var(--input); }
+  .dg .box-k { fill: var(--background); stroke: var(--primary); stroke-width: 1.5; }
+  .dg .box-ok { fill: var(--background); stroke: var(--success); stroke-width: 1.5; }
+  .dg .box-d { fill: none; stroke: var(--input); stroke-dasharray: 5 4; }
+  .dg .ln { fill: none; stroke: var(--muted-foreground); stroke-width: 1.5; }
+  .dg .ln-d { fill: none; stroke: var(--muted-foreground); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .dg .halo { fill: none; stroke: var(--card); stroke-width: 8; }
+  .dg .life { stroke: var(--input); stroke-dasharray: 3 4; }
+  .dg .dot { fill: var(--muted-foreground); }
+  .ah { fill: var(--muted-foreground); }
+
+  /* Passos dos diagramas de sequência */
+  ol.seq-steps { margin: 0; padding: var(--space-4) var(--space-5) var(--space-5) calc(var(--space-5) + var(--space-6)); border-top: 1px solid var(--border); font-size: var(--text-sm); }
+  ol.seq-steps li { max-width: var(--measure); }
+  ol.seq-steps li::marker { font-family: var(--font-mono); color: var(--muted-foreground); }
+
+  /* Rodapé do documento */
+  .doc > footer { padding-top: var(--space-8); border-top: 1px solid var(--border); font-size: var(--text-sm); color: var(--muted-foreground); }
+  .doc > footer p { max-width: var(--measure); }
+
+  @media (max-width: 1080px) {
+    .d-shell { grid-template-columns: minmax(0, 1fr); gap: var(--space-8); padding-top: var(--space-8); }
+    .d-aside { position: static; max-height: none; overflow: visible; }
+    .toc-box { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+    .toc-box > summary {
+      display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 var(--space-4);
+      font-weight: 600; cursor: pointer; list-style: none;
+    }
+    .toc-box > summary::-webkit-details-marker { display: none; }
+    .toc-box > summary::after { content: "+"; font-family: var(--font-mono); color: var(--muted-foreground); }
+    .toc-box[open] > summary::after { content: "−"; }
+    .toc-box .toc-title { display: none; }
+    .toc { padding: 0 var(--space-2) var(--space-3); }
+  }
+  @media (max-width: 720px) {
+    .d-nav-inner { padding: 0 var(--space-4); }
+    .d-brand-sub { display: none; }
+    .d-nav-links a.opt { display: none; }
+    .d-shell { padding-left: var(--space-4); padding-right: var(--space-4); }
+    .doc section { margin-bottom: var(--space-12); }
+    .fig-scroll { padding: var(--space-3); }
+  }
+  @media (pointer: coarse) {
+    .d-theme { width: 44px; height: 44px; }
+    .d-nav-links a { height: 44px; }
+    .toc a { padding-top: 11px; padding-bottom: 11px; }
+  }
+
+  @media print {
+    :root, :root[data-theme="dark"] {
+      color-scheme: light;
+      --background: #ffffff; --foreground: #0c1416; --card: #ffffff; --muted: #f6f8f7; --muted-foreground: #55676a;
+      --secondary: #edf1f0; --border: #dae2e1; --input: #b9c7c5; --primary: #c2456b; --success: #1a7d6f; --accent: #edf1f0;
+    }
+    @page { margin: 18mm 16mm; }
+    body { font-size: 11pt; }
+    .d-nav, .d-aside, .skip-link { display: none !important; }
+    .d-shell { display: block; max-width: none; padding: 0; }
+    .doc > header { margin-bottom: var(--space-8); }
+    .doc section { margin-bottom: var(--space-10); }
+    h2, h3, h4 { break-after: avoid; }
+    .doc h2 { break-before: page; }
+    #visao-geral h2 { break-before: auto; }
+    figure.fig { break-inside: avoid; }
+    .table-wrap { overflow: visible; }
+    .t-min, .t-wide { min-width: 0; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; }
+    .fig-scroll { overflow: visible; }
+    .fig-scroll svg { min-width: 0 !important; }
+    .doc a { color: inherit; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path class="ah" d="M0 0L10 5L0 10z"/>
+    </marker>
+  </defs>
+</svg>
+
+<header class="d-nav">
+  <div class="d-nav-inner">
+    <a class="d-brand" href="index.html" aria-label="boto — abrir o protótipo">
+      <svg viewBox="0 0 200 64" aria-hidden="true" focusable="false">
+        <path fill="var(--primary)" fill-rule="evenodd" d="M20 43C14 34 20 6 40 6C52 6 60 16 60 28C60 41 50 50 38 50L28 50C21 50 14 54 8 57.6C6.4 58.5 5.2 56.6 6.6 55.5C10.5 52.5 15.5 47.5 20 43ZM26.2 38a2.8 2.8 0 1 0 5.6 0a2.8 2.8 0 1 0-5.6 0Z"/>
+        <g transform="translate(78 12)" fill="none" stroke-width="7">
+          <rect x="0" y="0" width="7" height="40" fill="var(--foreground)"/>
+          <circle cx="18.5" cy="26" r="10.5" stroke="var(--foreground)"/>
+          <circle cx="51.5" cy="26" r="10.5" stroke="var(--foreground)"/>
+          <path d="M77.5 4V30q0 6.5 6.5 6.5H88M70 15H87" stroke="var(--foreground)"/>
+          <circle cx="106" cy="26" r="10.5" stroke="var(--primary)"/>
+        </g>
+      </svg>
+      <span class="d-brand-sub">system design</span>
+    </a>
+    <nav class="d-nav-links" aria-label="Outras páginas">
+      <a href="index.html">Protótipo</a>
+      <a class="opt" href="identidade.html">Guia de marca</a>
+      <button class="d-theme" type="button" id="theme-btn" aria-pressed="false" aria-label="Tema escuro">
+        <svg class="od-icon i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="od-icon i-sun" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<div class="d-shell">
+  <aside class="d-aside">
+    <details class="toc-box" id="toc-box" open>
+      <summary>Sumário</summary>
+      <nav class="toc" aria-label="Sumário">
+        <span class="toc-title">Sumário</span>
+        <ol>
+          <li><a href="#visao-geral"><span class="n">01</span>Visão geral</a></li>
+          <li><a href="#requisitos"><span class="n">02</span>Requisitos</a></li>
+          <li><a href="#arquitetura"><span class="n">03</span>Arquitetura</a>
+            <ol>
+              <li><a href="#componentes">Componentes</a></li>
+              <li><a href="#ciclo">Ciclo do agente</a></li>
+              <li><a href="#provedores">Provedores de IA</a></li>
+              <li><a href="#maquinas">Máquinas e tela ao vivo</a></li>
+              <li><a href="#api">Interface do serviço</a></li>
+              <li><a href="#implantacao">Implantação</a></li>
+            </ol>
+          </li>
+          <li><a href="#dados"><span class="n">04</span>Modelo de dados</a></li>
+          <li><a href="#estados"><span class="n">05</span>Máquinas de estado</a></li>
+          <li><a href="#fluxos"><span class="n">06</span>Fluxos principais</a></li>
+          <li><a href="#seguranca"><span class="n">07</span>Segurança e privacidade</a></li>
+          <li><a href="#confiabilidade"><span class="n">08</span>Confiabilidade e operação</a></li>
+          <li><a href="#escolhas"><span class="n">09</span>Escolhas técnicas</a></li>
+          <li><a href="#abertas"><span class="n">10</span>Questões em aberto</a></li>
+        </ol>
+      </nav>
+    </details>
+  </aside>
+
+  <main class="doc" id="conteudo" tabindex="-1">
+    <header>
+      <span class="eyebrow">Documento técnico · arquitetura</span>
+      <h1>Como o Boto funciona por trás da tela</h1>
+      <p class="lead">Este documento descreve a arquitetura da plataforma: os componentes, os dados, os estados e os fluxos que fariam o protótipo funcionar de verdade. Agentes autônomos recebem uma tarefa, trabalham num computador próprio e voltam para mostrar o que fizeram, pedir uma decisão ou entregar o resultado.</p>
+      <div class="meta">
+        <span><b>Versão</b> 1 · proposta</span>
+        <span><b>Data</b> novembro de 2026</span>
+        <span><b>Base</b> <a href="index.html">protótipo</a> e <a href="identidade.html">guia de marca</a></span>
+      </div>
+      <div class="legend" aria-label="Legenda dos selos">
+        <span>Legenda:</span>
+        <span class="tag tag-proto">Protótipo</span><span>comportamento já mostrado no protótipo</span>
+        <span class="tag tag-rec">Recomendação</span><span>proposta deste documento</span>
+        <span class="tag tag-tbd">A definir</span><span>parâmetro ou decisão em aberto</span>
+      </div>
+    </header>
+
+    <!-- 1 -->
+    <section id="visao-geral" aria-labelledby="h-visao">
+      <h2 id="h-visao"><span class="n">01</span>Visão geral</h2>
+      <p>O Boto é uma plataforma de agentes de IA autônomos. Um chatbot responde dentro da conversa; o Boto funciona como um colega de trabalho virtual. Você delega uma tarefa, e um agente a executa de ponta a ponta num computador dedicado: abre o navegador, usa o terminal, edita arquivos, chama apps conectados e entrega um resultado concreto, como um PR aberto, uma planilha ou um e-mail enviado.</p>
+      <p>Três princípios do guia de marca viram restrições de arquitetura:</p>
+      <ul>
+        <li><strong>Trabalha no próprio computador.</strong> Cada instância de agente tem uma máquina virtual isolada. Nada roda direto no computador do usuário.</li>
+        <li><strong>Mostra o que está fazendo.</strong> Toda ação vira um evento registrado. A linha do tempo, a tela ao vivo e os avisos são leituras desse mesmo registro.</li>
+        <li><strong>Pede antes de agir fora.</strong> Toda chamada de ferramenta passa por um único ponto de controle, que aplica as permissões e as aprovações.</li>
+      </ul>
+
+      <h3>O que o sistema não faz</h3>
+      <ul>
+        <li>Não tem conta, cadastro nem plano. O perfil é local: um nome e um texto "Sobre você". <span class="tag tag-proto">Protótipo</span></li>
+        <li>Não opera um servidor central do Boto que guarde tarefas, chaves ou memória. Os dados ficam no dispositivo do usuário ou numa infraestrutura que ele controla.</li>
+        <li>Não treina nem hospeda modelos. Usa os provedores que o usuário configura.</li>
+        <li>Não promete disponibilidade. "Ligado na nuvem" significa que o serviço está rodando num lugar que fica ligado, como descrito em <a href="#implantacao">Implantação</a>.</li>
+      </ul>
+
+      <h3>Glossário</h3>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Glossário">
+        <table class="t-min">
+          <caption>Termos usados neste documento</caption>
+          <thead><tr><th scope="col">Termo</th><th scope="col">Significado</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Agente</th><td>Um colega virtual com nome e especialidade, como Código ou Vendas. Define quantas instâncias pode rodar ao mesmo tempo e tem uma fila própria.</td></tr>
+            <tr><th scope="row">Instância</th><td>Uma vaga de execução de um agente. Cada instância tem uma máquina e executa no máximo uma tarefa por vez.</td></tr>
+            <tr><th scope="row">Máquina</th><td>A máquina virtual de uma instância, como <code>codigo-01</code>, com área de trabalho, navegador, terminal, editor e arquivos.</td></tr>
+            <tr><th scope="row">Tarefa ou sessão</th><td>Um trabalho delegado, do pedido até a entrega. As permissões "nesta sessão" valem para uma tarefa.</td></tr>
+            <tr><th scope="row">Ferramenta</th><td>Algo que o agente pode usar: as quatro ferramentas do computador ou um app, MCP, plugin ou skill instalado. Qualquer agente pode usar qualquer ferramenta disponível.</td></tr>
+            <tr><th scope="row">Pedido</th><td>Uma pausa em que o agente precisa de você. Pode ser de <em>permissão</em> (primeiro uso de uma ferramenta na sessão) ou de <em>aprovação</em> (antes de uma ação externa).</td></tr>
+            <tr><th scope="row">Ação externa</th><td>Uma ação com efeito fora da máquina, como enviar e-mail, publicar, abrir PR ou pagar.</td></tr>
+            <tr><th scope="row">Rotina</th><td>Uma tarefa recorrente ou agendada que o sistema cria sozinho no horário.</td></tr>
+            <tr><th scope="row">Modelo de tarefa</th><td>Um pedido pronto com opções preenchidas, usado para começar uma tarefa.</td></tr>
+            <tr><th scope="row">Provedor de IA</th><td>De onde vem o modelo: um CLI instalado, um login de conta ou uma chave de API.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section id="requisitos" aria-labelledby="h-req">
+      <h2 id="h-req"><span class="n">02</span>Requisitos</h2>
+      <p>Os requisitos funcionais vêm do comportamento que o protótipo já mostra. Os não funcionais são as qualidades que a arquitetura precisa garantir. Limites numéricos aparecem como parâmetros a definir, porque ainda não há medição que os sustente.</p>
+
+      <h3>Funcionais</h3>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Requisitos funcionais">
+        <table class="t-wide">
+          <caption>Requisitos funcionais, todos já mostrados no protótipo</caption>
+          <thead><tr><th scope="col" class="col-id">ID</th><th scope="col">Requisito</th><th scope="col">Detalhe</th></tr></thead>
+          <tbody>
+            <tr><td class="col-id">RF-01</td><th scope="row">Agentes</th><td>Criar com nome único, descrição opcional e "pedir aprovação". Não se escolhem ferramentas nem instâncias na criação; o agente começa com 1 instância.</td></tr>
+            <tr><td class="col-id">RF-02</td><th scope="row">Instâncias e fila</th><td>Cada agente tem um limite de instâncias em paralelo (de 1 a 5 no protótipo). O que excede entra na fila do agente. A fila pode ser pausada e reordenada, e itens podem ser removidos. Quando uma instância fica livre, a próxima tarefa começa sozinha.</td></tr>
+            <tr><td class="col-id">RF-03</td><th scope="row">Tarefa como sessão</th><td>Pedido, plano em etapas, linha do tempo com horário e ferramenta de cada ação, instruções enviadas sem interromper e cartão da entrega. Uma tarefa concluída pode receber um ajuste e voltar a rodar.</td></tr>
+            <tr><td class="col-id">RF-04</td><th scope="row">Computador próprio</th><td>Cada instância tem uma máquina com sistema operacional (Ubuntu 24.04 no protótipo), janelas, navegador, terminal, editor e arquivos. O agente move o cursor, clica, digita e abre e fecha janelas.</td></tr>
+            <tr><td class="col-id">RF-05</td><th scope="row">Área de trabalho ao vivo</th><td>A tela da máquina aparece ao vivo ao lado da atividade e em miniaturas no cockpit de Agentes.</td></tr>
+            <tr><td class="col-id">RF-06</td><th scope="row">Assumir o controle</th><td>O usuário opera a máquina no lugar do agente; a tarefa espera. As ações dele entram na linha do tempo, e ao devolver o agente recebe um resumo do que mudou. Uma máquina ociosa pode ser usada sem tarefa.</td></tr>
+            <tr><td class="col-id">RF-07</td><th scope="row">Controles da tarefa</th><td>Pausar, retomar e encerrar, este último com confirmação.</td></tr>
+            <tr><td class="col-id">RF-08</td><th scope="row">Aprovação</th><td>Pedido de aprovação antes de ações externas, configurável por tarefa e com padrão por agente.</td></tr>
+            <tr><td class="col-id">RF-09</td><th scope="row">Permissão no primeiro uso</th><td>Na primeira vez que uma ferramenta é usada numa sessão, o sistema pergunta: permitir nesta sessão, permitir em todas as sessões ou não permitir. Concessões globais podem ser revogadas nas Configurações e no Marketplace.</td></tr>
+            <tr><td class="col-id">RF-10</td><th scope="row">Memória</th><td>Nome e texto "Sobre você", divididos em itens com tipo. Cada resposta registra quais itens usou, mesmo que a memória mude depois. Editar e apagar com confirmação.</td></tr>
+            <tr><td class="col-id">RF-11</td><th scope="row">Tarefa privada</th><td>Aparece enquanto roda, mas fica fora do histórico, da busca e das entregas.</td></tr>
+            <tr><td class="col-id">RF-12</td><th scope="row">Rotinas e agendamentos</th><td>Recorrentes (todo dia, toda segunda) e únicos (daqui a 1 hora, amanhã). Ativar, pausar, executar agora e cancelar.</td></tr>
+            <tr><td class="col-id">RF-13</td><th scope="row">Modelos de tarefa</th><td>Abrem o chat de nova tarefa com o pedido e as opções preenchidos.</td></tr>
+            <tr><td class="col-id">RF-14</td><th scope="row">Provedores de IA</th><td>Detectar CLIs instalados e instalar os suportados; login com ChatGPT, Claude e Grok; chaves de API da OpenAI, Anthropic, xAI, Google, OpenRouter e de um endpoint compatível; testar conexão; provedor padrão, trocado automaticamente quando o atual é removido.</td></tr>
+            <tr><td class="col-id">RF-15</td><th scope="row">Marketplace</th><td>Apps, plugins, skills e MCPs. Instalar e remover; cada item declara as permissões que pede e fica disponível para todos os agentes.</td></tr>
+            <tr><td class="col-id">RF-16</td><th scope="row">Avisos</th><td>Aviso quando uma tarefa precisa de você ou quando a fila avança, mesmo com o usuário em outra tela.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Não funcionais</h3>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Requisitos não funcionais">
+        <table class="t-min">
+          <caption>Qualidades que a arquitetura precisa garantir</caption>
+          <thead><tr><th scope="col" class="col-id">ID</th><th scope="col">Qualidade</th><th scope="col">O que significa aqui</th></tr></thead>
+          <tbody>
+            <tr><td class="col-id">RNF-01</td><th scope="row">Isolamento</th><td>Uma máquina por instância. Por padrão, a máquina não acessa os arquivos do usuário nem a rede local dele, e pode ser descartada sem perda para o usuário.</td></tr>
+            <tr><td class="col-id">RNF-02</td><th scope="row">Retomada</th><td>Se o serviço, a máquina ou o provedor caírem, o trabalho já confirmado não se perde, e a tarefa continua do último passo confirmado.</td></tr>
+            <tr><td class="col-id">RNF-03</td><th scope="row">Privacidade</th><td>Tarefas, memória e chaves ficam no dispositivo do usuário ou numa infraestrutura dele. Só o provedor de IA escolhido recebe o contexto necessário para cada passo.</td></tr>
+            <tr><td class="col-id">RNF-04</td><th scope="row">Rastreabilidade</th><td>Toda ação tem horário, autor (agente, você ou sistema) e ferramenta. Ações externas sempre ficam registradas.</td></tr>
+            <tr><td class="col-id">RNF-05</td><th scope="row">Custo previsível</th><td>O uso do modelo é contado por tarefa, e máquinas ociosas são suspensas.</td></tr>
+            <tr><td class="col-id">RNF-06</td><th scope="row">Interatividade da tela</th><td>A tela ao vivo precisa responder rápido o bastante para o usuário assumir o controle sem desconforto.</td></tr>
+            <tr><td class="col-id">RNF-07</td><th scope="row">Acessibilidade</th><td>Eventos estruturados permitem anunciar as ações do agente para leitores de tela, como o protótipo já faz.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Parâmetros a definir</h3>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Parâmetros a definir">
+        <table class="t-min">
+          <caption>Valores que dependem de medição ou de decisão de produto</caption>
+          <thead><tr><th scope="col">Parâmetro</th><th scope="col">Situação</th><th scope="col">Observação</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Instâncias por agente</th><td><span class="tag tag-proto">Protótipo</span></td><td>De 1 a 5 no protótipo. O teto real depende do host.</td></tr>
+            <tr><th scope="row">Máquinas simultâneas por host</th><td><span class="tag tag-tbd">A definir</span></td><td>Depende de memória e CPU do host e da imagem da máquina.</td></tr>
+            <tr><th scope="row">Tempo até suspender máquina ociosa</th><td><span class="tag tag-tbd">A definir</span></td><td>Equilíbrio entre custo e tempo para acordar.</td></tr>
+            <tr><th scope="row">Tentativas por passo</th><td><span class="tag tag-tbd">A definir</span></td><td>Depois disso, a tarefa pausa com motivo.</td></tr>
+            <tr><th scope="row">Orçamento de uso por tarefa</th><td><span class="tag tag-tbd">A definir</span></td><td>Limite opcional de tokens ou custo informado pelo provedor.</td></tr>
+            <tr><th scope="row">Retenção de eventos e capturas</th><td><span class="tag tag-tbd">A definir</span></td><td>Capturas de tela ocupam muito mais espaço que eventos de texto.</td></tr>
+            <tr><th scope="row">Latência alvo da tela ao vivo</th><td><span class="tag tag-tbd">A definir</span></td><td>Medir nos dois modos de implantação.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section id="arquitetura" aria-labelledby="h-arq">
+      <h2 id="h-arq"><span class="n">03</span>Arquitetura</h2>
+      <p>A plataforma tem três partes. O <strong>app</strong> é a interface. O <strong>serviço do Boto</strong> é o plano de controle: decide o que roda, guarda o estado e aplica as permissões. As <strong>máquinas</strong> são onde o trabalho acontece. Como não há conta nem servidor central, o serviço roda num lugar que o usuário controla: o próprio computador ou um servidor dele.</p>
+
+      <figure class="fig" id="fig-arquitetura">
+        <div class="fig-scroll">
+          <svg class="dg" viewBox="0 0 960 610" style="min-width:760px" role="img" aria-labelledby="fig-arq-t">
+            <title id="fig-arq-t">Diagrama de componentes do Boto: app, serviço do Boto, provedor de máquinas e serviços externos</title>
+            <!-- Zona A -->
+            <rect class="zone" x="20" y="20" width="600" height="468" rx="12"/>
+            <text class="t-z" x="40" y="42">Dispositivo ou servidor do usuário</text>
+            <rect class="box-k" x="40" y="56" width="560" height="44" rx="8"/>
+            <text class="t-b" x="320" y="76" text-anchor="middle">App Boto</text>
+            <text class="t-s" x="320" y="92" text-anchor="middle">desktop ou navegador · interface</text>
+            <path class="ln" d="M320 100V122" marker-end="url(#ah)" marker-start="url(#ah)"/>
+            <rect class="box" x="40" y="124" width="560" height="40" rx="8"/>
+            <text class="t-b" x="320" y="142" text-anchor="middle">API do serviço do Boto</text>
+            <text class="t-s" x="320" y="157" text-anchor="middle">HTTP + WebSocket · só local ou por canal pareado</text>
+
+            <rect class="box" x="40" y="188" width="128" height="56" rx="8"/>
+            <text class="t-b" x="104" y="212" text-anchor="middle">Orquestrador</text>
+            <text class="t-s" x="104" y="229" text-anchor="middle">filas · instâncias</text>
+            <rect class="box" x="184" y="188" width="128" height="56" rx="8"/>
+            <text class="t-b" x="248" y="212" text-anchor="middle">Agendador</text>
+            <text class="t-s" x="248" y="229" text-anchor="middle">rotinas</text>
+            <rect class="box" x="328" y="188" width="128" height="56" rx="8"/>
+            <text class="t-b" x="392" y="212" text-anchor="middle">Memória</text>
+            <text class="t-s" x="392" y="229" text-anchor="middle">itens · uso</text>
+            <rect class="box" x="472" y="188" width="128" height="56" rx="8"/>
+            <text class="t-b" x="536" y="212" text-anchor="middle">Marketplace</text>
+            <text class="t-s" x="536" y="229" text-anchor="middle">registro local</text>
+
+            <rect class="box" x="40" y="268" width="272" height="56" rx="8"/>
+            <text class="t-b" x="176" y="292" text-anchor="middle">Executores de agente</text>
+            <text class="t-s" x="176" y="309" text-anchor="middle">um por instância em uso</text>
+            <rect class="box" x="328" y="268" width="272" height="56" rx="8"/>
+            <text class="t-b" x="464" y="292" text-anchor="middle">Gerenciador de máquinas</text>
+            <text class="t-s" x="464" y="309" text-anchor="middle">cria · suspende · descarta</text>
+
+            <rect class="box" x="40" y="348" width="272" height="56" rx="8"/>
+            <text class="t-b" x="176" y="372" text-anchor="middle">Adaptadores de IA</text>
+            <text class="t-s" x="176" y="389" text-anchor="middle">CLI · login · chave de API</text>
+            <rect class="box-k" x="328" y="348" width="272" height="56" rx="8"/>
+            <text class="t-b" x="464" y="372" text-anchor="middle">Intermediário de ferramentas</text>
+            <text class="t-s" x="464" y="389" text-anchor="middle">permissões · aprovações · registro</text>
+
+            <path class="ln" d="M176 324V346" marker-end="url(#ah)"/>
+            <path class="ln" d="M300 324L338 346" marker-end="url(#ah)"/>
+
+            <rect class="box" x="40" y="428" width="156" height="40" rx="8"/>
+            <text class="t-b" x="118" y="446" text-anchor="middle">Banco local</text>
+            <text class="t-s" x="118" y="461" text-anchor="middle">eventos · estado</text>
+            <rect class="box" x="212" y="428" width="156" height="40" rx="8"/>
+            <text class="t-b" x="290" y="446" text-anchor="middle">Cofre do sistema</text>
+            <text class="t-s" x="290" y="461" text-anchor="middle">chaves · tokens</text>
+            <rect class="box" x="384" y="428" width="140" height="40" rx="8"/>
+            <text class="t-b" x="454" y="446" text-anchor="middle">Barramento</text>
+            <text class="t-s" x="454" y="461" text-anchor="middle">eventos ao vivo</text>
+
+            <!-- Zona B -->
+            <rect class="zone" x="650" y="20" width="290" height="468" rx="12"/>
+            <text class="t-z" x="670" y="42">Provedor de máquinas</text>
+            <rect class="box" x="670" y="56" width="250" height="92" rx="8"/>
+            <text class="t-b" x="686" y="78">codigo-01 · Ubuntu 24.04</text>
+            <text class="t-s" x="686" y="98">área de trabalho virtual</text>
+            <text class="t-s" x="686" y="114">agente convidado</text>
+            <text class="t-s" x="686" y="130">servidor de tela</text>
+            <rect class="box" x="670" y="160" width="250" height="92" rx="8"/>
+            <text class="t-b" x="686" y="182">vendas-01 · Ubuntu 24.04</text>
+            <text class="t-s" x="686" y="202">área de trabalho virtual</text>
+            <text class="t-s" x="686" y="218">agente convidado</text>
+            <text class="t-s" x="686" y="234">servidor de tela</text>
+            <text class="t-s" x="686" y="274">… uma máquina por instância</text>
+            <rect class="box" x="670" y="280" width="210" height="40" rx="8"/>
+            <text class="t-b" x="686" y="298">Hipervisor</text>
+            <text class="t-s" x="686" y="312">microVMs locais ou nuvem</text>
+            <rect class="box" x="670" y="352" width="210" height="40" rx="8"/>
+            <text class="t-b" x="686" y="370">Canal seguro</text>
+            <text class="t-s" x="686" y="384">ações · capturas · tela</text>
+
+            <path class="ln" d="M600 296H668" marker-end="url(#ah)"/>
+            <path class="ln" d="M600 376H668" marker-end="url(#ah)" marker-start="url(#ah)"/>
+
+            <!-- Zona C -->
+            <rect class="zone" x="20" y="512" width="920" height="88" rx="12"/>
+            <text class="t-z" x="40" y="532">Serviços externos</text>
+            <rect class="box" x="40" y="542" width="290" height="44" rx="8"/>
+            <text class="t-b" x="56" y="561">Provedores de IA</text>
+            <text class="t-s" x="56" y="577">OpenAI · Anthropic · xAI · Google · OpenRouter</text>
+            <rect class="box" x="350" y="542" width="290" height="44" rx="8"/>
+            <text class="t-b" x="366" y="561">Apps e MCPs remotos</text>
+            <text class="t-s" x="366" y="577">GitHub · Gmail · Google Drive · …</text>
+            <rect class="box" x="660" y="542" width="260" height="44" rx="8"/>
+            <text class="t-b" x="676" y="561">Internet aberta</text>
+            <text class="t-s" x="676" y="577">sites que o navegador da máquina visita</text>
+
+            <path class="ln" d="M204 404V540" marker-end="url(#ah)"/>
+            <text class="t-l" x="210" y="500">modelo</text>
+            <path class="ln" d="M560 404V540" marker-end="url(#ah)"/>
+            <text class="t-l" x="566" y="500">chamadas com credencial</text>
+            <path class="ln" d="M900 252V540" marker-end="url(#ah)"/>
+            <text class="t-l" x="894" y="440" text-anchor="end">saída com registro</text>
+          </svg>
+        </div>
+        <figcaption><b>Figura 1.</b> Componentes. O gerenciador controla o hipervisor; ações, capturas e a tela ao vivo passam pelo canal seguro entre o serviço e cada máquina. Os módulos do serviço conversam entre si pelo barramento e pelo banco local. As credenciais nunca saem do serviço para a máquina.</figcaption>
+      </figure>
+
+      <h3 id="componentes">Componentes</h3>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Componentes">
+        <table class="t-wide">
+          <caption>Responsabilidade de cada componente</caption>
+          <thead><tr><th scope="col">Componente</th><th scope="col">Responsabilidade</th><th scope="col">Tecnologia sugerida</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">App Boto</th><td>Todas as telas do protótipo: Início, Agentes, tarefa, Rotinas, Modelos, Marketplace e Configurações. Não guarda estado próprio além de preferências de interface, como tema e largura da barra.</td><td>Interface web empacotada como app de desktop</td></tr>
+            <tr><th scope="row">API do serviço</th><td>Recebe comandos do app e transmite eventos ao vivo. Escuta só no endereço local; acesso remoto exige pareamento.</td><td>HTTP + WebSocket</td></tr>
+            <tr><th scope="row">Orquestrador</th><td>Escolhe o agente, reserva instâncias, mantém as filas, inicia e encerra executores e aplica as transições de estado da tarefa.</td><td>Processo único com transações no banco</td></tr>
+            <tr><th scope="row">Executor de agente</th><td>Roda o ciclo planejar, agir, observar e registrar de uma tarefa. Um executor por instância em uso.</td><td>Processo filho isolado por tarefa</td></tr>
+            <tr><th scope="row">Adaptadores de IA</th><td>Traduzem o ciclo do agente para cada tipo de provedor e contam o uso. Ver <a href="#provedores">Provedores de IA</a>.</td><td>Um adaptador por tipo</td></tr>
+            <tr><th scope="row">Intermediário de ferramentas</th><td>Único caminho de qualquer chamada de ferramenta. Confere a concessão, abre pedidos de permissão e de aprovação, injeta credenciais, executa a chamada e registra o resultado.</td><td>Protocolo MCP para todas as ferramentas</td></tr>
+            <tr><th scope="row">Gerenciador de máquinas</th><td>Cria, acorda, suspende, restaura e descarta máquinas, e mantém o canal com o agente convidado de cada uma.</td><td>Interface trocável sobre o hipervisor</td></tr>
+            <tr><th scope="row">Agente convidado</th><td>Programa dentro da máquina. Executa cliques, digitação e comandos, tira capturas, lê a árvore de acessibilidade e registra o que o usuário faz quando está no controle.</td><td>Binário pequeno incluído na imagem</td></tr>
+            <tr><th scope="row">Memória</th><td>Divide o "Sobre você" em itens, escolhe os relevantes para cada passo e grava uma cópia dos itens usados em cada resposta.</td><td>Tabelas no banco local</td></tr>
+            <tr><th scope="row">Agendador</th><td>Dispara rotinas no horário, no fuso do usuário, e aplica a política de horário perdido.</td><td>Relógio interno do serviço</td></tr>
+            <tr><th scope="row">Registro do marketplace</th><td>Catálogo, instalação, versões e manifestos de permissões de apps, plugins, skills e MCPs.</td><td>Catálogo assinado baixado para o disco</td></tr>
+            <tr><th scope="row">Barramento de eventos</th><td>Distribui cada evento gravado para o app, os avisos e as miniaturas.</td><td>Dentro do processo do serviço</td></tr>
+            <tr><th scope="row">Banco local</th><td>Fonte de verdade: o registro de eventos e o estado atual de agentes, tarefas, filas e concessões.</td><td>SQLite</td></tr>
+            <tr><th scope="row">Cofre do sistema</th><td>Guarda chaves de API e tokens de login. O banco guarda só a referência.</td><td>Keychain, Credential Manager ou Secret Service</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="ciclo">Ciclo do agente</h3>
+      <p>O executor repete quatro passos até entregar ou precisar de você. Cada volta termina com um evento gravado, que é o ponto de retomada se algo cair.</p>
+      <figure class="fig">
+        <div class="fig-scroll">
+          <svg class="dg" viewBox="0 0 900 190" style="min-width:680px" role="img" aria-labelledby="fig-ciclo-t">
+            <title id="fig-ciclo-t">Ciclo do agente: planejar, agir, observar e registrar, com volta para o próximo passo</title>
+            <rect class="box-k" x="30" y="40" width="170" height="56" rx="8"/>
+            <text class="t-b" x="115" y="64" text-anchor="middle">Planejar</text>
+            <text class="t-s" x="115" y="82" text-anchor="middle">modelo decide a ação</text>
+            <rect class="box" x="250" y="40" width="170" height="56" rx="8"/>
+            <text class="t-b" x="335" y="64" text-anchor="middle">Agir</text>
+            <text class="t-s" x="335" y="82" text-anchor="middle">pelo intermediário</text>
+            <rect class="box" x="470" y="40" width="170" height="56" rx="8"/>
+            <text class="t-b" x="555" y="64" text-anchor="middle">Observar</text>
+            <text class="t-s" x="555" y="82" text-anchor="middle">captura + resultado</text>
+            <rect class="box-ok" x="690" y="40" width="180" height="56" rx="8"/>
+            <text class="t-b" x="780" y="64" text-anchor="middle">Registrar</text>
+            <text class="t-s" x="780" y="82" text-anchor="middle">evento + retomada</text>
+            <path class="ln" d="M200 68H248" marker-end="url(#ah)"/>
+            <path class="ln" d="M420 68H468" marker-end="url(#ah)"/>
+            <path class="ln" d="M640 68H688" marker-end="url(#ah)"/>
+            <path class="ln" d="M780 96V140H115V98" marker-end="url(#ah)"/>
+            <text class="t-l" x="448" y="134" text-anchor="middle">próximo passo</text>
+            <text class="t-s" x="30" y="176">Saídas do ciclo: entrega registrada · pedido aberto (precisa de você) · pausa · controle assumido pelo usuário</text>
+          </svg>
+        </div>
+        <figcaption><b>Figura 2.</b> O ciclo de execução. A cada volta, o contexto enviado ao modelo inclui o pedido, o plano, as últimas observações, as instruções novas do usuário e os itens de memória relevantes.</figcaption>
+      </figure>
+      <ul>
+        <li><strong>Planejar.</strong> Na primeira volta, o modelo propõe o plano em etapas que aparece na linha do tempo. Nas seguintes, decide a próxima ação. <span class="tag tag-proto">Protótipo</span></li>
+        <li><strong>Agir.</strong> A ação vira uma chamada de ferramenta, como <code>computador.clicar</code>, <code>terminal.executar</code> ou <code>github.criar_pr</code>. O executor não fala com a máquina nem com apps diretamente.</li>
+        <li><strong>Observar.</strong> O resultado volta com uma captura de tela reduzida e, quando disponível, a árvore de acessibilidade da janela ativa, que é mais barata e mais precisa que a imagem.</li>
+        <li><strong>Registrar.</strong> O executor grava o evento, atualiza a etapa atual e o progresso, e só então começa a próxima volta.</li>
+        <li><strong>Instruções do usuário.</strong> Uma mensagem enviada durante a execução entra na fila de instruções da tarefa e é lida no início da próxima volta, sem interromper a ação em andamento. <span class="tag tag-proto">Protótipo</span></li>
+      </ul>
+
+      <h3 id="provedores">Provedores de IA</h3>
+      <p>O protótipo oferece três formas de conectar um modelo. Cada uma tem um adaptador próprio, mas todas passam pelo mesmo intermediário de ferramentas, então as permissões valem igual para todas.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Adaptadores de provedor">
+        <table class="t-wide">
+          <caption>Como cada tipo de provedor se encaixa no ciclo</caption>
+          <thead><tr><th scope="col">Tipo</th><th scope="col">Como funciona</th><th scope="col">Quem conduz o ciclo</th><th scope="col">Cuidados</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Chave de API</th><td>O adaptador chama a API do provedor com a chave lida do cofre, enviando o contexto e a lista de ferramentas.</td><td>O executor do Boto</td><td>Contagem de uso exata, informada pela própria API.</td></tr>
+            <tr><th scope="row">CLI instalado</th><td>O Boto inicia o CLI (Claude Code, Codex CLI, Gemini CLI e outros) em modo não interativo e oferece as ferramentas do computador como um servidor MCP local.</td><td>O CLI, chamando as ferramentas do Boto</td><td>Nem todo CLI informa o uso. O CLI precisa ser configurado para usar só as ferramentas do Boto, sem acesso ao disco do host.</td></tr>
+            <tr><th scope="row">Login de conta</th><td>ChatGPT, Claude ou Grok. O token obtido no login fica no cofre e é usado pelo adaptador correspondente.</td><td>Depende do que cada provedor permite</td><td>Os termos de uso de cada provedor para apps de terceiros precisam ser conferidos. Ver <a href="#abertas">Questões em aberto</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>O provedor padrão vale para todos os agentes. Se ele for removido, o serviço escolhe outro que esteja pronto e avisa, como no protótipo. Uma queda temporária não troca de provedor sozinha: a tarefa tenta de novo e, se continuar falhando, pausa e oferece a troca. <span class="tag tag-rec">Recomendação</span></p>
+
+      <h3 id="maquinas">Máquinas e tela ao vivo</h3>
+      <p>Cada instância tem uma máquina com nome estável, formado pelo agente e pelo número da instância, como <code>codigo-01</code>. Dentro dela, uma sessão gráfica leve roda a área de trabalho, e o agente convidado faz a ponte com o serviço.</p>
+      <ul>
+        <li><strong>Imagem base.</strong> Ubuntu 24.04 com navegador, terminal, editor, gerenciador de arquivos e o agente convidado. Ferramentas comuns de desenvolvimento já vêm instaladas.</li>
+        <li><strong>Entre tarefas.</strong> A máquina volta à imagem base antes de cada tarefa, para que uma tarefa não veja os arquivos da outra. Uma pasta persistente do agente é opcional. <span class="tag tag-rec">Recomendação</span></li>
+        <li><strong>Observação do agente.</strong> Capturas sob demanda e a árvore de acessibilidade. No navegador, o agente convidado também lê a página pelo protocolo de depuração, o que permite clicar em elementos em vez de coordenadas.</li>
+        <li><strong>Tela ao vivo.</strong> Um fluxo de vídeo separado das capturas, aberto só quando alguém está olhando: a tela da tarefa ou as miniaturas do cockpit. As miniaturas usam uma versão de baixa taxa de quadros.</li>
+        <li><strong>Assumir o controle.</strong> O mesmo fluxo passa a aceitar mouse e teclado do app, e o agente convidado recusa as ações do executor até o controle ser devolvido. <span class="tag tag-proto">Protótipo</span></li>
+        <li><strong>Rede da máquina.</strong> Saída para a internet por um proxy que registra os destinos. Sem rota para a rede local do usuário e sem pastas compartilhadas com o host.</li>
+      </ul>
+
+      <h3 id="api">Interface do serviço</h3>
+      <p>O app fala com o serviço por uma API local. A lista abaixo mostra as operações principais; os nomes são ilustrativos.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Operações da API">
+        <table class="t-wide">
+          <caption>Operações principais da API do serviço</caption>
+          <thead><tr><th scope="col">Operação</th><th scope="col">Uso</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /agentes</code> · <code>POST /agentes</code></td><td>Listar o cockpit e criar um agente com nome, descrição e "pedir aprovação".</td></tr>
+            <tr><td><code>PATCH /agentes/{id}</code></td><td>Mudar o limite de instâncias, pausar ou retomar a fila.</td></tr>
+            <tr><td><code>POST /tarefas</code></td><td>Delegar: pedido, agente (opcional), quando, onde, aprovação e privada.</td></tr>
+            <tr><td><code>PATCH /tarefas/{id}/fila</code></td><td>Mover na fila ou remover da fila.</td></tr>
+            <tr><td><code>POST /tarefas/{id}/instrucoes</code></td><td>Enviar uma instrução sem interromper.</td></tr>
+            <tr><td><code>POST /tarefas/{id}/pausar</code> · <code>retomar</code> · <code>encerrar</code></td><td>Controles da tarefa.</td></tr>
+            <tr><td><code>PUT /maquinas/{id}/controle</code></td><td>Assumir o controle ou devolver ao agente. Também serve para uma máquina ociosa.</td></tr>
+            <tr><td><code>POST /pedidos/{id}/resposta</code></td><td>Responder a uma permissão (nesta sessão, todas, não) ou aprovação (aprovar, recusar).</td></tr>
+            <tr><td><code>GET /permissoes</code> · <code>DELETE /permissoes/{id}</code></td><td>Listar e revogar concessões.</td></tr>
+            <tr><td><code>GET /memoria</code> · <code>PUT /memoria</code> · <code>DELETE /memoria</code></td><td>Ver, editar e apagar a memória.</td></tr>
+            <tr><td><code>/rotinas</code> · <code>/modelos</code></td><td>Criar, ativar, pausar, executar agora e cancelar.</td></tr>
+            <tr><td><code>/provedores</code></td><td>Detectar CLIs, conectar contas, salvar chaves, testar conexão e definir o padrão.</td></tr>
+            <tr><td><code>/marketplace</code></td><td>Catálogo, instalar e remover.</td></tr>
+            <tr><td><code>WS /eventos</code></td><td>Fluxo de eventos ao vivo, filtrável por tarefa ou agente.</td></tr>
+            <tr><td><code>WS /maquinas/{id}/tela</code></td><td>Tela ao vivo e, com o controle assumido, entrada de mouse e teclado.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Tipos de evento</h4>
+      <p>Tudo o que a interface mostra sobre uma tarefa é derivado destes eventos.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Tipos de evento">
+        <table class="t-min">
+          <caption>Eventos gravados no registro da tarefa</caption>
+          <thead><tr><th scope="col">Evento</th><th scope="col">Quando</th></tr></thead>
+          <tbody>
+            <tr><td><code>tarefa.criada</code></td><td>Pedido recebido, com as opções escolhidas.</td></tr>
+            <tr><td><code>tarefa.estado</code></td><td>Toda mudança de estado, com o motivo.</td></tr>
+            <tr><td><code>plano.definido</code></td><td>Plano em etapas proposto ou revisado.</td></tr>
+            <tr><td><code>acao.executada</code></td><td>Clique, digitação, comando, chamada de app. Inclui ferramenta, alvo e autor.</td></tr>
+            <tr><td><code>pedido.aberto</code> · <code>pedido.respondido</code></td><td>Permissão ou aprovação.</td></tr>
+            <tr><td><code>permissao.concedida</code> · <code>permissao.revogada</code></td><td>Concessão criada ou retirada, com escopo.</td></tr>
+            <tr><td><code>controle.assumido</code> · <code>controle.devolvido</code></td><td>Troca de quem opera a máquina, com o resumo das mudanças.</td></tr>
+            <tr><td><code>instrucao.recebida</code></td><td>Mensagem do usuário durante a tarefa.</td></tr>
+            <tr><td><code>resposta.enviada</code></td><td>Mensagem do agente, com a cópia dos itens de memória usados.</td></tr>
+            <tr><td><code>entrega.registrada</code></td><td>Resultado final: PR, arquivo, e-mail enviado, relatório.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="implantacao">Implantação</h3>
+      <p>O mesmo serviço roda em dois lugares. A diferença é só onde ele fica e quem garante que fica ligado.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Modos de implantação">
+        <table class="t-wide">
+          <caption>Modos de implantação</caption>
+          <thead><tr><th scope="col">Modo</th><th scope="col">Onde roda</th><th scope="col">Máquinas</th><th scope="col">Limite</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Local</th><td>No computador do usuário, junto com o app e os CLIs.</td><td>MicroVMs no próprio computador.</td><td>Se o computador dorme ou desliga, as tarefas param e retomam quando ele volta.</td></tr>
+            <tr><th scope="row">Sempre ligado</th><td>Num servidor do próprio usuário, na nuvem dele. O app se conecta por um canal pareado.</td><td>MicroVMs no servidor ou máquinas do provedor de nuvem do usuário.</td><td>O usuário paga e mantém o servidor. Os CLIs e logins precisam ser configurados nesse servidor.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure class="fig" id="fig-implantacao">
+        <div class="fig-scroll">
+          <svg class="dg" viewBox="0 0 960 680" style="min-width:760px" role="img" aria-labelledby="fig-imp-t fig-imp-d">
+            <title id="fig-imp-t">Diagrama de implantação comparando o modo local e o modo sempre ligado</title>
+            <desc id="fig-imp-d">No modo local, app, serviço, banco, cofre, CLIs e microVMs ficam no computador do usuário, e o trabalho para quando ele dorme. No modo sempre ligado, o app e outros dispositivos se conectam por canal pareado a um servidor do usuário, onde ficam o serviço, o banco, o cofre, os CLIs e as máquinas, e o trabalho continua com o dispositivo fechado. Os dois modos usam o mesmo banco, então migrar é copiar o banco.</desc>
+
+            <!-- Modo local -->
+            <text class="t-h" x="20" y="34">Modo local</text>
+            <text class="t-s" x="20" y="54">o serviço roda junto com o app</text>
+
+            <rect class="zone" x="20" y="70" width="430" height="388" rx="12"/>
+            <text class="t-z" x="40" y="92">Computador do usuário</text>
+            <rect class="box-k" x="40" y="104" width="390" height="44" rx="8"/>
+            <text class="t-b" x="235" y="124" text-anchor="middle">App Boto</text>
+            <text class="t-s" x="235" y="140" text-anchor="middle">desktop</text>
+            <path class="ln" d="M235 148V212" marker-end="url(#ah)" marker-start="url(#ah)"/>
+            <text class="t-l" x="243" y="184">endereço local + token</text>
+            <rect class="box" x="40" y="214" width="390" height="56" rx="8"/>
+            <text class="t-b" x="235" y="238" text-anchor="middle">Serviço do Boto</text>
+            <text class="t-s" x="235" y="256" text-anchor="middle">orquestrador · agendador · executores · intermediário</text>
+
+            <path class="ln" d="M120 270V292" marker-end="url(#ah)"/>
+            <path class="ln" d="M325 270V292" marker-end="url(#ah)"/>
+            <rect class="box" x="40" y="294" width="160" height="40" rx="8"/>
+            <text class="t-b" x="56" y="312">Banco local</text>
+            <text class="t-s" x="56" y="326">SQLite · eventos</text>
+            <rect class="box" x="40" y="346" width="160" height="40" rx="8"/>
+            <text class="t-b" x="56" y="364">Cofre do sistema</text>
+            <text class="t-s" x="56" y="378">chaves · tokens</text>
+            <rect class="box" x="40" y="398" width="160" height="40" rx="8"/>
+            <text class="t-b" x="56" y="416">CLIs e logins</text>
+            <text class="t-s" x="56" y="430">neste computador</text>
+
+            <rect class="box-d" x="220" y="294" width="210" height="144" rx="8"/>
+            <text class="t-b" x="236" y="314">Hipervisor local</text>
+            <text class="t-s" x="236" y="330">microVMs no computador</text>
+            <rect class="box" x="236" y="342" width="178" height="40" rx="8"/>
+            <text class="t-b" x="252" y="360">codigo-01</text>
+            <text class="t-s" x="252" y="374">Ubuntu 24.04</text>
+            <rect class="box" x="236" y="390" width="178" height="40" rx="8"/>
+            <text class="t-b" x="252" y="408">vendas-01</text>
+            <text class="t-s" x="252" y="422">Ubuntu 24.04</text>
+
+            <path class="ln" d="M120 438V480" marker-end="url(#ah)"/>
+            <text class="t-l" x="128" y="472">modelo</text>
+            <path class="ln" d="M325 438V480" marker-end="url(#ah)"/>
+            <text class="t-l" x="333" y="472">saída com registro</text>
+            <rect class="box" x="20" y="482" width="430" height="44" rx="8"/>
+            <text class="t-b" x="235" y="502" text-anchor="middle">Serviços externos</text>
+            <text class="t-s" x="235" y="518" text-anchor="middle">provedores de IA · apps e MCPs · internet</text>
+
+            <rect class="box-d" x="20" y="546" width="430" height="72" rx="8"/>
+            <text class="t-b" x="36" y="568">Se o computador dorme ou desliga</text>
+            <text class="t-s" x="36" y="588">as tarefas param no último evento gravado</text>
+            <text class="t-s" x="36" y="606">e as rotinas seguem a política de horário perdido</text>
+
+            <!-- Modo sempre ligado -->
+            <text class="t-h" x="510" y="34">Modo sempre ligado</text>
+            <text class="t-s" x="510" y="54">o serviço roda num servidor do usuário</text>
+
+            <rect class="zone" x="510" y="70" width="430" height="92" rx="12"/>
+            <text class="t-z" x="530" y="92">Dispositivos do usuário</text>
+            <rect class="box-k" x="530" y="104" width="185" height="44" rx="8"/>
+            <text class="t-b" x="622" y="124" text-anchor="middle">App Boto</text>
+            <text class="t-s" x="622" y="140" text-anchor="middle">desktop ou navegador</text>
+            <rect class="box" x="735" y="104" width="185" height="44" rx="8"/>
+            <text class="t-b" x="827" y="124" text-anchor="middle">Outro dispositivo</text>
+            <text class="t-s" x="827" y="140" text-anchor="middle">pareado · a definir</text>
+
+            <path class="ln" d="M725 162V212" marker-end="url(#ah)" marker-start="url(#ah)"/>
+            <text class="t-l" x="733" y="178">canal pareado e cifrado</text>
+
+            <rect class="zone" x="510" y="182" width="430" height="276" rx="12"/>
+            <text class="t-z" x="530" y="204">Servidor do usuário · nuvem dele</text>
+            <rect class="box" x="530" y="214" width="390" height="56" rx="8"/>
+            <text class="t-b" x="725" y="238" text-anchor="middle">Serviço do Boto</text>
+            <text class="t-s" x="725" y="256" text-anchor="middle">o mesmo serviço · sem interface própria</text>
+
+            <path class="ln" d="M610 270V292" marker-end="url(#ah)"/>
+            <path class="ln" d="M815 270V292" marker-end="url(#ah)"/>
+            <rect class="box" x="530" y="294" width="160" height="40" rx="8"/>
+            <text class="t-b" x="546" y="312">Banco do servidor</text>
+            <text class="t-s" x="546" y="326">SQLite · eventos</text>
+            <rect class="box" x="530" y="346" width="160" height="40" rx="8"/>
+            <text class="t-b" x="546" y="364">Cofre do servidor</text>
+            <text class="t-s" x="546" y="378">chaves · tokens</text>
+            <rect class="box" x="530" y="398" width="160" height="40" rx="8"/>
+            <text class="t-b" x="546" y="416">CLIs e logins</text>
+            <text class="t-s" x="546" y="430">refeitos no servidor</text>
+
+            <rect class="box-d" x="710" y="294" width="210" height="144" rx="8"/>
+            <text class="t-b" x="726" y="314">Hipervisor no servidor</text>
+            <text class="t-s" x="726" y="330">microVMs ou nuvem do usuário</text>
+            <rect class="box" x="726" y="342" width="178" height="40" rx="8"/>
+            <text class="t-b" x="742" y="360">codigo-01</text>
+            <text class="t-s" x="742" y="374">Ubuntu 24.04</text>
+            <rect class="box" x="726" y="390" width="178" height="40" rx="8"/>
+            <text class="t-b" x="742" y="408">vendas-01</text>
+            <text class="t-s" x="742" y="422">Ubuntu 24.04</text>
+
+            <path class="ln" d="M610 438V480" marker-end="url(#ah)"/>
+            <text class="t-l" x="618" y="472">modelo</text>
+            <path class="ln" d="M815 438V480" marker-end="url(#ah)"/>
+            <text class="t-l" x="823" y="472">saída com registro</text>
+            <rect class="box" x="510" y="482" width="430" height="44" rx="8"/>
+            <text class="t-b" x="725" y="502" text-anchor="middle">Serviços externos</text>
+            <text class="t-s" x="725" y="518" text-anchor="middle">provedores de IA · apps e MCPs · internet</text>
+
+            <rect class="box-ok" x="510" y="546" width="430" height="72" rx="8"/>
+            <text class="t-b" x="526" y="568">Se o dispositivo fecha</text>
+            <text class="t-s" x="526" y="588">as tarefas e as rotinas continuam no servidor</text>
+            <text class="t-s" x="526" y="606">e o app recebe os eventos perdidos ao reconectar</text>
+
+            <!-- Migração -->
+            <path class="ln-d" d="M235 620V654H725V620" marker-start="url(#ah)" marker-end="url(#ah)"/>
+            <text class="t-l" x="480" y="658" text-anchor="middle">migrar entre os modos = copiar o banco</text>
+          </svg>
+        </div>
+        <figcaption><b>Figura 3.</b> Implantação nos dois modos. Os componentes são os mesmos da Figura 1; muda só onde o serviço roda e quem o mantém ligado. No modo sempre ligado, os CLIs e os logins de conta precisam ser configurados de novo no servidor, e o modo de pareamento de outros dispositivos ainda está em aberto.</figcaption>
+      </figure>
+
+      <p>É o modo sempre ligado que sustenta a ideia de um colega que trabalha 24 horas: as rotinas disparam e as tarefas continuam com o computador do usuário fechado. Os dois modos usam o mesmo banco e o mesmo formato de dados, então é possível migrar de um para o outro copiando o banco. <span class="tag tag-rec">Recomendação</span></p>
+    </section>
+
+    <!-- 4 -->
+    <section id="dados" aria-labelledby="h-dados">
+      <h2 id="h-dados"><span class="n">04</span>Modelo de dados</h2>
+      <p>O banco local guarda duas coisas: o registro de eventos de cada tarefa, que nunca é reescrito, e o estado atual das entidades, que pode ser reconstruído a partir dos eventos. A figura mostra as relações principais.</p>
+
+      <figure class="fig">
+        <div class="fig-scroll">
+          <svg class="dg" viewBox="0 0 960 400" style="min-width:760px" role="img" aria-labelledby="fig-er-t">
+            <title id="fig-er-t">Relações entre as entidades do Boto</title>
+            <!-- linha 0 -->
+            <rect class="box" x="30" y="30" width="180" height="64" rx="8"/>
+            <text class="t-b" x="46" y="54">Rotina</text><text class="t-s" x="46" y="74">recorrencia · fuso</text>
+            <rect class="box-k" x="270" y="30" width="180" height="64" rx="8"/>
+            <text class="t-b" x="286" y="54">Agente</text><text class="t-s" x="286" y="74">instancias_max · fila</text>
+            <rect class="box" x="510" y="30" width="180" height="64" rx="8"/>
+            <text class="t-b" x="526" y="54">Instância</text><text class="t-s" x="526" y="74">ordinal · tarefa_id</text>
+            <rect class="box" x="750" y="30" width="180" height="64" rx="8"/>
+            <text class="t-b" x="766" y="54">Máquina</text><text class="t-s" x="766" y="74">estado · controle</text>
+            <!-- linha 1 -->
+            <rect class="box" x="30" y="170" width="180" height="64" rx="8"/>
+            <text class="t-b" x="46" y="194">Modelo de tarefa</text><text class="t-s" x="46" y="214">pedido · opcoes</text>
+            <rect class="box-k" x="270" y="170" width="180" height="64" rx="8"/>
+            <text class="t-b" x="286" y="194">Tarefa</text><text class="t-s" x="286" y="214">estado · privada</text>
+            <rect class="box" x="510" y="170" width="180" height="64" rx="8"/>
+            <text class="t-b" x="526" y="194">Pedido</text><text class="t-s" x="526" y="214">permissão | aprovação</text>
+            <rect class="box" x="750" y="170" width="180" height="64" rx="8"/>
+            <text class="t-b" x="766" y="194">Concessão</text><text class="t-s" x="766" y="214">sessão | todas</text>
+            <!-- linha 2 -->
+            <rect class="box" x="30" y="310" width="180" height="64" rx="8"/>
+            <text class="t-b" x="46" y="334">Item de memória</text><text class="t-s" x="46" y="354">tipo · texto</text>
+            <rect class="box" x="270" y="310" width="180" height="64" rx="8"/>
+            <text class="t-b" x="286" y="334">Evento</text><text class="t-s" x="286" y="354">tipo · autor · dados</text>
+            <rect class="box" x="510" y="310" width="180" height="64" rx="8"/>
+            <text class="t-b" x="526" y="334">Provedor</text><text class="t-s" x="526" y="354">tipo · ref_credencial</text>
+            <rect class="box" x="750" y="310" width="180" height="64" rx="8"/>
+            <text class="t-b" x="766" y="334">Ferramenta</text><text class="t-s" x="766" y="354">tipo · origem</text>
+
+            <path class="ln" d="M210 62H270"/><text class="t-l" x="240" y="56" text-anchor="middle">N : 1</text>
+            <path class="ln" d="M450 62H510"/><text class="t-l" x="480" y="56" text-anchor="middle">1 : N</text>
+            <path class="ln" d="M690 62H750"/><text class="t-l" x="720" y="56" text-anchor="middle">1 : 1</text>
+            <path class="ln" d="M360 94V170"/><text class="t-l" x="368" y="136">1 : N</text>
+            <path class="ln" d="M190 94L280 170"/><text class="t-l" x="214" y="140">gera</text>
+            <path class="ln-d" d="M450 172L530 94"/><text class="t-l" x="470" y="128">executa</text>
+            <path class="ln-d" d="M210 202H270"/><text class="t-l" x="240" y="196" text-anchor="middle">origem</text>
+            <path class="ln" d="M450 202H510"/><text class="t-l" x="480" y="196" text-anchor="middle">1 : N</text>
+            <path class="ln-d" d="M690 202H750"/><text class="t-l" x="720" y="196" text-anchor="middle">cria</text>
+            <path class="ln" d="M360 234V310"/><text class="t-l" x="368" y="276">1 : N</text>
+            <path class="ln" d="M530 310L450 234"/><text class="t-l" x="500" y="282">usa</text>
+            <path class="ln" d="M840 234V310"/><text class="t-l" x="848" y="276">N : 1</text>
+            <path class="ln-d" d="M210 342H270"/><text class="t-l" x="240" y="336" text-anchor="middle">cópia</text>
+          </svg>
+        </div>
+        <figcaption><b>Figura 4.</b> Entidades e relações. Linhas tracejadas são relações opcionais. A relação entre Evento e Item de memória é uma cópia feita no momento da resposta, não uma referência viva.</figcaption>
+      </figure>
+
+      <p>As tabelas a seguir listam os campos essenciais de cada entidade. Identificadores são UUIDs e datas são guardadas em UTC, com o fuso do usuário guardado à parte.</p>
+
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Agente">
+        <table class="t-min">
+          <caption>Agente</caption>
+          <thead><tr><th scope="col">Campo</th><th scope="col">Tipo</th><th scope="col">Observação</th></tr></thead>
+          <tbody>
+            <tr><td><code>nome</code></td><td>texto</td><td>Único, sem diferenciar maiúsculas.</td></tr>
+            <tr><td><code>descricao</code></td><td>texto, opcional</td><td>"O que ele faz". Também orienta a escolha do agente por assunto.</td></tr>
+            <tr><td><code>instancias_max</code></td><td>inteiro</td><td>Começa em 1. Não pode ficar abaixo das instâncias em uso.</td></tr>
+            <tr><td><code>fila_ativa</code></td><td>booleano</td><td>Desligado: tarefas na fila esperam.</td></tr>
+            <tr><td><code>pedir_aprovacao</code></td><td>booleano</td><td>Padrão para as tarefas do agente.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>O agente não tem lista de ferramentas. Qualquer ferramenta disponível pode ser usada, sujeita à permissão no primeiro uso. <span class="tag tag-proto">Protótipo</span></p>
+
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Instância e máquina">
+        <table class="t-min">
+          <caption>Instância e Máquina</caption>
+          <thead><tr><th scope="col">Campo</th><th scope="col">Tipo</th><th scope="col">Observação</th></tr></thead>
+          <tbody>
+            <tr><td><code>instancia.agente_id</code></td><td>referência</td><td></td></tr>
+            <tr><td><code>instancia.ordinal</code></td><td>inteiro</td><td>Forma o nome da máquina: <code>codigo-01</code>.</td></tr>
+            <tr><td><code>instancia.tarefa_id</code></td><td>referência, opcional</td><td>Vazio quando livre. Tarefas aguardando você ou pausadas continuam ocupando a instância.</td></tr>
+            <tr><td><code>maquina.estado</code></td><td>enumeração</td><td><code>provisionando</code>, <code>livre</code>, <code>em_uso</code>, <code>suspensa</code>, <code>descartada</code>.</td></tr>
+            <tr><td><code>maquina.controle</code></td><td>enumeração</td><td><code>agente</code> ou <code>usuario</code>.</td></tr>
+            <tr><td><code>maquina.imagem</code></td><td>texto</td><td>Versão da imagem base, por exemplo <code>ubuntu-24.04-boto</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Tarefa">
+        <table class="t-min">
+          <caption>Tarefa</caption>
+          <thead><tr><th scope="col">Campo</th><th scope="col">Tipo</th><th scope="col">Observação</th></tr></thead>
+          <tbody>
+            <tr><td><code>agente_id</code></td><td>referência</td><td>Escolhido pelo assunto ou pelo painel do agente.</td></tr>
+            <tr><td><code>instancia_id</code></td><td>referência, opcional</td><td>Vazio enquanto está na fila.</td></tr>
+            <tr><td><code>pedido</code></td><td>texto</td><td>O que o usuário escreveu.</td></tr>
+            <tr><td><code>estado</code> · <code>motivo</code></td><td>enumeração · texto</td><td>Ver <a href="#estados">Máquinas de estado</a>.</td></tr>
+            <tr><td><code>posicao_fila</code></td><td>inteiro, opcional</td><td>Ordem definida pelo usuário.</td></tr>
+            <tr><td><code>onde</code></td><td>enumeração</td><td><code>navegador</code>, <code>terminal</code> ou <code>ambos</code>. É uma preferência da tarefa, não uma restrição do agente.</td></tr>
+            <tr><td><code>pedir_aprovacao</code> · <code>privada</code></td><td>booleanos</td><td></td></tr>
+            <tr><td><code>rotina_id</code> · <code>modelo_id</code> · <code>provedor_id</code></td><td>referências, opcionais</td><td>Origem e provedor usado.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Evento">
+        <table class="t-min">
+          <caption>Evento</caption>
+          <thead><tr><th scope="col">Campo</th><th scope="col">Tipo</th><th scope="col">Observação</th></tr></thead>
+          <tbody>
+            <tr><td><code>tarefa_id</code> · <code>seq</code></td><td>referência · inteiro</td><td>Sequência crescente dentro da tarefa.</td></tr>
+            <tr><td><code>tipo</code></td><td>texto</td><td>Ver a tabela de tipos de evento.</td></tr>
+            <tr><td><code>autor</code></td><td>enumeração</td><td><code>agente</code>, <code>usuario</code> ou <code>sistema</code>.</td></tr>
+            <tr><td><code>ferramenta_id</code></td><td>referência, opcional</td><td></td></tr>
+            <tr><td><code>dados</code></td><td>JSON</td><td>Alvo, comando, prévia, resultado. Segredos nunca entram aqui.</td></tr>
+            <tr><td><code>memoria_usada</code></td><td>JSON, opcional</td><td>Cópia de tipo e texto dos itens usados na resposta. Permite mostrar "Não está mais na memória".</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Pedido e concessão">
+        <table class="t-min">
+          <caption>Pedido e Concessão de permissão</caption>
+          <thead><tr><th scope="col">Campo</th><th scope="col">Tipo</th><th scope="col">Observação</th></tr></thead>
+          <tbody>
+            <tr><td><code>pedido.tipo</code></td><td>enumeração</td><td><code>permissao</code> ou <code>aprovacao</code>.</td></tr>
+            <tr><td><code>pedido.previa</code></td><td>JSON</td><td>O que será feito: destinatários, texto, diff, etapa em que a ferramenta será usada.</td></tr>
+            <tr><td><code>pedido.resposta</code></td><td>enumeração</td><td>Permissão: <code>sessao</code>, <code>todas</code>, <code>nao</code>. Aprovação: <code>aprovar</code>, <code>recusar</code>.</td></tr>
+            <tr><td><code>concessao.ferramenta_id</code></td><td>referência</td><td></td></tr>
+            <tr><td><code>concessao.escopo</code></td><td>enumeração</td><td><code>sessao</code> (com <code>tarefa_id</code>) ou <code>todas</code> (vale para qualquer agente).</td></tr>
+            <tr><td><code>concessao.revogada_em</code></td><td>data, opcional</td><td>Revogar não apaga: mantém o histórico.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Demais entidades">
+        <table class="t-wide">
+          <caption>Demais entidades</caption>
+          <thead><tr><th scope="col">Entidade</th><th scope="col">Campos essenciais</th><th scope="col">Observação</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Ferramenta</th><td><code>tipo</code> (computador, app, mcp, plugin, skill), <code>acoes_externas</code>, <code>permissoes_declaradas</code>, <code>origem</code>, <code>versao</code></td><td>As quatro do computador são embutidas; as demais vêm do marketplace.</td></tr>
+            <tr><th scope="row">Item de memória</th><td><code>tipo</code> (como chamar, ferramentas, estilo, agenda, trabalho, contexto), <code>texto</code></td><td>Gerado a partir do nome e do "Sobre você".</td></tr>
+            <tr><th scope="row">Rotina</th><td><code>agente_id</code>, <code>pedido</code>, <code>opcoes</code>, <code>recorrencia</code>, <code>fuso</code>, <code>ativa</code>, <code>horario_perdido</code></td><td>A recorrência pode seguir o formato RRULE; agendamentos únicos têm uma só data.</td></tr>
+            <tr><th scope="row">Modelo de tarefa</th><td><code>titulo</code>, <code>descricao</code>, <code>pedido</code>, <code>opcoes</code>, <code>tipo</code> (uma vez ou rotina)</td><td></td></tr>
+            <tr><th scope="row">Provedor</th><td><code>tipo</code> (cli, conta, api), <code>nome</code>, <code>ref_credencial</code>, <code>endpoint</code>, <code>padrao</code>, <code>estado</code></td><td>A credencial fica no cofre; aqui só a referência.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section id="estados" aria-labelledby="h-estados">
+      <h2 id="h-estados"><span class="n">05</span>Máquinas de estado</h2>
+      <p>Só o orquestrador muda o estado de uma tarefa, sempre numa transação que também grava o evento <code>tarefa.estado</code>. Isso evita que duas partes do sistema discordem sobre onde a tarefa está.</p>
+
+      <h3>Estado da tarefa</h3>
+      <figure class="fig">
+        <div class="fig-scroll">
+          <svg class="dg" viewBox="0 0 910 370" style="min-width:720px" role="img" aria-labelledby="fig-st-t">
+            <title id="fig-st-t">Estados da tarefa: na fila, em execução, aguardando você, pausada, concluída e encerrada</title>
+            <path class="ln" d="M830 148V24H330V146" marker-end="url(#ah)"/>
+            <text class="t-l" x="580" y="18" text-anchor="middle">nova instrução depois da entrega</text>
+
+            <circle class="dot" cx="20" cy="172" r="6"/>
+            <path class="ln" d="M26 172H38" marker-end="url(#ah)"/>
+            <rect class="box" x="40" y="148" width="130" height="48" rx="8"/>
+            <text class="t-b" x="105" y="177" text-anchor="middle">Na fila</text>
+
+            <rect class="box-k" x="250" y="148" width="160" height="48" rx="8"/>
+            <text class="t-b" x="330" y="177" text-anchor="middle">Em execução</text>
+
+            <rect class="box" x="520" y="56" width="180" height="48" rx="8"/>
+            <text class="t-b" x="610" y="85" text-anchor="middle">Aguardando você</text>
+
+            <rect class="box" x="520" y="240" width="180" height="48" rx="8"/>
+            <text class="t-b" x="610" y="269" text-anchor="middle">Pausada</text>
+
+            <rect class="box-ok" x="770" y="148" width="120" height="48" rx="8"/>
+            <text class="t-b" x="830" y="177" text-anchor="middle">Concluída</text>
+
+            <rect class="box-d" x="770" y="280" width="120" height="48" rx="8"/>
+            <text class="t-b" x="830" y="309" text-anchor="middle">Encerrada</text>
+            <text class="t-s" x="890" y="350" text-anchor="end">você encerra, de qualquer estado não final</text>
+
+            <path class="ln" d="M170 172H248" marker-end="url(#ah)"/>
+            <text class="t-l" x="210" y="164" text-anchor="middle">instância livre</text>
+
+            <path class="ln" d="M396 148L518 90" marker-end="url(#ah)"/>
+            <text class="t-l" x="470" y="134" text-anchor="middle">pedido aberto</text>
+            <path class="ln" d="M520 70L380 146" marker-end="url(#ah)"/>
+            <text class="t-l" x="420" y="100" text-anchor="middle">você responde</text>
+
+            <path class="ln" d="M610 104V238" marker-end="url(#ah)"/>
+            <text class="t-l" x="618" y="214">recusa ou "não permitir"</text>
+
+            <path class="halo" d="M410 172H768"/>
+            <path class="ln" d="M410 172H768" marker-end="url(#ah)"/>
+            <text class="t-l" x="712" y="164" text-anchor="middle">entrega</text>
+
+            <path class="ln" d="M396 196L518 252" marker-end="url(#ah)"/>
+            <text class="t-l" x="456" y="206" text-anchor="middle">pausa · falha</text>
+            <path class="ln" d="M520 272L380 198" marker-end="url(#ah)"/>
+            <text class="t-l" x="436" y="260" text-anchor="middle">retomar</text>
+          </svg>
+        </div>
+        <figcaption><b>Figura 5.</b> Estados da tarefa. "Aguardando você" e "Pausada" continuam ocupando a instância, como no protótipo. Uma falha que esgota as tentativas leva a "Pausada" com o motivo, para o usuário decidir.</figcaption>
+      </figure>
+
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Transições da tarefa">
+        <table class="t-wide">
+          <caption>Transições da tarefa</caption>
+          <thead><tr><th scope="col">De</th><th scope="col">Evento</th><th scope="col">Para</th><th scope="col">Quem dispara</th></tr></thead>
+          <tbody>
+            <tr><td>(nova)</td><td>Delegada sem instância livre, ou fila do agente pausada</td><td>Na fila</td><td>Orquestrador</td></tr>
+            <tr><td>(nova) · Na fila</td><td>Instância reservada</td><td>Em execução</td><td>Orquestrador</td></tr>
+            <tr><td>Em execução</td><td>Pedido de permissão ou aprovação aberto</td><td>Aguardando você</td><td>Intermediário</td></tr>
+            <tr><td>Aguardando você</td><td>Permitiu ou aprovou</td><td>Em execução</td><td>Você</td></tr>
+            <tr><td>Aguardando você</td><td>Recusou ou "não permitir"</td><td>Pausada</td><td>Você</td></tr>
+            <tr><td>Em execução</td><td>Pausar, ou tentativas esgotadas, ou provedor indisponível</td><td>Pausada</td><td>Você ou orquestrador</td></tr>
+            <tr><td>Pausada</td><td>Retomar. Se a pausa veio de "não permitir", a permissão é pedida de novo.</td><td>Em execução</td><td>Você</td></tr>
+            <tr><td>Em execução</td><td>Entrega registrada</td><td>Concluída</td><td>Executor</td></tr>
+            <tr><td>Concluída</td><td>Nova instrução do usuário</td><td>Na fila ou Em execução</td><td>Você</td></tr>
+            <tr><td>Qualquer não final</td><td>Encerrar, com confirmação</td><td>Encerrada</td><td>Você</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Assumir o controle não muda o estado da tarefa. A tarefa continua "Em execução", mas o executor fica parado e a máquina mostra "Você está no controle". Esse período não conta para nenhum limite de tempo da tarefa. <span class="tag tag-proto">Protótipo</span></p>
+
+      <h3>Estado da máquina e controle</h3>
+      <figure class="fig">
+        <div class="fig-scroll">
+          <svg class="dg" viewBox="0 0 910 240" style="min-width:720px" role="img" aria-labelledby="fig-mq-t">
+            <title id="fig-mq-t">Ciclo de vida da máquina e quem a controla</title>
+            <path class="ln" d="M660 40V14H290V38" marker-end="url(#ah)"/>
+            <text class="t-l" x="475" y="10" text-anchor="middle">acorda para nova tarefa</text>
+
+            <rect class="box" x="20" y="40" width="150" height="44" rx="8"/>
+            <text class="t-b" x="95" y="67" text-anchor="middle">Provisionando</text>
+            <rect class="box" x="230" y="40" width="120" height="44" rx="8"/>
+            <text class="t-b" x="290" y="67" text-anchor="middle">Livre</text>
+            <rect class="box-k" x="410" y="40" width="140" height="44" rx="8"/>
+            <text class="t-b" x="480" y="67" text-anchor="middle">Em uso</text>
+            <rect class="box" x="600" y="40" width="120" height="44" rx="8"/>
+            <text class="t-b" x="660" y="67" text-anchor="middle">Suspensa</text>
+            <rect class="box-d" x="780" y="40" width="110" height="44" rx="8"/>
+            <text class="t-b" x="835" y="67" text-anchor="middle">Descartada</text>
+
+            <path class="ln" d="M170 62H228" marker-end="url(#ah)"/>
+            <path class="ln" d="M350 54H408" marker-end="url(#ah)"/>
+            <path class="ln" d="M410 72H352" marker-end="url(#ah)"/>
+            <text class="t-l" x="380" y="48" text-anchor="middle">tarefa</text>
+            <path class="ln" d="M720 62H778" marker-end="url(#ah)"/>
+            <path class="ln" d="M290 84V110H660V86" marker-end="url(#ah)"/>
+            <text class="t-l" x="580" y="104" text-anchor="middle">ociosa por um tempo</text>
+
+            <rect class="box-d" x="280" y="138" width="470" height="88" rx="10"/>
+            <text class="t-z" x="296" y="156">Quem controla a máquina em uso</text>
+            <path class="halo" d="M480 84V136"/>
+            <path class="ln-d" d="M480 84V136"/>
+            <rect class="box-k" x="300" y="166" width="170" height="44" rx="8"/>
+            <text class="t-b" x="385" y="193" text-anchor="middle">Agente</text>
+            <rect class="box" x="560" y="166" width="170" height="44" rx="8"/>
+            <text class="t-b" x="645" y="193" text-anchor="middle">Você</text>
+            <path class="ln" d="M470 180H558" marker-end="url(#ah)"/>
+            <path class="ln" d="M560 200H472" marker-end="url(#ah)"/>
+            <text class="t-l" x="515" y="174" text-anchor="middle">assumir</text>
+            <text class="t-l" x="515" y="220" text-anchor="middle">devolver</text>
+          </svg>
+        </div>
+        <figcaption><b>Figura 6.</b> Ciclo de vida da máquina. Antes de cada tarefa a máquina volta à imagem base. "Descartada" acontece quando o agente é removido, quando o limite de instâncias diminui ou quando a imagem base é atualizada.</figcaption>
+      </figure>
+      <p>Uma máquina "Livre" também pode ser usada pelo usuário sem tarefa, como na opção "Usar a máquina" do protótipo. Enquanto ele estiver nela, o orquestrador não a entrega a uma tarefa da fila. <span class="tag tag-proto">Protótipo</span></p>
+    </section>
+
+    <!-- 6 -->
+    <section id="fluxos" aria-labelledby="h-fluxos">
+      <h2 id="h-fluxos"><span class="n">06</span>Fluxos principais</h2>
+      <p>Cada diagrama tem setas numeradas, e a lista logo abaixo descreve cada passo. Setas tracejadas são respostas.</p>
+
+      <h3>Delegar uma tarefa até a entrega</h3>
+      <figure class="fig seq" data-p="voce:Você|app:App|orq:Orquestrador|exe:Executor|ia:Provedor de IA|int:Intermediário|vm:Máquina">
+        <div class="fig-scroll"></div>
+        <ol class="seq-steps">
+          <li data-f="voce" data-t="app" data-l="Descreve a tarefa">Você escreve o pedido no chat de nova tarefa e escolhe quando, onde e se quer aprovação.</li>
+          <li data-f="app" data-t="orq" data-l="POST /tarefas">O app envia o pedido. O orquestrador escolhe o agente pelo assunto, ou usa o agente do painel de onde a tarefa veio.</li>
+          <li data-f="orq" data-t="orq" data-l="Reserva instância">Se há instância livre e a fila está ativa, reserva. Se não, a tarefa entra na fila do agente e o fluxo para aqui.</li>
+          <li data-f="orq" data-t="exe" data-l="Inicia sessão">O orquestrador inicia um executor ligado à máquina da instância, acordando-a se estiver suspensa.</li>
+          <li data-f="exe" data-t="ia" data-l="Contexto + ferramentas">O executor envia o pedido, os itens de memória relevantes e a lista de ferramentas disponíveis.</li>
+          <li data-f="ia" data-t="exe" data-l="Plano · próxima ação" data-r="1">O modelo responde com o plano em etapas, na primeira volta, ou com a próxima ação.</li>
+          <li data-f="exe" data-t="int" data-l="Chamada de ferramenta">Por exemplo: abrir o navegador, clicar, digitar um comando.</li>
+          <li data-f="int" data-t="vm" data-l="Executa ação">Depois de conferir permissão e aprovação, o intermediário envia a ação ao agente convidado.</li>
+          <li data-f="vm" data-t="int" data-l="Captura + resultado" data-r="1">A máquina devolve o resultado, uma captura reduzida e, quando possível, a árvore de acessibilidade.</li>
+          <li data-f="int" data-t="exe" data-l="Observação" data-r="1">O intermediário registra a ação e devolve a observação. Os passos 5 a 10 se repetem.</li>
+          <li data-f="exe" data-t="orq" data-l="Entrega">O executor registra a entrega. O orquestrador muda a tarefa para Concluída e libera a instância.</li>
+          <li data-f="orq" data-t="app" data-l="Evento ao vivo" data-r="1">O app mostra o cartão da entrega. Se houver fila, a próxima tarefa começa (ver fila abaixo).</li>
+        </ol>
+      </figure>
+
+      <h3>Primeiro uso de uma ferramenta</h3>
+      <figure class="fig seq" data-p="exe:Executor|int:Intermediário|orq:Orquestrador|app:App|voce:Você">
+        <div class="fig-scroll"></div>
+        <ol class="seq-steps">
+          <li data-f="exe" data-t="int" data-l="Usar Terminal">O agente vai usar uma ferramenta pela primeira vez nesta sessão.</li>
+          <li data-f="int" data-t="int" data-l="Procura concessão">O intermediário procura uma concessão ativa para a ferramenta: global ou desta tarefa.</li>
+          <li data-f="int" data-t="orq" data-l="Abre pedido">Sem concessão, abre um pedido de permissão com o nome da ferramenta, o que ela faz e a etapa em que será usada. A tarefa vai para Aguardando você.</li>
+          <li data-f="orq" data-t="app" data-l="Aviso" data-r="1">O app mostra o cartão na linha do tempo, a faixa "Aguardando você" no Início e um aviso se o usuário estiver em outra tela.</li>
+          <li data-f="voce" data-t="app" data-l="Todas as sessões">Você escolhe permitir nesta sessão, em todas as sessões ou não permitir.</li>
+          <li data-f="app" data-t="orq" data-l="Responde pedido">O app envia a resposta.</li>
+          <li data-f="orq" data-t="int" data-l="Grava concessão">A concessão é gravada com o escopo escolhido. Uma concessão global libera também as outras tarefas que esperavam a mesma ferramenta.</li>
+          <li data-f="int" data-t="exe" data-l="Libera chamada" data-r="1">A chamada original continua. Com "não permitir", a tarefa pausa e o executor recebe um erro de permissão.</li>
+        </ol>
+      </figure>
+
+      <h3>Aprovação antes de uma ação externa</h3>
+      <figure class="fig seq" data-p="exe:Executor|int:Intermediário|orq:Orquestrador|app:App|voce:Você|ext:App externo">
+        <div class="fig-scroll"></div>
+        <ol class="seq-steps">
+          <li data-f="exe" data-t="int" data-l="Enviar e-mail">O manifesto da ferramenta marca a ação como externa. Com aprovação ligada na tarefa, o intermediário não executa direto.</li>
+          <li data-f="int" data-t="orq" data-l="Pedido + prévia">Abre um pedido de aprovação com a prévia: destinatários e texto, ou o diff do PR.</li>
+          <li data-f="orq" data-t="app" data-l="Aguardando você" data-r="1">A tarefa aparece em "Aguardando você", com os botões Aprovar e Ver detalhes.</li>
+          <li data-f="voce" data-t="app" data-l="Aprova">Você aprova. Recusar pausa a tarefa.</li>
+          <li data-f="app" data-t="orq" data-l="Responde">O app envia a resposta.</li>
+          <li data-f="orq" data-t="int" data-l="Aprovado">O orquestrador libera a chamada com uma chave de idempotência, para que ela nunca seja executada duas vezes.</li>
+          <li data-f="int" data-t="ext" data-l="Executa com credencial">O intermediário lê a credencial no cofre e faz a chamada. O agente nunca vê o token.</li>
+          <li data-f="ext" data-t="int" data-l="Resultado" data-r="1">O app externo confirma, por exemplo com o ID da mensagem ou o link do PR.</li>
+          <li data-f="int" data-t="exe" data-l="Observação" data-r="1">O resultado vira evento e volta ao executor.</li>
+        </ol>
+      </figure>
+
+      <h3>Assumir o controle e devolver</h3>
+      <figure class="fig seq" data-p="voce:Você|app:App|orq:Orquestrador|exe:Executor|vm:Máquina">
+        <div class="fig-scroll"></div>
+        <ol class="seq-steps">
+          <li data-f="voce" data-t="app" data-l="Assumir o controle">Você clica em "Assumir o controle" na tela da tarefa.</li>
+          <li data-f="app" data-t="orq" data-l="PUT controle">O app pede a troca de controle da máquina.</li>
+          <li data-f="orq" data-t="exe" data-l="Para o ciclo">O executor termina a ação em andamento e não começa outra.</li>
+          <li data-f="orq" data-t="vm" data-l="Entrada: usuário">O agente convidado passa a aceitar mouse e teclado do app e recusa ações do executor.</li>
+          <li data-f="voce" data-t="vm" data-l="Usa a máquina">Você usa a máquina pela tela ao vivo.</li>
+          <li data-f="vm" data-t="orq" data-l="Suas ações" data-r="1">O agente convidado registra o que você fez: janelas abertas, endereços, comandos e arquivos alterados. Isso entra na linha do tempo com você como autor.</li>
+          <li data-f="voce" data-t="app" data-l="Devolver ao Boto">Você devolve o controle.</li>
+          <li data-f="orq" data-t="vm" data-l="Entrada: agente">A máquina volta a aceitar só as ações do executor.</li>
+          <li data-f="orq" data-t="exe" data-l="Retoma + resumo">O executor recebe um resumo das mudanças e uma captura nova antes de planejar o próximo passo, e diz o que viu.</li>
+        </ol>
+      </figure>
+
+      <h3>Próxima tarefa da fila</h3>
+      <figure class="fig seq" data-p="exe:Executor A|orq:Orquestrador|db:Banco local|vm:Máquina|exe2:Executor B|app:App">
+        <div class="fig-scroll"></div>
+        <ol class="seq-steps">
+          <li data-f="exe" data-t="orq" data-l="Tarefa concluída">Uma tarefa termina ou é encerrada.</li>
+          <li data-f="orq" data-t="db" data-l="Libera e escolhe">Numa só transação, o orquestrador libera a instância e lê a primeira tarefa da fila do agente, se a fila estiver ativa.</li>
+          <li data-f="db" data-t="orq" data-l="Próxima tarefa" data-r="1">O banco devolve a tarefa seguinte, na ordem definida pelo usuário.</li>
+          <li data-f="orq" data-t="vm" data-l="Restaura imagem base">A máquina volta à imagem base.</li>
+          <li data-f="orq" data-t="exe2" data-l="Inicia sessão">Um novo executor começa a tarefa na mesma máquina.</li>
+          <li data-f="orq" data-t="app" data-l="Aviso: fila avançou" data-r="1">O app mostra o aviso e atualiza o cockpit. O mesmo caminho roda quando o limite de instâncias aumenta ou a fila é retomada.</li>
+        </ol>
+      </figure>
+
+      <h3>Rotina agendada</h3>
+      <figure class="fig seq" data-p="agd:Agendador|orq:Orquestrador|exe:Executor|app:App">
+        <div class="fig-scroll"></div>
+        <ol class="seq-steps">
+          <li data-f="agd" data-t="agd" data-l="Chega o horário">O agendador calcula o próximo horário de cada rotina ativa no fuso do usuário.</li>
+          <li data-f="agd" data-t="orq" data-l="Cria tarefa">Copia o pedido e as opções da rotina para uma tarefa nova, ligada à rotina.</li>
+          <li data-f="orq" data-t="orq" data-l="Instância ou fila">Segue o mesmo caminho de uma tarefa delegada.</li>
+          <li data-f="orq" data-t="exe" data-l="Executa">O executor trabalha como em qualquer tarefa, com permissões e aprovações.</li>
+          <li data-f="exe" data-t="orq" data-l="Entrega" data-r="1">O executor registra a entrega.</li>
+          <li data-f="orq" data-t="app" data-l="Aviso da entrega" data-r="1">A entrega aparece em "Entregas recentes".</li>
+        </ol>
+      </figure>
+      <div class="note">
+        <span class="note-label">Horário perdido</span>
+        <p>No modo local, o serviço pode estar desligado no horário de uma rotina. Cada rotina guarda o que fazer nesse caso: executar uma vez ao voltar ou pular até o próximo horário. Nunca executar várias vezes seguidas para compensar. <span class="tag tag-rec">Recomendação</span></p>
+      </div>
+    </section>
+
+    <!-- 7 -->
+    <section id="seguranca" aria-labelledby="h-seg">
+      <h2 id="h-seg"><span class="n">07</span>Segurança e privacidade</h2>
+      <p>O agente age sozinho, com acesso a contas reais. A segurança vem de três camadas: o que a máquina consegue alcançar, o que o intermediário deixa passar e o que o usuário aprova.</p>
+      <ul>
+        <li><strong>Sem conta, sem servidor central.</strong> Não há senha do Boto para vazar nem base central de usuários. O perfil e a memória ficam no banco local.</li>
+        <li><strong>Chaves no cofre do sistema.</strong> Chaves de API e tokens de login ficam no Keychain, no Credential Manager ou no Secret Service. O banco guarda só a referência, e nenhum segredo entra em eventos, capturas ou contexto do modelo.</li>
+        <li><strong>Máquinas isoladas e descartáveis.</strong> Uma máquina por instância, sem acesso à rede local nem ao disco do host, restaurada antes de cada tarefa.</li>
+        <li><strong>Ações externas sempre registradas.</strong> Cada uma vira um evento com a prévia, a aprovação (quando houve) e o resultado.</li>
+        <li><strong>Memória visível e apagável.</strong> O usuário vê cada item, vê quais itens cada resposta usou e pode apagar tudo. <span class="tag tag-proto">Protótipo</span></li>
+        <li><strong>Tarefa privada.</strong> Os eventos ficam numa área separada e são apagados quando a tarefa termina. A entrega fica só onde foi gravada, como o repositório ou a pasta escolhida. <span class="tag tag-rec">Recomendação</span></li>
+      </ul>
+
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Ameaças e mitigações">
+        <table class="t-wide">
+          <caption>Ameaças principais e como a arquitetura responde</caption>
+          <thead><tr><th scope="col">Ameaça</th><th scope="col">Mitigação</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Uma página da web tenta dar ordens ao agente</th><td>O que vem da máquina é tratado como dado não confiável no contexto do modelo. Ações externas exigem aprovação quando ela está ligada, e o intermediário valida a chamada real, não o texto do modelo.</td></tr>
+            <tr><th scope="row">O agente expõe um segredo</th><td>Credenciais nunca entram na máquina nem no prompt. O intermediário faz as chamadas autenticadas. Capturas enviadas ao modelo passam por mascaramento de padrões de segredo, sem garantia total.</td></tr>
+            <tr><th scope="row">Uma máquina comprometida ataca a rede do usuário</th><td>Rede isolada, sem rota para a rede local nem para o host. Saída só pelo proxy que registra os destinos.</td></tr>
+            <tr><th scope="row">Outro programa do computador chama o serviço</th><td>O serviço escuta só no endereço local e exige um token gerado na instalação. O modo sempre ligado exige pareamento do dispositivo e conexão cifrada.</td></tr>
+            <tr><th scope="row">Uma permissão ampla fica esquecida</th><td>Lista em Configurações e no detalhe de cada item do marketplace, com revogação imediata. Concessões globais viram eventos.</td></tr>
+            <tr><th scope="row">Um item do marketplace é malicioso</th><td>Catálogo assinado, manifesto com permissões declaradas e ações externas marcadas. MCPs locais rodam em processo isolado. Skills são instruções em texto, não código.</td></tr>
+            <tr><th scope="row">O dispositivo é perdido</th><td>Banco no disco cifrado do sistema e segredos no cofre. No modo sempre ligado, o dispositivo pareado pode ser revogado no servidor.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 8 -->
+    <section id="confiabilidade" aria-labelledby="h-conf">
+      <h2 id="h-conf"><span class="n">08</span>Confiabilidade e operação</h2>
+      <h3>Pontos de retomada</h3>
+      <p>O registro de eventos é a fonte de verdade. Um passo só conta como feito depois que o evento dele foi gravado. Ao reiniciar, o orquestrador reconstrói filas, instâncias e estados a partir do banco, e os executores reconectam às máquinas.</p>
+      <p>As ações são tratadas de acordo com o efeito que têm:</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Classes de ação">
+        <table class="t-min">
+          <caption>O que fazer com uma ação interrompida</caption>
+          <thead><tr><th scope="col">Classe</th><th scope="col">Exemplos</th><th scope="col">Se o serviço cair no meio</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Leitura</th><td>Abrir página, listar arquivos</td><td>Repete sem perguntar.</td></tr>
+            <tr><th scope="row">Na máquina</th><td>Editar arquivo, rodar testes</td><td>Repete a partir do último passo confirmado, com uma captura nova.</td></tr>
+            <tr><th scope="row">Externa</th><td>Enviar e-mail, abrir PR, publicar</td><td>Não repete sozinha. Se não há confirmação do resultado, a tarefa vai para "Aguardando você" com a pergunta: a ação aconteceu ou não?</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Falhas e tentativas</h3>
+      <ul>
+        <li><strong>Erro temporário do provedor.</strong> Tenta de novo com espera crescente, até o limite de tentativas. Depois, pausa com o motivo e oferece trocar de provedor. <span class="tag tag-tbd">A definir</span></li>
+        <li><strong>Máquina caiu.</strong> O gerenciador sobe outra a partir da imagem base. Se o trabalho em andamento estava só no disco da máquina perdida, a tarefa pausa e explica o que se perdeu.</li>
+        <li><strong>Acesso expirado num app.</strong> A tarefa pausa com o motivo, como no exemplo do guia de marca: a senha expirou e o Boto precisa de você.</li>
+        <li><strong>Agente em repetição.</strong> Se a mesma ação falha ou se repete sem progresso, o executor para e abre um pedido em vez de insistir.</li>
+        <li><strong>Orçamento atingido.</strong> Se houver limite de uso por tarefa, a tarefa pausa antes de passar dele.</li>
+      </ul>
+
+      <h3>O que vale medir</h3>
+      <p>As métricas ficam no banco local e aparecem para o próprio usuário. Nada é enviado para fora por padrão.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Métricas">
+        <table class="t-min">
+          <caption>Métricas e por que importam</caption>
+          <thead><tr><th scope="col">Métrica</th><th scope="col">Por que medir</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Tempo na fila</th><td>Mostra quando vale aumentar as instâncias de um agente.</td></tr>
+            <tr><th scope="row">Tempo em "Aguardando você"</th><td>Mostra quanto do trabalho depende de resposta do usuário.</td></tr>
+            <tr><th scope="row">Pedidos por tarefa</th><td>Muitos pedidos de permissão indicam que valeria liberar uma ferramenta para todas as sessões.</td></tr>
+            <tr><th scope="row">Passos e tentativas por tarefa</th><td>Revela tarefas em que o agente se perde.</td></tr>
+            <tr><th scope="row">Pausas por motivo</th><td>Separa falhas do provedor, de acesso e de recusas.</td></tr>
+            <tr><th scope="row">Uso do modelo por tarefa</th><td>Custo real, quando o provedor informa.</td></tr>
+            <tr><th scope="row">Máquinas ativas e suspensas</th><td>Ocupação do host.</td></tr>
+            <tr><th scope="row">Latência da tela ao vivo</th><td>Diz se assumir o controle está confortável.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section id="escolhas" aria-labelledby="h-esc">
+      <h2 id="h-esc"><span class="n">09</span>Escolhas técnicas e alternativas</h2>
+      <p>As recomendações abaixo são pontos de partida, não decisões tomadas. Cada uma deve ser confirmada com um protótipo técnico pequeno.</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Escolhas técnicas">
+        <table class="t-wide">
+          <caption>Alternativas comparadas</caption>
+          <thead><tr><th scope="col">Decisão</th><th scope="col">Opções</th><th scope="col">Prós e contras</th><th scope="col">Recomendação</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Isolamento da máquina</th><td>MicroVM · contêiner · VM completa</td><td>MicroVMs isolam como uma VM e sobem mais rápido, mas exigem virtualização no host. Contêineres são leves, mas dividem o kernel com o host. VMs completas são mais simples de montar, porém mais pesadas.</td><td>MicroVM (Firecracker ou Cloud Hypervisor) em Linux; o framework de virtualização nativo no macOS.</td></tr>
+            <tr><th scope="row">Tela ao vivo</th><td>VNC pelo navegador · WebRTC · capturas periódicas</td><td>VNC é maduro e já aceita entrada, mas gasta mais banda. WebRTC tem latência menor e se adapta à rede, mas é mais complexo. Capturas não servem para assumir o controle.</td><td>VNC na primeira versão; avaliar WebRTC para o modo sempre ligado.</td></tr>
+            <tr><th scope="row">Como o agente usa o sistema</th><td>Captura e coordenadas · árvore de acessibilidade · protocolo do navegador</td><td>Coordenadas funcionam em qualquer app, mas erram mais e custam mais. Acessibilidade e o protocolo do navegador são precisos, mas não cobrem tudo.</td><td>Combinar os três, preferindo o mais preciso disponível.</td></tr>
+            <tr><th scope="row">Banco</th><td>SQLite local · Postgres</td><td>SQLite não tem servidor e é fácil de copiar. Postgres aguenta mais escrita simultânea, mas exige um serviço a mais.</td><td>SQLite, que basta para um usuário.</td></tr>
+            <tr><th scope="row">Protocolo de ferramentas</th><td>MCP para tudo · interfaces próprias</td><td>MCP é o mesmo formato do marketplace e dos CLIs. Interfaces próprias dão mais controle, mas duplicam trabalho.</td><td>MCP para todas, inclusive as do computador.</td></tr>
+            <tr><th scope="row">App</th><td>Tauri · Electron · só navegador</td><td>Tauri gera apps pequenos, mas depende do navegador do sistema. Electron é previsível e mais pesado. Só navegador não acessa o cofre nem detecta CLIs.</td><td>Tauri, com a mesma interface servindo o acesso remoto pelo navegador.</td></tr>
+            <tr><th scope="row">Barramento</th><td>Dentro do processo · NATS ou similar</td><td>Dentro do processo é simples e suficiente para um usuário. Um barramento externo só se justifica com vários hosts.</td><td>Dentro do processo.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 10 -->
+    <section id="abertas" aria-labelledby="h-abertas">
+      <h2 id="h-abertas"><span class="n">10</span>Questões em aberto e próximos passos</h2>
+      <h3>Questões em aberto</h3>
+      <ol>
+        <li><strong>Login com contas de assinatura.</strong> Conferir o que os termos do ChatGPT, do Claude e do Grok permitem para um app de terceiros. Talvez só o CLI oficial ou a chave de API sejam viáveis para algum deles.</li>
+        <li><strong>Máquina restaurada entre tarefas.</strong> Confirmar com casos reais se a restauração atrapalha, por exemplo quando uma tarefa depende de dependências instaladas pela anterior, e quando usar a pasta persistente do agente.</li>
+        <li><strong>Escolha automática do agente.</strong> Hoje é por assunto. Decidir se o modelo deve escolher, e o que fazer com agentes criados pelo usuário sem descrição.</li>
+        <li><strong>Ações externas de terceiros.</strong> Definir o que fazer quando um MCP do marketplace não declara quais ações são externas. A proposta é tratar toda escrita como externa até haver declaração.</li>
+        <li><strong>Vários dispositivos sem conta.</strong> Definir como o celular encontra o servidor no modo sempre ligado. Pareamento por código QR é o caminho mais simples.</li>
+        <li><strong>Limites da virtualização no macOS.</strong> Medir quantas máquinas simultâneas um computador comum aguenta no modo local.</li>
+        <li><strong>Uso via CLI.</strong> Nem todo CLI informa tokens. Decidir como mostrar custo nesses casos sem estimar números.</li>
+        <li><strong>Retenção.</strong> Por quanto tempo guardar eventos e capturas de tarefas concluídas.</li>
+      </ol>
+
+      <h3>Próximos passos</h3>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Fases">
+        <table class="t-min">
+          <caption>Ordem sugerida de construção</caption>
+          <thead><tr><th scope="col">Fase</th><th scope="col">Entrega</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">1 · Núcleo local</th><td>Serviço local, um agente com uma instância, uma máquina, adaptador de chave de API, registro de eventos e linha do tempo.</td></tr>
+            <tr><th scope="row">2 · Controle</th><td>Tela ao vivo, assumir o controle, intermediário com permissão no primeiro uso e aprovações.</td></tr>
+            <tr><th scope="row">3 · Escala</th><td>Vários agentes, instâncias, filas, rotinas, modelos e memória com registro de uso.</td></tr>
+            <tr><th scope="row">4 · Ecossistema</th><td>Adaptadores de CLI e de login, marketplace com MCPs e modo sempre ligado.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      <p>Este documento descreve uma proposta. O <a href="index.html">protótipo</a> simula todo o comportamento no navegador; nenhum dos componentes descritos aqui existe ainda. As tecnologias citadas são recomendações para avaliar, e os exemplos (agentes, máquinas, PRs e e-mails) são fictícios, coerentes com os roteiros do protótipo.</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+(() => {
+  const root = document.documentElement;
+  const KEY = 'boto-doc-theme';
+  const btn = document.getElementById('theme-btn');
+  const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
+  const write = (v) => { try { localStorage.setItem(KEY, v); } catch {} };
+  const apply = (t) => {
+    root.dataset.theme = t;
+    btn.setAttribute('aria-pressed', String(t === 'dark'));
+  };
+  apply(read() === 'dark' ? 'dark' : 'light');
+  btn.addEventListener('click', () => {
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    apply(next); write(next);
+  });
+
+  const tocBox = document.getElementById('toc-box');
+  const narrow = window.matchMedia('(max-width: 1080px)');
+  const syncToc = () => { tocBox.open = !narrow.matches; };
+  syncToc();
+  narrow.addEventListener('change', syncToc);
+  tocBox.addEventListener('click', (e) => {
+    if (narrow.matches && e.target.closest('.toc a')) tocBox.open = false;
+  });
+
+  const links = [...document.querySelectorAll('.toc a')];
+  const byId = new Map(links.map((a) => [a.getAttribute('href').slice(1), a]));
+  const targets = [...byId.keys()].map((id) => document.getElementById(id)).filter(Boolean);
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => {
+        if (!en.isIntersecting) return;
+        links.forEach((a) => a.removeAttribute('aria-current'));
+        byId.get(en.target.id)?.setAttribute('aria-current', 'true');
+      });
+    }, { rootMargin: '-80px 0px -70% 0px' });
+    targets.forEach((t) => io.observe(t));
+  }
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, text) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  document.querySelectorAll('figure.seq').forEach((fig, fi) => {
+    const parts = fig.dataset.p.split('|').map((s) => { const i = s.indexOf(':'); return { id: s.slice(0, i), label: s.slice(i + 1) }; });
+    const steps = [...fig.querySelectorAll('ol.seq-steps > li')];
+    const colW = 128, pad = 20, headH = 36, rowH = 40, top = 24 + headH + 28;
+    const W = pad * 2 + colW * parts.length;
+    const H = top + steps.length * rowH;
+    const x = Object.fromEntries(parts.map((p, i) => [p.id, pad + colW * i + colW / 2]));
+    const title = fig.previousElementSibling?.textContent || 'Diagrama de sequência';
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, class: 'dg', role: 'img', 'aria-label': `${title}. Os passos estão descritos na lista abaixo.` });
+    svg.style.minWidth = Math.round(W * 0.82) + 'px';
+    parts.forEach((p) => {
+      svg.appendChild(el('line', { class: 'life', x1: x[p.id], y1: 24 + headH, x2: x[p.id], y2: H - 8 }));
+      svg.appendChild(el('rect', { class: p.id === 'voce' ? 'box-k' : 'box', x: x[p.id] - colW / 2 + 8, y: 24, width: colW - 16, height: headH, rx: 8 }));
+      svg.appendChild(el('text', { class: 't-b', x: x[p.id], y: 24 + headH / 2 + 4.5, 'text-anchor': 'middle' }, p.label));
+    });
+    steps.forEach((li, i) => {
+      const y = top + i * rowH;
+      const f = x[li.dataset.f], t = x[li.dataset.t];
+      const cls = li.dataset.r ? 'ln-d' : 'ln';
+      const label = `${i + 1} · ${li.dataset.l}`;
+      if (f === t) {
+        svg.appendChild(el('path', { class: cls, d: `M${f} ${y - 10}H${f + 26}V${y + 6}H${f + 3}`, 'marker-end': 'url(#ah)' }));
+        svg.appendChild(el('text', { class: 't-l', x: f + 32, y: y }, label));
+      } else {
+        const dir = t > f ? 1 : -1;
+        svg.appendChild(el('path', { class: cls, d: `M${f} ${y}H${t - dir * 3}`, 'marker-end': 'url(#ah)' }));
+        svg.appendChild(el('text', { class: 't-l', x: (f + t) / 2, y: y - 7, 'text-anchor': 'middle' }, label));
+      }
+    });
+    fig.querySelector('.fig-scroll').appendChild(svg);
+  });
+})();
+</script>
+</body>
+</html>

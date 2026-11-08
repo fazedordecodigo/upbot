@@ -24,30 +24,37 @@ type Tokens = {
   mix: Record<string, Themed>;
 };
 
-const FONT_FACES = `@font-face {
-  font-family: 'Host Grotesk';
-  src: url('../fonts/host-grotesk-latin.woff2') format('woff2');
-  font-weight: 300 800;
-  font-style: normal;
+const LATIN =
+  "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD";
+const LATIN_EXT =
+  "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF";
+
+function face(
+  family: string,
+  file: string,
+  weight: string,
+  unicodeRange: string,
+  stretch?: string,
+): string {
+  const stretchLine = stretch ? `\n  font-stretch: ${stretch};` : "";
+  return `@font-face {
+  font-family: '${family}';
+  src: url('../fonts/${file}') format('woff2');
+  font-weight: ${weight};
+  font-style: normal;${stretchLine}
   font-display: swap;
+  unicode-range: ${unicodeRange};
+}`;
 }
 
-@font-face {
-  font-family: 'DM Mono';
-  src: url('../fonts/dm-mono-400-latin.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'DM Mono';
-  src: url('../fonts/dm-mono-500-latin.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-`;
+const FONT_FACES = [
+  face("Bricolage Grotesque", "bricolage-grotesque-latin-ext.woff2", "500 700", LATIN_EXT, "100%"),
+  face("Bricolage Grotesque", "bricolage-grotesque-latin.woff2", "500 700", LATIN, "100%"),
+  face("Inter", "inter-latin-ext.woff2", "400 600", LATIN_EXT),
+  face("Inter", "inter-latin.woff2", "400 600", LATIN),
+  face("JetBrains Mono", "jetbrains-mono-latin-ext.woff2", "400 500", LATIN_EXT),
+  face("JetBrains Mono", "jetbrains-mono-latin.woff2", "400 500", LATIN),
+].join("\n\n");
 
 const LEGACY_VARS: Record<string, string> = {
   bg: "color-bg",
@@ -71,7 +78,7 @@ const LEGACY_VARS: Record<string, string> = {
   "st-wait": "color-status-wait",
   "st-ok": "color-status-ok",
   "st-err": "color-danger",
-  "font-display": "font-sans",
+  "font-display": "font-display",
   "font-body": "font-sans",
   "font-mono": "font-mono",
   "fs-label": "font-size-label",
@@ -181,17 +188,17 @@ function themed(tokens: Tokens, theme: "light" | "dark"): Array<[string, string]
 export function renderTokensCss(tokens: Tokens, raw: string): string {
   const lines = [
     "/* Boto — tokens de design. GERADO por scripts/build-tokens.ts a partir de tokens.json. Não edite à mão. */",
-    '/* Tema claro em :root; escuro em [data-theme="dark"] no <html> (apps/desktop/src/lib/theme.ts). */',
+    '/* Tema escuro em :root (padrão). Claro só em [data-theme="light"] no <html> (apps/desktop/src/lib/theme.ts). */',
     "",
     FONT_FACES.trimEnd(),
     "",
     ":root {",
-    "  color-scheme: light;",
+    "  color-scheme: dark;",
   ];
   for (const [name, value] of flatStatic(tokens, raw)) lines.push(`  --boto-${name}: ${value};`);
-  for (const [name, value] of themed(tokens, "light")) lines.push(`  --boto-${name}: ${value};`);
-  lines.push("}", "", '[data-theme="dark"] {', "  color-scheme: dark;");
   for (const [name, value] of themed(tokens, "dark")) lines.push(`  --boto-${name}: ${value};`);
+  lines.push("}", "", '[data-theme="light"] {', "  color-scheme: light;");
+  for (const [name, value] of themed(tokens, "light")) lines.push(`  --boto-${name}: ${value};`);
   lines.push(
     "}",
     "",
@@ -214,7 +221,7 @@ export function renderLegacyBridge(): string {
   const lines = [
     "/* Ponte de migração: nomes antigos do UpBot apontando para os tokens do Boto. GERADO por scripts/build-tokens.ts.",
     " * Permite trocar apps/desktop/src/styles/tokens.css sem reescrever boto.css de uma vez. Remover quando ninguém mais usar os nomes antigos. */",
-    ':root, [data-theme="dark"] {',
+    ':root, [data-theme="light"], [data-theme="dark"] {',
   ];
   for (const [name, token] of Object.entries(LEGACY_VARS))
     lines.push(`  --${name}: var(--boto-${token});`);
