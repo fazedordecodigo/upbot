@@ -762,6 +762,156 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
   }
 }, 120000);
 
+test("sidebar keeps failed tasks visible, labels statuses and preserves agent selection in settings", async () => {
+  const subject = (await rpc.request("agents.create", {
+    name: "Agente com falha na barra",
+    provider: "grok",
+  })) as Agent;
+  await rpc.request("routines.create", {
+    agentId: subject.id,
+    name: "Rotina da barra",
+    prompt: "Preparar relatório",
+    schedule: "every 30m",
+  });
+  await rpc.request("chat.send", { agentId: subject.id, text: "fail-secret:falha da barra" });
+  let failed = false;
+  for (let attempt = 0; attempt < 150; attempt++) {
+    const history = await rpc.request("chat.history", { agentId: subject.id });
+    if (history.turns.some((turn) => turn.status === "failed")) {
+      failed = true;
+      break;
+    }
+    await Bun.sleep(100);
+  }
+  expect(failed).toBe(true);
+  const target = await newMacAppPage();
+  try {
+    await target.addInitScript((id) => {
+      localStorage.setItem("boto.agent", id);
+      localStorage.setItem("boto.view", "chat");
+    }, subject.id);
+    await gotoApp(target);
+    const side = target.getByRole("complementary", { name: "Barra lateral" });
+    const failure = side.getByRole("region", { name: "Com erro", exact: true });
+    await failure.waitFor();
+    expect(await failure.locator("h2 [data-tone]").getAttribute("data-tone")).toBe("muted");
+    expect(await failure.locator("h2 svg[aria-hidden='true']").count()).toBe(1);
+    expect(await failure.locator("small").first().textContent()).toContain("falha da barra");
+    const row = failure.getByRole("button").filter({ hasText: subject.name });
+    await row.click();
+    expect(await row.getAttribute("aria-current")).toBe("true");
+    await openSettings(target);
+    expect(await row.getAttribute("aria-current")).toBe("true");
+    const nav = side.getByRole("navigation", { name: "Navegação principal" });
+    const labels = await nav.locator(".side-btn > span:first-of-type").allTextContents();
+    expect(labels).toEqual([
+      "Nova tarefa",
+      "Início",
+      "Agentes",
+      "Rotinas",
+      "Modelos",
+      "Marketplace",
+      "Buscar",
+    ]);
+    const routines = nav.getByRole("button", { name: /Rotinas/ });
+    expect(await routines.locator(".sr").textContent()).toMatch(/^\d+ rotinas$/);
+    expect(await routines.locator("[aria-hidden='true']").last().textContent()).toMatch(/^\d+$/);
+    expect(
+      await routines.locator(".side-count").evaluate((element) => {
+        const probe = document.createElement("span");
+        probe.style.background = "var(--boto-color-secondary)";
+        document.body.append(probe);
+        const neutral = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return getComputedStyle(element).backgroundColor === neutral;
+      }),
+    ).toBe(true);
+    await nav.getByRole("button", { name: "Modelos", exact: true }).click();
+    await target.getByRole("region", { name: "Modelos", exact: true }).waitFor();
+    expect(
+      await nav.getByRole("button", { name: "Modelos", exact: true }).getAttribute("aria-current"),
+    ).toBe("page");
+    await target.getByRole("button", { name: "Tarefa em branco" }).click();
+    await target.getByRole("button", { name: "Configurar agente" }).waitFor();
+    await nav.getByRole("button", { name: /^Agentes/ }).click();
+    await target.getByRole("region", { name: "Agentes", exact: true }).waitFor();
+    await target.getByRole("button", { name: "Novo agente", exact: true }).click();
+    const dialog = target.getByRole("dialog", { name: "Novo agente", exact: true });
+    const approval = dialog.getByRole("switch", { name: "Pedir aprovação" });
+    expect(await approval.getAttribute("aria-checked")).toBe("true");
+    expect(await dialog.getAttribute("class")).toBeNull();
+    expect(await dialog.locator("#an-approval-label").count()).toBe(0);
+    await target.keyboard.press("Escape");
+  } finally {
+    await target.close();
+    await rpc.request("agents.delete", { id: subject.id });
+  }
+}, 45000);
+
+test("sidebar becomes a keyboard-accessible Sheet up to 1023px and controls grow only for touch", async () => {
+  const subject = (await rpc.request("agents.create", {
+    name: "Agente do Sheet",
+    provider: "grok",
+  })) as Agent;
+  const target = await newMacAppPage();
+  try {
+    await target.addInitScript((id) => {
+      localStorage.setItem("boto.agent", id);
+      localStorage.setItem("boto.view", "chat");
+    }, subject.id);
+    await gotoApp(target);
+    await target.getByRole("button", { name: "Configurar agente" }).waitFor();
+    const toggle = target.getByRole("button", { name: "Abrir barra lateral" });
+    for (const width of [1024, 1023, 900, 760, 759]) {
+      await target.setViewportSize({ width, height: 900 });
+      if (width === 1024) {
+        await target.getByRole("complementary", { name: "Barra lateral" }).waitFor();
+        expect(await toggle.isVisible()).toBe(false);
+        continue;
+      }
+      await toggle.waitFor();
+      expect(await target.locator("#bot-drawer").isVisible()).toBe(false);
+      await toggle.click();
+      const sheet = target.getByRole("dialog", { name: "Barra lateral", exact: true });
+      await sheet.waitFor();
+      expect(await sheet.getAttribute("aria-modal")).toBe("true");
+      expect(await target.locator("main").evaluate((element) => element.inert)).toBe(true);
+      await target.keyboard.press("Escape");
+      await sheet.waitFor({ state: "hidden" });
+      expect(await toggle.evaluate((element) => element === document.activeElement)).toBe(true);
+    }
+    await target.setViewportSize({ width: 1280, height: 900 });
+    await target.evaluate(() => {
+      const probe = document.createElement("button");
+      probe.id = "control-height-probe";
+      probe.textContent = "Controle de teste";
+      document.body.append(probe);
+    });
+    const probe = target.locator("#control-height-probe");
+    expect(await probe.evaluate((element) => getComputedStyle(element).minHeight)).toBe("36px");
+    const touch = await browser.newContext({
+      hasTouch: true,
+      viewport: { width: 1280, height: 900 },
+    });
+    try {
+      const touchPage = await touch.newPage();
+      await gotoApp(touchPage);
+      await touchPage.getByRole("button", { name: "Configurar agente" }).waitFor();
+      expect(await touchPage.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+      expect(
+        await touchPage
+          .getByRole("button", { name: "Configurar agente" })
+          .evaluate((element) => getComputedStyle(element).minHeight),
+      ).toBe("44px");
+    } finally {
+      await touch.close();
+    }
+  } finally {
+    await target.close();
+    await rpc.request("agents.delete", { id: subject.id });
+  }
+}, 45000);
+
 test("existing memories are editable inline and only persist on Save", async () => {
   writeFileSync(
     join(state, "fake", "state.json"),
