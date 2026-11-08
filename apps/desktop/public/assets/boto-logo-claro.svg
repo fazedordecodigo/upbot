@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 64" width="200" height="64" role="img" aria-label="boto">
-  <!-- Versão para fundos claros (Praia #f6f8f7 ou branco) -->
+  <!-- VersÃ£o para fundos claros (Praia #f6f8f7 ou branco) -->
   <path fill="#c2456b" fill-rule="evenodd" d="M20 43C14 34 20 6 40 6C52 6 60 16 60 28C60 41 50 50 38 50L28 50C21 50 14 54 8 57.6C6.4 58.5 5.2 56.6 6.6 55.5C10.5 52.5 15.5 47.5 20 43ZM26.2 38a2.8 2.8 0 1 0 5.6 0a2.8 2.8 0 1 0-5.6 0Z"/>
   <g transform="translate(78 12)" fill="none" stroke-width="7">
     <rect x="0" y="0" width="7" height="40" fill="#0c1416"/>
