@@ -5,7 +5,7 @@ import type { AgentOverview } from "../hooks/useOverview";
 import { agentSituation } from "../lib/agent-surface";
 import type { DaemonClient } from "../lib/daemon";
 import { mod } from "../lib/platform";
-import { fmtTime } from "../lib/ui";
+import { fmtTime, statusIcon, statusTone, type UiStatus } from "../lib/ui";
 import { BotoSimboloCurrentcolorIcon } from "./ds/icons";
 import { Icon } from "./icons";
 
@@ -29,6 +29,7 @@ export function Sidebar({
   onHome,
   onAgents,
   onScheduled,
+  onTemplates,
   onMarketplace,
   onSettings,
   onAgent,
@@ -53,6 +54,7 @@ export function Sidebar({
   onHome: () => void;
   onAgents: () => void;
   onScheduled: () => void;
+  onTemplates: () => void;
   onMarketplace: () => void;
   onSettings: () => void;
   onAgent: (id: string) => void;
@@ -76,27 +78,43 @@ export function Sidebar({
   const groups = [
     {
       id: "working",
-      label: "Em andamento",
+      label: "Em execução",
+      status: "run" as UiStatus,
       items: agents.filter((agent) => agentSituation(overview[agent.id]) === "working"),
     },
     {
       id: "waiting",
       label: "Aguardando você",
+      status: "wait" as UiStatus,
       items: agents.filter((agent) => agentSituation(overview[agent.id]) === "waiting"),
     },
     {
       id: "paused",
       label: "Pausadas",
+      status: "idle" as UiStatus,
       items: agents.filter((agent) => agentSituation(overview[agent.id]) === "paused"),
     },
     {
+      id: "failed",
+      label: "Com erro",
+      status: "err" as UiStatus,
+      items: agents.filter(
+        (agent) =>
+          agentSituation(overview[agent.id]) === "idle" &&
+          (overview[agent.id]?.latestTurn?.status === "failed" ||
+            overview[agent.id]?.status === "err"),
+      ),
+    },
+    {
       id: "recent",
-      label: "Recentes",
+      label: "Concluídas",
+      status: "ok" as UiStatus,
       items: agents
         .filter((agent) => {
           const item = overview[agent.id];
           return (
             agentSituation(item) === "idle" &&
+            item?.status !== "err" &&
             item?.latestTurn?.status === "completed" &&
             Boolean(item.task)
           );
@@ -180,7 +198,21 @@ export function Sidebar({
         >
           <Icon name="repeat" />
           <span>Rotinas</span>
-          {routineCount > 0 && <span className="side-count">{routineCount}</span>}
+          {routineCount > 0 && (
+            <span className="side-count">
+              <span className="sr">{routineCount} rotinas</span>
+              <span aria-hidden="true">{routineCount}</span>
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          className="side-btn"
+          aria-current={current === "templates" ? "page" : undefined}
+          onClick={onTemplates}
+        >
+          <Icon name="doc" />
+          <span>Modelos</span>
         </button>
         <button
           type="button"
@@ -204,25 +236,37 @@ export function Sidebar({
         {groups.map((group) =>
           group.items.length === 0 ? null : (
             <section key={group.id} aria-label={group.label}>
-              <h2 className="side-label">{group.label}</h2>
+              <h2 className="side-label">
+                <span
+                  className="rn-status"
+                  data-tone={group.id === "paused" ? "muted" : statusTone(group.status)}
+                >
+                  <Icon name={statusIcon(group.status, group.id === "paused")} />
+                  {group.label}
+                </span>
+              </h2>
               <ul className="side-bots">
                 {group.items.map((agent) => {
                   const item = overview[agent.id];
                   const summary = item?.task || named(agent);
                   const when = fmtTime(item?.latestTurn?.endedAt ?? item?.latestTurn?.startedAt);
+                  const error = statuses[agent.id]?.error || item?.latestTurn?.error;
                   return (
                     <li key={agent.id}>
                       <button
                         type="button"
                         className="side-bot"
                         aria-current={
-                          current === "chat" && selectedId === agent.id ? "true" : undefined
+                          (current === "chat" || current === "agent-settings") &&
+                          selectedId === agent.id
+                            ? "true"
+                            : undefined
                         }
                         onClick={() => onAgent(agent.id)}
                       >
                         <b>{summary}</b>
-                        <small title={statuses[agent.id]?.error ?? named(agent)}>
-                          {named(agent)}
+                        <small title={error || named(agent)}>
+                          {error ? `${named(agent)} · ${error}` : named(agent)}
                           {when !== "—" ? ` · ${when}` : ""}
                         </small>
                       </button>
