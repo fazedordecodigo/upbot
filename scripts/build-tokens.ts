@@ -202,15 +202,15 @@ export function renderTokensCss(tokens: Tokens, raw: string): string {
   lines.push(
     "}",
     "",
-    "/* Movimento reduzido (WCAG 2.3.3, preferência do sistema): durações zeradas e animações paradas. */",
+    "/* Movimento reduzido (WCAG 2.3.3, preferência do sistema): durações de 1ms. */",
     "@media (prefers-reduced-motion: reduce) {",
     "  :root {",
   );
   for (const key of Object.keys(tokens.motion.duration))
-    lines.push(`    --boto-duration-${key}: 0ms;`);
+    lines.push(`    --boto-duration-${key}: 1ms;`);
   lines.push(
     "  }",
-    "  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }",
+    "  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }",
     "}",
     "",
   );
