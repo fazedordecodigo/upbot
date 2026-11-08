@@ -40,7 +40,7 @@
 .input[aria-invalid="true"] { border-style: dashed; border-color: var(--fg); }
 textarea.input { min-height: var(--boto-size-textarea); resize: vertical; line-height: 1.5; }
 .switch { width: var(--boto-size-target); height: var(--boto-size-target); min-width: var(--boto-size-target); min-height: var(--boto-size-target); border-radius: var(--boto-radius-full); border: 0; background: transparent; flex: none; }
-.switch::before { content: ''; position: absolute; top: calc(50% - var(--boto-size-switch-height) / 2); min-width: 0; width: var(--boto-size-switch-track); height: var(--boto-size-badge); left: calc((var(--boto-size-target) - var(--boto-size-switch-track)) / 2); border-radius: var(--boto-radius-full); background: var(--border); }
+.switch::before { content: ''; position: absolute; top: calc(50% - var(--boto-size-switch-height) / 2); min-width: 0; width: var(--boto-size-switch-track); height: var(--boto-size-switch-height); left: calc((var(--boto-size-target) - var(--boto-size-switch-track)) / 2); border-radius: var(--boto-radius-full); background: var(--border); }
 .switch span { position: absolute; top: calc(50% - var(--boto-size-switch-thumb) / 2); left: calc((var(--boto-size-target) - var(--boto-size-switch-track)) / 2 + var(--boto-size-switch-inset)); width: var(--boto-size-switch-thumb); height: var(--boto-size-switch-thumb); border-radius: var(--boto-radius-full); background: var(--surface); box-shadow: var(--shadow-icon); transition: transform var(--dur-fast) var(--ease); }
 .switch[aria-checked="true"]::before { background: var(--fg); }
 .switch[aria-checked="true"] span { transform: translateX(var(--boto-space-4)); }
