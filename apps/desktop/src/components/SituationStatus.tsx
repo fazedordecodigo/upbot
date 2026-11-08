@@ -14,7 +14,7 @@ export function SituationStatus({
   const tone = pausedLabel ? "muted" : statusTone(status);
   const label = pausedLabel ? "Fila pausada" : ST[status];
   return (
-    <span className="rn-status" data-tone={tone} title={detail || undefined}>
+    <span className="status" data-tone={tone} title={detail || undefined}>
       <Icon name={statusIcon(status, pausedLabel)} size={13} />
       {label}
     </span>

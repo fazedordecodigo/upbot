@@ -25,6 +25,7 @@ import {
   startDaemon,
   stopDaemon,
 } from "../../../packages/daemon/test/helpers";
+import { expectSwitchGeometry } from "./switch-geometry";
 
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
@@ -361,13 +362,22 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
     await page.getByRole("button", { name: "Abrir barra lateral", exact: true }).click();
     await page.keyboard.press("Escape");
     expect(await page.locator(".side").isVisible()).toBe(false);
-    await page.getByRole("tab", { name: "Área de trabalho", exact: true }).click();
-    await page.getByRole("region", { name: "Área de trabalho do agente" }).waitFor();
+    const deskTab = page.getByRole("tab", { name: "Área de trabalho", exact: true });
+    const activityTab = page.getByRole("tab", { name: "Atividade", exact: true });
+    await deskTab.click();
+    const deskPanel = page.getByRole("tabpanel", { name: "Área de trabalho", exact: true });
+    await deskPanel.waitFor();
+    expect(await deskTab.getAttribute("aria-controls")).toBe(await deskPanel.getAttribute("id"));
+    expect(await deskPanel.getAttribute("aria-labelledby")).toBe(await deskTab.getAttribute("id"));
     await capture(`details-700-${theme}`);
-    await page.getByRole("tab", { name: "Atividade", exact: true }).click();
-    await page.getByRole("region", { name: "Área de trabalho do agente" }).waitFor({
-      state: "hidden",
-    });
+    await activityTab.click();
+    await deskPanel.waitFor({ state: "hidden" });
+    const activityPanel = page.locator(`[id="${await activityTab.getAttribute("aria-controls")}"]`);
+    expect(await activityPanel.getAttribute("role")).toBe("tabpanel");
+    expect(await activityPanel.getAttribute("aria-labelledby")).toBe(
+      await activityTab.getAttribute("id"),
+    );
+    expect(await activityPanel.isVisible()).toBe(true);
     await page.setViewportSize({ width: 1440, height: 1000 });
   }
 }, 90000);
@@ -602,18 +612,77 @@ test("sidebar navigation, real approval counts, routines, groups, profile and th
   await side.getByRole("button", { name: /Agentes/ }).click();
   const card = (name: string) => page.locator(".ag-card", { hasText: name });
   const statusOf = async (name: string, tone: string, label: string) => {
-    const badge = card(name).locator(`.rn-status[data-tone="${tone}"]`, { hasText: label });
+    const badge = card(name).locator(`.status[data-tone="${tone}"]`, { hasText: label });
     await badge.waitFor();
     expect(await badge.locator("svg").count()).toBe(1);
   };
-  const waitingBadge = card("Despesas de outubro").locator(".rn-status");
-  await waitingBadge.waitFor();
-  expect(["run", "wait"]).toContain(await waitingBadge.getAttribute("data-tone"));
-  expect(await waitingBadge.locator("svg").count()).toBe(1);
-  await statusOf("Caixa de entrada", "run", "Em execução");
-  await statusOf("Viagem a Recife", "muted", "Com erro");
-  await statusOf("Revisão de notas", "muted", "Fila pausada");
-  await statusOf(bot.name, "done", "Concluído");
+  const situations = [
+    ["Despesas de outubro", "wait", "Aguardando você"],
+    ["Caixa de entrada", "run", "Em execução"],
+    ["Viagem a Recife", "muted", "Com erro"],
+    ["Revisão de notas", "muted", "Fila pausada"],
+    [bot.name, "done", "Concluído"],
+  ] as const;
+  for (const [name, tone, label] of situations) await statusOf(name, tone, label);
+  const statusToken = {
+    run: "--boto-color-success",
+    wait: "--boto-color-primary",
+    muted: "--boto-color-muted-foreground",
+    done: "--boto-color-muted-foreground",
+  } as const;
+  const initialTheme = await page.evaluate(() => document.documentElement.dataset.theme ?? "");
+  for (const theme of ["light", "dark"] as const) {
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+    }, theme);
+    for (const [name, tone] of situations) {
+      const result = await card(name)
+        .locator(`.status[data-tone="${tone}"]`)
+        .evaluate((element, token) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = 1;
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Missing canvas context");
+          const pixel = (color: string) => {
+            context.clearRect(0, 0, 1, 1);
+            context.fillStyle = color;
+            context.fillRect(0, 0, 1, 1);
+            return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
+          };
+          const luminance = (rgb: number[]) => {
+            const [r = 0, g = 0, b = 0] = rgb.map((value) => {
+              const channel = value / 255;
+              return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+            });
+            return r * 0.2126 + g * 0.7152 + b * 0.0722;
+          };
+          const surface = element.closest(".ag-card");
+          if (!surface) throw new Error("Missing agent card");
+          const icon = element.querySelector("svg");
+          if (!icon) throw new Error("Missing status icon");
+          const ink = getComputedStyle(element).color;
+          const probe = document.createElement("i");
+          probe.style.color = `var(${token})`;
+          surface.append(probe);
+          const expected = getComputedStyle(probe).color;
+          probe.remove();
+          const a = luminance(pixel(getComputedStyle(surface).backgroundColor));
+          const b = luminance(pixel(ink));
+          return {
+            contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+            matchesToken: ink === expected,
+            iconMatches: getComputedStyle(icon).color === ink,
+          };
+        }, statusToken[tone]);
+      expect(result.matchesToken).toBe(true);
+      expect(result.iconMatches).toBe(true);
+      expect(result.contrast).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+  await page.evaluate((theme) => {
+    if (theme) document.documentElement.dataset.theme = theme;
+    else delete document.documentElement.dataset.theme;
+  }, initialTheme);
   await side.getByRole("button", { name: "Configurações", exact: true }).click();
   await page.getByRole("tab", { name: "Apps", exact: true }).click();
   await page.getByRole("heading", { name: "Apps conectados", exact: true }).waitFor();
@@ -914,6 +983,23 @@ test("routine history opens chat and appears in the saved routine dialog", async
     await dialog.getByText("Concluída", { exact: true }).waitFor();
     await dialog.getByText(/Início:/).scrollIntoViewIfNeeded();
     await capture("routine-history", target);
+    for (const theme of ["light", "dark"] as const) {
+      await target.evaluate((theme) => {
+        document.documentElement.dataset.theme = theme;
+      }, theme);
+      for (const name of ["Também começar por webhook", "Ativa"]) {
+        const control = dialog.getByRole("switch", { name, exact: true });
+        await control.scrollIntoViewIfNeeded();
+        for (let toggle = 0; toggle < 2; toggle++) {
+          await expectSwitchGeometry(control, "span");
+          const checked = await control.getAttribute("aria-checked");
+          await control.click();
+          await dialog
+            .getByRole("switch", { name, exact: true, checked: checked !== "true" })
+            .waitFor();
+        }
+      }
+    }
   } finally {
     await target.close();
     await rpc.request("routines.delete", { id: routine.id });
