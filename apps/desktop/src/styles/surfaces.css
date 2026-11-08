@@ -33,7 +33,7 @@
   gap: var(--boto-space-2);
   height: auto;
   min-height: 22px;
-  padding: 0 var(--boto-space-0-5);
+  padding: 0;
   border-radius: 0;
   background: none;
   font: 500 var(--boto-font-size-sm) var(--boto-font-sans);
@@ -142,7 +142,7 @@ button.side-brand {
   background: var(--boto-color-card);
 }
 .lane-item:hover { background: var(--boto-color-accent-surface); }
-.lane-copy { flex: 1; min-width: 0; display: grid; gap: var(--boto-space-0-5); }
+.lane-copy { flex: 1; min-width: 0; display: grid; gap: var(--boto-space-1); }
 .lane-copy small { color: var(--muted); font-size: var(--boto-font-size-sm); }
 .pc-card {
   padding: var(--boto-space-5);
@@ -184,7 +184,7 @@ button.side-brand {
 }
 .ag-stats div {
   display: grid;
-  gap: var(--boto-space-0-5);
+  gap: var(--boto-space-1);
   padding: var(--boto-space-4);
   border: 1px solid var(--border);
   border-radius: var(--boto-radius-lg);
@@ -247,7 +247,7 @@ button.side-brand {
   gap: var(--boto-space-2);
   margin: 0;
 }
-.ag-facts div { display: grid; gap: var(--boto-space-0-5); min-width: 0; }
+.ag-facts div { display: grid; gap: var(--boto-space-1); min-width: 0; }
 .ag-facts dt { color: var(--muted); font-size: var(--boto-font-size-xs); }
 .ag-facts dd {
   margin: 0;
@@ -292,7 +292,7 @@ dialog.agent-panel {
 .ap-slots { display: grid; gap: var(--boto-space-1); }
 .ap-slots b { font: 600 var(--boto-font-size-2xl)/1 var(--boto-font-mono); }
 .ap-slots span, .ap-machine span { color: var(--muted); font-size: var(--boto-font-size-sm); }
-.ap-machine { display: grid; gap: var(--boto-space-0-5); }
+.ap-machine { display: grid; gap: var(--boto-space-1); }
 .ap-machine .ap-machine-size { white-space: nowrap; }
 .ap-queue { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--boto-space-2); }
 .ap-queue li {
