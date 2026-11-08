@@ -3,6 +3,7 @@ name: Windows installer (develop snapshot)
 on:
   push:
     branches: ["devin/*-windows-installer"]
+    paths: [".github/workflows/windows-installer.yml"]
   workflow_dispatch:
 
 jobs:

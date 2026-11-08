@@ -1,0 +1,28 @@
+name: macOS installer (develop snapshot)
+
+on:
+  push:
+    branches: ["devin/*-windows-installer"]
+    paths: [".github/workflows/macos-installer.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd apps/desktop tauri build --bundles app,dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boto-macos-arm64
+          path: apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
