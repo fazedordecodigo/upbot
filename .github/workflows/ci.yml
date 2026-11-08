@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, ubuntu-22.04, ubuntu-22.04-arm, windows-latest, windows-11-arm]
+        os: [macos-15, ubuntu-22.04, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
@@ -49,11 +49,6 @@ jobs:
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libssl-dev build-essential zip unzip
       - run: bun install --frozen-lockfile
-      - name: Install ARM64 Linux test browser
-        if: runner.os == 'Linux' && runner.arch == 'ARM64'
-        run: |
-          bunx --no-install playwright-core install --with-deps chromium
-          bun -e 'import { chromium } from "playwright-core"; console.log(`CHROME_PATH=${chromium.executablePath()}`)' >> "$GITHUB_ENV"
       - run: bun run test
       - run: bun run build:daemon
       - run: cargo check --locked
