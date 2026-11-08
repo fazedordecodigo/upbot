@@ -1,0 +1,1139 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boto — seu colega de trabalho virtual</title>
+<meta name="description" content="Boto, a plataforma de agentes de IA que trabalham num computador próprio na nuvem e executam tarefas de ponta a ponta.">
+<link rel="icon" href="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/favicon.svg?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np" type="image/svg+xml">
+<style>
+/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio, geometry.
+   Put this @layer first; product CSS outside the layer wins ordinary layout rules.
+   Native hidden and closed-dialog states take precedence over component display rules. */
+@layer od-layout {
+  [hidden]:not([hidden="until-found" i]) { display: none !important; }
+  dialog:not([open]) { display: none !important; }
+
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+
+  .od-icon { display: inline-block; inline-size: var(--od-icon-size, 1em); block-size: var(--od-icon-size, 1em); flex: none; }
+
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }
+  .od-nowrap  { white-space: nowrap; }
+  .od-keep    { word-break: keep-all; overflow-wrap: anywhere; }
+
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch  { min-width: 44px; min-height: 44px; }
+}
+:root [hidden]:where(:not([hidden="until-found" i])) { display: none; }
+/* /OD-LAYOUT-PRIMITIVES v1 */
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/boto-ui.css?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np">
+<link rel="stylesheet" href="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/app.css?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np">
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('boto-theme');
+      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Pular para o conteúdo</a>
+
+<template id="sidebar-tpl">
+  <div class="sb">
+    <div class="sb-head od-row">
+      <button type="button" class="sb-brand" data-action="go-home" aria-label="Boto, ir para o início">
+        <svg class="sb-logo" viewBox="0 0 200 64" width="88" height="28" aria-hidden="true"><use href="#boto-logo"></use></svg>
+      </button>
+      <span class="od-fill"></span>
+      <button type="button" class="btn btn-ghost btn-icon sb-collapse" data-action="collapse-sidebar" data-tip="Recolher barra lateral" aria-label="Recolher barra lateral">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-panel-left"></use></svg>
+      </button>
+      <button type="button" class="btn btn-ghost btn-icon sb-close" data-action="close-sheet" aria-label="Fechar menu">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+      </button>
+    </div>
+
+    <div class="sb-actions od-stack">
+      <button type="button" class="btn btn-outline sb-new" data-action="new-task" data-nav="new">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+        <span class="od-fill">Nova tarefa</span>
+      </button>
+      <button type="button" class="sb-item od-row" data-action="go-home" data-nav="home">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-home"></use></svg>
+        <span class="od-fill">Início</span>
+      </button>
+      <button type="button" class="sb-item od-row" data-action="go-agents" data-nav="agents">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-users"></use></svg>
+        <span class="od-fill">Agentes</span>
+        <span class="sb-count" data-agent-count></span>
+      </button>
+      <button type="button" class="sb-item od-row" data-action="go-routines" data-nav="routines">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-repeat"></use></svg>
+        <span class="od-fill">Rotinas</span>
+        <span class="sb-count" data-routine-count></span>
+      </button>
+      <button type="button" class="sb-item od-row" data-action="go-templates" data-nav="templates">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-layout-template"></use></svg>
+        <span class="od-fill">Modelos</span>
+      </button>
+      <button type="button" class="sb-item od-row" data-action="go-marketplace" data-nav="marketplace">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-store"></use></svg>
+        <span class="od-fill">Marketplace</span>
+      </button>
+      <button type="button" class="sb-item od-row" data-action="open-command">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+        <span class="od-fill">Buscar tarefas</span>
+        <span class="kbd" data-shortcut-label>⌘K</span>
+      </button>
+    </div>
+
+    <nav class="sb-history od-scroll" aria-label="Tarefas" data-history></nav>
+
+    <div class="sb-foot">
+      <hr class="separator">
+      <div class="sb-foot-row od-row">
+        <button type="button" class="sb-user od-row od-fill" data-menu="user-menu" aria-haspopup="menu" aria-expanded="false" data-menu-align="start" aria-label="Menu da conta">
+          <span class="avatar" aria-hidden="true" data-user-avatar></span>
+          <span class="sb-user-name od-truncate od-fill" data-user-name>Você</span>
+          <svg class="od-icon" aria-hidden="true"><use href="#i-chevron-up-down"></use></svg>
+        </button>
+        <button type="button" class="btn btn-ghost btn-icon sb-settings" data-action="go-settings" data-nav="settings" data-tip="Configurações" aria-label="Configurações">
+          <svg class="od-icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar" aria-label="Barra lateral" data-sidebar-slot>
+    <div class="sb-resizer" id="sb-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="sidebar" aria-label="Largura da barra lateral" aria-valuemin="220" aria-valuemax="400" aria-valuenow="272" data-tip="Arraste para ajustar. Duplo clique volta ao padrão."></div>
+  </aside>
+
+  <main class="main" id="main" tabindex="-1" data-view="home">
+    <header class="topbar od-row">
+      <button type="button" class="btn btn-ghost btn-icon topbar-menu" data-action="open-sheet" aria-label="Abrir menu" aria-haspopup="dialog">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-menu"></use></svg>
+      </button>
+      <button type="button" class="btn btn-ghost btn-icon topbar-expand" data-action="expand-sidebar" data-tip="Mostrar barra lateral" aria-label="Mostrar barra lateral" hidden>
+        <svg class="od-icon" aria-hidden="true"><use href="#i-panel-left"></use></svg>
+      </button>
+      <span class="od-fill"></span>
+      <div class="private-toggle od-row">
+        <span class="private-label" id="private-label">Privada</span>
+        <button type="button" class="switch" role="switch" aria-checked="false" aria-labelledby="private-label" id="private-switch" data-tip="Tarefas privadas não ficam no histórico"></button>
+      </div>
+      <button type="button" class="btn btn-ghost btn-icon" data-theme-toggle aria-label="Tema escuro" aria-pressed="true" data-tip="Alternar tema">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-moon"></use></svg>
+      </button>
+    </header>
+
+    <!-- Início -->
+    <section class="view home od-scroll" id="view-home" aria-labelledby="home-title">
+      <div class="home-inner">
+        <div class="home-head">
+          <div class="od-field od-fill">
+            <p class="hero-greeting" id="greeting">Boa noite.</p>
+            <h1 class="home-title" id="home-title" tabindex="-1">O trabalho do Boto hoje</h1>
+          </div>
+          <button type="button" class="btn btn-primary home-new" data-action="new-task">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+            Nova tarefa
+          </button>
+        </div>
+
+        <div class="lanes">
+          <section class="lane" aria-labelledby="lane-running-title">
+            <div class="section-head od-row">
+              <h2 class="section-title" id="lane-running-title">Em andamento</h2>
+              <span class="badge badge-secondary" id="lane-running-count"></span>
+            </div>
+            <div id="lane-running"></div>
+          </section>
+          <section class="lane" aria-labelledby="lane-waiting-title">
+            <div class="section-head od-row">
+              <h2 class="section-title" id="lane-waiting-title">Aguardando você</h2>
+              <span class="badge badge-secondary" id="lane-waiting-count"></span>
+            </div>
+            <div id="lane-waiting"></div>
+          </section>
+        </div>
+
+        <section aria-labelledby="deliveries-title">
+          <div class="section-head od-row">
+            <h2 class="section-title" id="deliveries-title">Entregas recentes</h2>
+          </div>
+          <div id="deliveries"></div>
+        </section>
+
+        <aside class="card pc-card" id="pc-card" aria-labelledby="pc-card-title"></aside>
+      </div>
+    </section>
+
+    <!-- Agentes: cockpit -->
+    <section class="view agents-view od-scroll" id="view-agents" aria-labelledby="agents-title" hidden>
+      <div class="page-inner page-wide">
+        <div class="page-head">
+          <div class="od-field od-fill">
+            <h1 class="page-title" id="agents-title" tabindex="-1">Agentes</h1>
+            <p class="page-sub">O quadro de todos os agentes do Boto. Cada agente tem uma especialidade, trabalha em instâncias próprias no computador na nuvem e puxa a próxima tarefa da fila quando uma instância fica livre.</p>
+          </div>
+          <button type="button" class="btn btn-primary" data-action="new-agent" id="new-agent">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+            Novo agente
+          </button>
+        </div>
+
+        <section class="ag-stats" id="ag-stats" aria-label="Resumo dos agentes"></section>
+
+        <section aria-labelledby="ag-board-title">
+          <div class="ag-toolbar">
+            <h2 class="section-title" id="ag-board-title">Quadro</h2>
+            <div class="tabs-list ag-filter" role="radiogroup" aria-label="Filtrar agentes pela situação" id="ag-filter"></div>
+          </div>
+          <div id="ag-grid"></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- Nova tarefa: chat com o Boto -->
+    <section class="view chat" id="view-new" aria-labelledby="chat-title" hidden>
+      <div class="chat-scroll od-scroll">
+        <div class="chat-inner" role="log" aria-label="Conversa com o Boto">
+          <div class="chat-msg">
+            <span class="chat-avatar" aria-hidden="true"><svg viewBox="0 0 64 64" width="20" height="20"><use href="#boto-mark"></use></svg></span>
+            <div class="chat-body">
+              <p class="chat-label">Boto</p>
+              <p class="chat-greeting" id="chat-greeting">Boa noite.</p>
+              <h1 class="chat-title" id="chat-title" tabindex="-1">O que eu devo fazer hoje?</h1>
+              <p class="chat-text">Descreva a tarefa e o resultado esperado. Trabalho no meu computador na nuvem, mostro cada etapa e peço sua aprovação antes de ações externas.</p>
+              <div class="chat-mem" id="chat-greet-mem"></div>
+              <button type="button" class="btn btn-outline btn-sm chat-link" data-action="go-templates">
+                <svg class="od-icon" aria-hidden="true"><use href="#i-layout-template"></use></svg>
+                Começar de um modelo
+              </button>
+            </div>
+          </div>
+          <div class="chat-msg" id="chat-template-note" hidden>
+            <span class="chat-avatar" aria-hidden="true"><svg viewBox="0 0 64 64" width="20" height="20"><use href="#boto-mark"></use></svg></span>
+            <div class="chat-body">
+              <p class="chat-label">Boto</p>
+              <p class="chat-text" id="chat-template-text"></p>
+              <div class="chat-mem" id="chat-template-mem"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-compose">
+            <p class="hero-private od-row" id="hero-private" hidden>
+              <svg class="od-icon" aria-hidden="true"><use href="#i-eye-off"></use></svg>
+              <span>Tarefa privada: ela não fica no histórico nem nas entregas.</span>
+            </p>
+
+            <div class="composer" id="composer">
+              <div class="composer-files" id="composer-files" hidden></div>
+              <label class="sr-only" for="composer-input">Tarefa para o Boto</label>
+              <textarea class="composer-input" id="composer-input" rows="2" placeholder="Descreva a tarefa e o resultado esperado" autocomplete="off"></textarea>
+              <div class="composer-bar">
+                <button type="button" class="btn btn-ghost btn-icon composer-attach" data-action="attach" data-tip="Anexar arquivo" aria-label="Anexar arquivo">
+                  <svg class="od-icon" aria-hidden="true"><use href="#i-paperclip"></use></svg>
+                </button>
+                <input type="file" id="file-input" class="sr-only" tabindex="-1" aria-hidden="true">
+                <button type="button" class="btn btn-ghost btn-sm opt-trigger" id="when-trigger" data-menu="when-menu" aria-haspopup="menu" aria-expanded="false" data-menu-align="start">
+                  <svg class="od-icon" aria-hidden="true"><use href="#i-clock"></use></svg>
+                  <span class="opt-key">Quando</span>
+                  <span class="opt-value" id="when-label">Agora</span>
+                  <svg class="od-icon opt-chevron" aria-hidden="true"><use href="#i-chevron-down"></use></svg>
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm opt-trigger" id="where-trigger" data-menu="where-menu" aria-haspopup="menu" aria-expanded="false" data-menu-align="start">
+                  <svg class="od-icon" aria-hidden="true"><use href="#i-monitor"></use></svg>
+                  <span class="opt-key">Onde</span>
+                  <span class="opt-value" id="where-label">Navegador e terminal</span>
+                  <svg class="od-icon opt-chevron" aria-hidden="true"><use href="#i-chevron-down"></use></svg>
+                </button>
+                <div class="opt-approval od-row">
+                  <svg class="od-icon" aria-hidden="true"><use href="#i-shield-check"></use></svg>
+                  <span id="approval-label">Pedir aprovação</span>
+                  <button type="button" class="switch" role="switch" aria-checked="true" aria-labelledby="approval-label" aria-describedby="approval-help" id="approval-switch"></button>
+                  <span class="sr-only" id="approval-help">O Boto para e pergunta antes de ações externas, como enviar e-mail, publicar ou abrir um PR.</span>
+                </div>
+                <span class="composer-spacer"></span>
+                <button type="button" class="btn btn-primary btn-pill composer-send" id="send" disabled>
+                  <span id="send-label">Delegar</span>
+                  <svg class="od-icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+                </button>
+              </div>
+            </div>
+      </div>
+    </section>
+
+    <!-- Modelos de tarefa -->
+    <section class="view templates-view od-scroll" id="view-templates" aria-labelledby="templates-title" hidden>
+      <div class="page-inner">
+        <div class="page-head">
+          <div class="od-field od-fill">
+            <h1 class="page-title" id="templates-title" tabindex="-1">Modelos</h1>
+            <p class="page-sub">Tarefas prontas para começar. Escolha um modelo: ele abre uma nova tarefa já preenchida, e você ajusta o texto e as opções antes de delegar.</p>
+          </div>
+          <button type="button" class="btn btn-outline" data-action="new-task">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+            Tarefa em branco
+          </button>
+        </div>
+        <section aria-labelledby="tpl-now-title">
+          <div class="section-head od-row"><h2 class="section-title" id="tpl-now-title">Executar uma vez</h2></div>
+          <div class="templates">
+            <button type="button" class="template" data-template="ci">
+              <svg class="od-icon" aria-hidden="true"><use href="#i-git-pull-request"></use></svg>
+              <span class="od-field od-fill">
+                <span class="template-name">Corrigir o teste que falha no CI e abrir um PR</span>
+                <span class="template-desc">Reproduz a falha no terminal, corrige o código e abre o PR com a descrição da causa.</span>
+                <span class="template-meta">Agora · com aprovação</span>
+              </span>
+            </button>
+            <button type="button" class="template" data-template="email">
+              <svg class="od-icon" aria-hidden="true"><use href="#i-mail"></use></svg>
+              <span class="od-field od-fill">
+                <span class="template-name">Resumir a reunião de produto e enviar ao time por e-mail</span>
+                <span class="template-desc">Lê a transcrição, escreve as decisões e os próximos passos e prepara o e-mail.</span>
+                <span class="template-meta">Agora · com aprovação</span>
+              </span>
+            </button>
+            <button type="button" class="template" data-template="deps">
+              <svg class="od-icon" aria-hidden="true"><use href="#i-terminal"></use></svg>
+              <span class="od-field od-fill">
+                <span class="template-name">Atualizar as dependências desatualizadas e abrir um PR</span>
+                <span class="template-desc">Lista o que está velho, atualiza, ajusta a configuração e roda os testes.</span>
+                <span class="template-meta">Agora · com aprovação</span>
+              </span>
+            </button>
+            <button type="button" class="template" data-template="research">
+              <svg class="od-icon" aria-hidden="true"><use href="#i-globe"></use></svg>
+              <span class="od-field od-fill">
+                <span class="template-name">Comparar planos de hospedagem e recomendar um</span>
+                <span class="template-desc">Pesquisa as fontes oficiais e entrega um relatório com prós e contras.</span>
+                <span class="template-meta">Agora · só navegador</span>
+              </span>
+            </button>
+          </div>
+        </section>
+        <section aria-labelledby="tpl-repeat-title">
+          <div class="section-head od-row"><h2 class="section-title" id="tpl-repeat-title">Rotinas</h2></div>
+          <div class="templates">
+            <button type="button" class="template" data-template="sales">
+              <svg class="od-icon" aria-hidden="true"><use href="#i-sheet"></use></svg>
+              <span class="od-field od-fill">
+                <span class="template-name">Toda segunda, consolidar as vendas da semana numa planilha</span>
+                <span class="template-desc">Baixa os relatórios do painel, junta os dados e salva a planilha no Drive.</span>
+                <span class="template-meta">Rotina · segunda às 9h</span>
+              </span>
+            </button>
+            <button type="button" class="template" data-template="inbox">
+              <svg class="od-icon" aria-hidden="true"><use href="#i-repeat"></use></svg>
+              <span class="od-field od-fill">
+                <span class="template-name">Todo dia, resumir o que chegou na minha caixa de entrada</span>
+                <span class="template-desc">Separa o que pede resposta do que pode esperar e escreve um resumo curto.</span>
+                <span class="template-meta">Rotina · todo dia às 8h</span>
+              </span>
+            </button>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- Tela de uma tarefa -->
+    <section class="view task" id="view-task" aria-labelledby="task-title" hidden>
+      <header class="task-head">
+        <button type="button" class="btn btn-ghost btn-sm task-back" data-action="go-home">
+          <svg class="od-icon" aria-hidden="true"><use href="#i-arrow-left"></use></svg>
+          <span class="ctl-label">Início</span>
+        </button>
+        <div class="od-field od-fill task-heading">
+          <h1 class="task-title od-truncate" id="task-title" tabindex="-1"></h1>
+          <div class="task-meta od-cluster" id="task-meta"></div>
+        </div>
+        <div class="task-controls od-row">
+          <button type="button" class="btn btn-ghost btn-sm ctl-live" id="ctl-live" aria-pressed="true" aria-controls="pc-pane">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-monitor"></use></svg>
+            <span class="ctl-label">Área de trabalho ao vivo</span>
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" id="ctl-pause">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-pause"></use></svg>
+            <span class="ctl-label">Pausar</span>
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" id="ctl-takeover">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-mouse-pointer"></use></svg>
+            <span class="ctl-label">Assumir o controle</span>
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm ctl-stop" id="ctl-stop">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-power"></use></svg>
+            <span class="ctl-label">Encerrar</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="task-tabs">
+        <div class="tabs-list" role="tablist" aria-label="Painéis da tarefa" id="pane-tabs">
+          <button type="button" class="tabs-trigger" role="tab" id="pane-tab-activity" data-pane="activity" aria-controls="tl-pane" aria-selected="true">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-list-checks"></use></svg>
+            Atividade
+          </button>
+          <button type="button" class="tabs-trigger" role="tab" id="pane-tab-computer" data-pane="computer" aria-controls="pc-pane" aria-selected="false" tabindex="-1">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-monitor"></use></svg>
+            Área de trabalho
+          </button>
+        </div>
+      </div>
+
+      <div class="task-body" id="task-body" data-pane="activity">
+        <div class="tl" id="tl-pane" role="region" aria-label="Atividade">
+          <div class="tl-scroll od-scroll" id="tl-scroll">
+            <div class="tl-inner" id="timeline" role="log" aria-live="polite" aria-label="Atividade do Boto"></div>
+          </div>
+          <div class="tl-compose">
+            <div class="composer composer-sm">
+              <label class="sr-only" for="instruct-input">Instrução para o Boto</label>
+              <textarea class="composer-input" id="instruct-input" rows="1" placeholder="Mande uma instrução sem interromper o trabalho" autocomplete="off"></textarea>
+              <button type="button" class="btn btn-secondary btn-icon btn-pill" id="instruct-send" aria-label="Enviar instrução" disabled>
+                <svg class="od-icon" aria-hidden="true"><use href="#i-send"></use></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="split" id="split" role="separator" aria-orientation="vertical" aria-controls="tl-pane" aria-label="Divisão entre a atividade e a área de trabalho" aria-valuemin="30" aria-valuemax="70" aria-valuenow="42" tabindex="0" data-tip="Arraste para ajustar. Duplo clique volta ao padrão."></div>
+
+        <div class="pc" id="pc-pane" role="region" aria-label="Área de trabalho do agente">
+          <div class="desk" id="task-desk" data-desk="task"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Rotinas -->
+    <section class="view routines od-scroll" id="view-routines" aria-labelledby="routines-title" hidden>
+      <div class="page-inner">
+        <div class="page-head">
+          <div class="od-field od-fill">
+            <h1 class="page-title" id="routines-title" tabindex="-1">Rotinas</h1>
+            <p class="page-sub">Tarefas que o Boto executa sozinho no horário marcado, no computador dele na nuvem. Você recebe a entrega quando ficar pronta.</p>
+          </div>
+          <button type="button" class="btn btn-primary" data-action="new-routine" id="new-routine">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+            Nova rotina
+          </button>
+        </div>
+        <section aria-labelledby="rt-recurring-title">
+          <div class="section-head od-row"><h2 class="section-title" id="rt-recurring-title">Recorrentes</h2></div>
+          <div id="rt-recurring"></div>
+        </section>
+        <section aria-labelledby="rt-once-title">
+          <div class="section-head od-row"><h2 class="section-title" id="rt-once-title">Agendadas uma vez</h2></div>
+          <div id="rt-once"></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- Marketplace -->
+    <section class="view mk-view od-scroll" id="view-marketplace" aria-labelledby="mk-title" hidden>
+      <div class="page-inner page-wide mk-inner">
+        <div class="page-head">
+          <div class="od-field od-fill">
+            <h1 class="page-title" id="mk-title" tabindex="-1">Marketplace</h1>
+            <p class="page-sub">Novas ferramentas para os seus agentes: apps, plugins, skills e servidores MCP. O que você instala aqui fica disponível no computador do Boto para todos os agentes. Na primeira vez que um agente usa uma ferramenta numa sessão, ele pede sua permissão.</p>
+          </div>
+        </div>
+
+        <div class="mk-toolbar">
+          <div class="tabs-list mk-tabs" role="tablist" aria-label="Tipo de item" id="mk-tabs"></div>
+          <div class="mk-search od-row">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+            <input class="mk-search-input od-fill" id="mk-search" type="search" placeholder="Buscar por nome ou função" aria-label="Buscar no marketplace" autocomplete="off">
+          </div>
+        </div>
+        <div class="mk-cats od-rail" role="radiogroup" aria-label="Categoria" id="mk-cats"></div>
+
+        <div class="mk-results" id="mk-results" role="tabpanel" aria-labelledby="mk-tab-apps">
+          <section class="mk-featured-wrap" id="mk-featured" aria-labelledby="mk-feat-title"></section>
+          <section aria-labelledby="mk-grid-title">
+            <div class="section-head od-row">
+              <h2 class="section-title" id="mk-grid-title">Apps</h2>
+              <span class="badge badge-secondary" id="mk-grid-count"></span>
+            </div>
+            <div id="mk-grid"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- Configurações -->
+    <section class="view st-view od-scroll" id="view-settings" aria-labelledby="settings-title" hidden>
+      <div class="page-inner page-wide">
+        <div class="page-head">
+          <div class="od-field od-fill">
+            <h1 class="page-title" id="settings-title" tabindex="-1">Configurações</h1>
+            <p class="page-sub">Escolha o provedor de IA que os agentes usam e ajuste a memória, a aparência e a privacidade. Não tem conta no Boto: tudo fica neste navegador.</p>
+          </div>
+        </div>
+
+        <div class="st-layout">
+          <div class="st-nav" role="tablist" aria-orientation="vertical" aria-label="Seções das configurações" id="st-tabs">
+            <button type="button" class="st-tab od-row" role="tab" id="st-tab-provider" data-st="provider" aria-controls="st-provider" aria-selected="true">
+              <svg class="od-icon" aria-hidden="true"><use href="#i-cpu"></use></svg>
+              <span class="od-fill">Provedor de IA</span>
+            </button>
+            <button type="button" class="st-tab od-row" role="tab" id="st-tab-memory" data-st="memory" aria-controls="st-memory" aria-selected="false" tabindex="-1">
+              <svg class="od-icon" aria-hidden="true"><use href="#i-user-check"></use></svg>
+              <span class="od-fill">Você e a memória</span>
+            </button>
+            <button type="button" class="st-tab od-row" role="tab" id="st-tab-appearance" data-st="appearance" aria-controls="st-appearance" aria-selected="false" tabindex="-1">
+              <svg class="od-icon" aria-hidden="true"><use href="#i-palette"></use></svg>
+              <span class="od-fill">Aparência</span>
+            </button>
+            <button type="button" class="st-tab od-row" role="tab" id="st-tab-privacy" data-st="privacy" aria-controls="st-privacy" aria-selected="false" tabindex="-1">
+              <svg class="od-icon" aria-hidden="true"><use href="#i-shield-check"></use></svg>
+              <span class="od-fill">Privacidade</span>
+            </button>
+          </div>
+
+          <div class="st-panels">
+            <!-- Provedor de IA -->
+            <section class="st-panel" id="st-provider" role="tabpanel" aria-labelledby="st-tab-provider" tabindex="-1">
+              <div class="st-block">
+                <div class="st-block-head">
+                  <div class="od-field od-fill">
+                    <h2 class="st-title" id="st-clis-title">CLIs nesta máquina</h2>
+                    <p class="st-desc">Ferramentas de linha de comando dos provedores de IA. O Boto usa as que estão instaladas e mostra como instalar as outras que ele suporta.</p>
+                  </div>
+                  <button type="button" class="btn btn-outline btn-sm od-fixed" id="st-scan">
+                    <svg class="od-icon" aria-hidden="true"><use href="#i-refresh-cw"></use></svg>
+                    <span id="st-scan-label">Procurar de novo</span>
+                  </button>
+                </div>
+                <p class="st-scan-status" id="st-scan-status" aria-live="polite"></p>
+                <div id="st-clis"></div>
+              </div>
+
+              <div class="st-block">
+                <div class="st-block-head">
+                  <div class="od-field od-fill">
+                    <h2 class="st-title">Entrar com a sua conta</h2>
+                    <p class="st-desc">Use a assinatura que você já tem. O login abre no navegador, e o Boto guarda só o acesso, nunca a sua senha.</p>
+                  </div>
+                </div>
+                <div class="st-accounts" id="st-accounts"></div>
+              </div>
+
+              <div class="st-block">
+                <div class="st-block-head">
+                  <div class="od-field od-fill">
+                    <h2 class="st-title">Chaves de API</h2>
+                    <p class="st-desc">Para cobrar direto na sua conta do provedor. A chave fica só neste navegador e aparece mascarada depois de salva.</p>
+                  </div>
+                </div>
+                <div id="st-keys"></div>
+              </div>
+
+              <div class="st-block">
+                <div class="st-block-head">
+                  <div class="od-field od-fill">
+                    <h2 class="st-title" id="st-default-title">Provedor padrão</h2>
+                    <p class="st-desc">O que os agentes usam quando você não escolhe outro. Só aparecem os provedores prontos para uso.</p>
+                  </div>
+                </div>
+                <div id="st-default"></div>
+              </div>
+            </section>
+
+            <!-- Você e a memória -->
+            <section class="st-panel" id="st-memory" role="tabpanel" aria-labelledby="st-tab-memory" tabindex="-1" hidden>
+              <div class="st-block">
+                <div class="st-block-head">
+                  <div class="od-field od-fill">
+                    <h2 class="st-title">Você e a memória</h2>
+                    <p class="st-desc">O Boto não tem cadastro. Ele só sabe o que você escreve aqui e usa isso para personalizar as sessões de todos os agentes.</p>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="label" for="st-name">Como você quer ser chamado</label>
+                  <input class="input" id="st-name" type="text" maxlength="40" autocomplete="nickname" placeholder="Por exemplo: Iara">
+                </div>
+                <div class="field">
+                  <label class="label" for="st-about">Sobre você <span class="label-opt">(opcional)</span></label>
+                  <textarea class="textarea" id="st-about" rows="6" maxlength="600" aria-describedby="st-about-help" placeholder="Sou dev front-end, prefiro respostas curtas, trabalho com React"></textarea>
+                  <p class="field-help od-row" id="st-about-help">
+                    <span class="od-fill">Conte sua função, as ferramentas que usa e como prefere receber as entregas.</span>
+                    <span class="od-nowrap" id="st-about-count">0/600</span>
+                  </p>
+                </div>
+                <div class="st-actions">
+                  <button type="button" class="btn btn-outline st-danger" id="st-forget">
+                    <svg class="od-icon" aria-hidden="true"><use href="#i-trash"></use></svg>
+                    Apagar memória
+                  </button>
+                  <span class="od-fill"></span>
+                  <p class="st-saved" id="st-mem-status" aria-live="polite"></p>
+                  <button type="button" class="btn btn-primary" id="st-mem-save" disabled>Salvar</button>
+                </div>
+              </div>
+              <div class="st-note">
+                <h3 class="st-subtitle">Como o Boto usa a memória</h3>
+                <ul class="st-points">
+                  <li><svg class="od-icon" aria-hidden="true"><use href="#i-check"></use></svg><span>O nome aparece na saudação e no menu da conta.</span></li>
+                  <li><svg class="od-icon" aria-hidden="true"><use href="#i-check"></use></svg><span>O texto entra no contexto de cada tarefa nova. A tela da tarefa mostra o selo “Usando sua memória”.</span></li>
+                  <li><svg class="od-icon" aria-hidden="true"><use href="#i-check"></use></svg><span>Nada sai deste navegador além do que vai junto com a tarefa para o provedor de IA.</span></li>
+                </ul>
+              </div>
+            </section>
+
+            <!-- Aparência -->
+            <section class="st-panel" id="st-appearance" role="tabpanel" aria-labelledby="st-tab-appearance" tabindex="-1" hidden>
+              <div class="st-block">
+                <div class="st-block-head">
+                  <div class="od-field od-fill">
+                    <h2 class="st-title" id="st-theme-label">Tema</h2>
+                    <p class="st-desc">O tema muda na hora e fica salvo neste navegador.</p>
+                  </div>
+                </div>
+                <div class="ob-theme-options st-themes" role="radiogroup" aria-labelledby="st-theme-label" id="st-themes">
+                  <button type="button" class="ob-option ob-theme-option" role="radio" aria-checked="true" data-st-theme="dark">
+                    <span class="ob-swatch" data-swatch="dark" aria-hidden="true"><span></span><span></span></span>
+                    <span class="ob-option-row od-row"><span class="ob-option-name od-fill">Escuro</span><span class="ob-radio" aria-hidden="true"></span></span>
+                  </button>
+                  <button type="button" class="ob-option ob-theme-option" role="radio" aria-checked="false" data-st-theme="light" tabindex="-1">
+                    <span class="ob-swatch" data-swatch="light" aria-hidden="true"><span></span><span></span></span>
+                    <span class="ob-option-row od-row"><span class="ob-option-name od-fill">Claro</span><span class="ob-radio" aria-hidden="true"></span></span>
+                  </button>
+                </div>
+              </div>
+              <div class="st-block">
+                <div class="st-block-head">
+                  <div class="od-field od-fill">
+                    <h2 class="st-title"><label for="st-width">Largura da barra lateral</label></h2>
+                    <p class="st-desc" id="st-width-help">Arraste a borda direita da barra ou use este controle. Vale para telas a partir de 1024 px; no celular a barra abre como painel.</p>
+                  </div>
+                </div>
+                <div class="st-range od-row">
+                  <input class="st-range-input od-fill" type="range" id="st-width" min="220" max="400" step="4" value="272" aria-describedby="st-width-help">
+                  <output class="st-range-value od-nowrap" id="st-width-out" for="st-width">272 px</output>
+                  <button type="button" class="btn btn-outline btn-sm" id="st-width-reset">Restaurar</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Privacidade -->
+            <section class="st-panel" id="st-privacy" role="tabpanel" aria-labelledby="st-tab-privacy" tabindex="-1" hidden>
+              <div class="st-block">
+                <div class="st-block-head">
+                  <div class="od-field od-fill">
+                    <h2 class="st-title">Privacidade</h2>
+                    <p class="st-desc">Os padrões de cada tarefa nova. Você ainda pode mudar na caixa de tarefa antes de delegar.</p>
+                  </div>
+                </div>
+                <div class="st-row od-row">
+                  <span class="od-field od-fill">
+                    <span class="st-row-name" id="st-private-label">Tarefa privada como padrão</span>
+                    <span class="st-row-help" id="st-private-help">As tarefas novas não ficam no histórico, na busca nem nas entregas.</span>
+                  </span>
+                  <button type="button" class="switch od-fixed" role="switch" aria-checked="false" aria-labelledby="st-private-label" aria-describedby="st-private-help" id="st-private"></button>
+                </div>
+                <div class="st-row od-row">
+                  <span class="od-field od-fill">
+                    <span class="st-row-name" id="st-approval-label">Pedir aprovação antes de ações externas</span>
+                    <span class="st-row-help" id="st-approval-help">O agente para e pergunta antes de enviar e-mail, publicar, abrir um PR ou mexer em pagamentos.</span>
+                  </span>
+                  <button type="button" class="switch od-fixed" role="switch" aria-checked="true" aria-labelledby="st-approval-label" aria-describedby="st-approval-help" id="st-approval"></button>
+                </div>
+              </div>
+              <div class="st-block">
+                <div class="st-block-head">
+                  <div class="od-field od-fill">
+                    <h2 class="st-title">Permissões das ferramentas</h2>
+                    <p class="st-desc">Todos os agentes podem usar as ferramentas do computador e os apps instalados. Na primeira vez que um agente usa uma ferramenta numa sessão, o Boto pede sua permissão. O que você libera em todas as sessões aparece aqui, e dá para revogar.</p>
+                  </div>
+                </div>
+                <div id="st-perms"></div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Dropdown: quando -->
+<div class="dropdown-menu" id="when-menu" role="menu" aria-label="Quando executar" hidden>
+  <p class="dropdown-label">Quando executar</p>
+  <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="true" data-when="now" tabindex="-1">
+    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <span class="od-field od-fill"><span class="item-name">Agora</span><span class="item-desc">O Boto começa assim que você delegar</span></span>
+  </button>
+  <div class="dropdown-separator" role="separator"></div>
+  <p class="dropdown-label">Uma vez</p>
+  <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-when="in1h" tabindex="-1">
+    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <span class="od-field od-fill"><span class="item-name">Daqui a 1 hora</span></span>
+  </button>
+  <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-when="tomorrow" tabindex="-1">
+    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <span class="od-field od-fill"><span class="item-name">Amanhã às 8h</span></span>
+  </button>
+  <div class="dropdown-separator" role="separator"></div>
+  <p class="dropdown-label">Repetir</p>
+  <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-when="daily" tabindex="-1">
+    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <span class="od-field od-fill"><span class="item-name">Todo dia às 8h</span></span>
+  </button>
+  <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-when="weekly" tabindex="-1">
+    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <span class="od-field od-fill"><span class="item-name">Toda segunda às 9h</span></span>
+  </button>
+</div>
+
+<!-- Dropdown: onde -->
+<div class="dropdown-menu" id="where-menu" role="menu" aria-label="Onde trabalhar" hidden>
+  <p class="dropdown-label">Ferramentas do computador</p>
+  <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="true" data-where="both" tabindex="-1">
+    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <span class="od-field od-fill"><span class="item-name">Navegador e terminal</span><span class="item-desc">O Boto escolhe o que cada etapa pede</span></span>
+  </button>
+  <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-where="browser" tabindex="-1">
+    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <span class="od-field od-fill"><span class="item-name">Só navegador</span><span class="item-desc">Sites, e-mail, painéis e planilhas online</span></span>
+  </button>
+  <button type="button" class="dropdown-item" role="menuitemradio" aria-checked="false" data-where="terminal" tabindex="-1">
+    <svg class="od-icon item-check" aria-hidden="true"><use href="#i-check"></use></svg>
+    <span class="od-field od-fill"><span class="item-name">Só terminal</span><span class="item-desc">Código, scripts e arquivos</span></span>
+  </button>
+</div>
+
+<!-- Dropdown: conta -->
+<div class="dropdown-menu" id="user-menu" role="menu" aria-label="Conta" hidden>
+  <p class="dropdown-label" data-user-label>Você</p>
+  <button type="button" class="dropdown-item" role="menuitem" data-action="go-settings" tabindex="-1">
+    <svg class="od-icon" aria-hidden="true"><use href="#i-settings"></use></svg>
+    <span class="od-fill">Configurações</span>
+  </button>
+  <button type="button" class="dropdown-item" role="menuitem" data-action="go-memory" tabindex="-1">
+    <svg class="od-icon" aria-hidden="true"><use href="#i-user-check"></use></svg>
+    <span class="od-fill">Você e a memória</span>
+  </button>
+  <div class="dropdown-separator" role="separator"></div>
+  <button type="button" class="dropdown-item" role="menuitem" data-action="toggle-theme" tabindex="-1">
+    <svg class="od-icon" aria-hidden="true"><use href="#i-sun"></use></svg>
+    <span class="od-fill">Alternar tema</span>
+  </button>
+  <button type="button" class="dropdown-item" role="menuitem" data-action="open-shortcuts" tabindex="-1">
+    <svg class="od-icon" aria-hidden="true"><use href="#i-keyboard"></use></svg>
+    <span class="od-fill">Atalhos de teclado</span>
+  </button>
+  <div class="dropdown-separator" role="separator"></div>
+  <button type="button" class="dropdown-item" role="menuitem" data-action="open-onboarding" tabindex="-1">
+    <svg class="od-icon" aria-hidden="true"><use href="#i-info"></use></svg>
+    <span class="od-fill">Conhecer o Boto</span>
+  </button>
+  <a class="dropdown-item" role="menuitem" href="identidade.html" tabindex="-1">
+    <svg class="od-icon" aria-hidden="true"><use href="#i-book-open"></use></svg>
+    <span class="od-fill">Guia da marca</span>
+  </a>
+</div>
+
+<!-- Sheet: barra lateral no celular -->
+<dialog class="sheet" id="sheet" aria-label="Menu" data-sidebar-slot></dialog>
+
+<!-- Dialog: paleta de comandos -->
+<dialog class="dialog command" id="command" aria-label="Buscar tarefas, rotinas e ações">
+  <div class="command-search od-row">
+    <svg class="od-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+    <input class="command-input od-fill" id="command-input" type="text" placeholder="Buscar tarefas, rotinas e ações" aria-label="Buscar tarefas, rotinas e ações" role="combobox" aria-expanded="true" aria-controls="command-list" aria-autocomplete="list" autocomplete="off">
+    <span class="kbd">Esc</span>
+  </div>
+  <div class="command-list od-scroll" id="command-list" role="listbox" aria-label="Resultados"></div>
+  <p class="command-empty" id="command-empty" hidden></p>
+</dialog>
+
+<!-- Dialog: atalhos -->
+<dialog class="dialog" id="shortcuts" aria-labelledby="shortcuts-title">
+  <div class="dialog-body">
+    <div class="dialog-header">
+      <h2 class="dialog-title" id="shortcuts-title">Atalhos de teclado</h2>
+      <p class="dialog-description">Use o Boto sem tirar as mãos do teclado.</p>
+    </div>
+    <dl class="shortcut-list">
+      <div class="shortcut-row od-row"><dt class="od-fill">Buscar tarefas, rotinas e ações</dt><dd><span class="kbd" data-shortcut-label>⌘K</span></dd></div>
+      <div class="shortcut-row od-row"><dt class="od-fill">Nova tarefa</dt><dd><span class="kbd" data-shortcut-new>⇧⌘O</span></dd></div>
+      <div class="shortcut-row od-row"><dt class="od-fill">Delegar a tarefa ou enviar a instrução</dt><dd><span class="kbd">Enter</span></dd></div>
+      <div class="shortcut-row od-row"><dt class="od-fill">Quebrar linha</dt><dd><span class="kbd">Shift + Enter</span></dd></div>
+      <div class="shortcut-row od-row"><dt class="od-fill">Fechar janelas e menus</dt><dd><span class="kbd">Esc</span></dd></div>
+    </dl>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-primary" data-action="close-dialog">Entendi</button>
+    </div>
+  </div>
+  <button type="button" class="btn btn-ghost btn-icon btn-sm dialog-close" data-action="close-dialog" aria-label="Fechar">
+    <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+  </button>
+</dialog>
+
+<!-- Dialog: encerrar tarefa -->
+<dialog class="dialog" id="confirm-stop" aria-labelledby="confirm-stop-title" aria-describedby="confirm-stop-desc">
+  <div class="dialog-body">
+    <div class="dialog-header">
+      <h2 class="dialog-title" id="confirm-stop-title">Encerrar esta tarefa?</h2>
+      <p class="dialog-description" id="confirm-stop-desc">O Boto para na etapa atual e não continua depois. O que já foi feito fica em Arquivos.</p>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-outline" data-action="close-dialog">Continuar a tarefa</button>
+      <button type="button" class="btn btn-destructive" id="confirm-stop-btn">Encerrar tarefa</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Máquina livre de um agente, usada por você -->
+<dialog class="dialog vm-dialog" id="vm-dialog" aria-labelledby="vm-title" aria-describedby="vm-sub">
+  <header class="vm-head od-row">
+    <span class="vm-head-icon" aria-hidden="true"><svg class="od-icon"><use href="#i-monitor"></use></svg></span>
+    <div class="od-field od-fill">
+      <h2 class="vm-title od-truncate" id="vm-title">Máquina</h2>
+      <p class="vm-sub od-truncate" id="vm-sub"></p>
+    </div>
+    <button type="button" class="btn btn-ghost btn-icon btn-sm" data-action="close-dialog" aria-label="Fechar e devolver a máquina">
+      <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+    </button>
+  </header>
+  <div class="desk" id="vm-desk" data-desk="vm"></div>
+</dialog>
+
+<!-- Painel de um agente -->
+<dialog class="sheet agent-panel" id="agent-panel" aria-labelledby="ap-title">
+  <div class="ap">
+    <header class="ap-head">
+      <div class="ap-head-main" id="ap-head"></div>
+      <button type="button" class="btn btn-ghost btn-icon btn-sm ap-close" data-action="close-dialog" aria-label="Fechar painel do agente">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+      </button>
+    </header>
+    <div class="ap-body od-scroll">
+      <div class="ap-stack" id="ap-live"></div>
+      <section class="ap-section" aria-labelledby="ap-add-title">
+        <h3 class="ap-sec-title" id="ap-add-title">Delegar a este agente</h3>
+        <div class="field">
+          <label class="label" for="ap-add-input">Tarefa</label>
+          <textarea class="textarea" id="ap-add-input" rows="2" aria-describedby="ap-add-help ap-add-error" placeholder="Descreva a tarefa e o resultado esperado"></textarea>
+          <p class="field-help" id="ap-add-help"></p>
+          <p class="field-error" id="ap-add-error" hidden>Descreva a tarefa antes de delegar.</p>
+        </div>
+        <div class="ap-add-foot od-row">
+          <button type="button" class="btn btn-primary" id="ap-add-btn">
+            <span id="ap-add-label">Delegar agora</span>
+            <svg class="od-icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+          </button>
+        </div>
+      </section>
+      <div class="ap-stack" id="ap-info"></div>
+    </div>
+  </div>
+</dialog>
+
+<!-- Painel de um item do marketplace -->
+<dialog class="sheet agent-panel mk-panel" id="mk-panel" aria-labelledby="mkp-title">
+  <div class="ap">
+    <header class="ap-head">
+      <div class="ap-head-main" id="mkp-head"></div>
+      <button type="button" class="btn btn-ghost btn-icon btn-sm ap-close" data-action="close-dialog" aria-label="Fechar detalhes">
+        <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+      </button>
+    </header>
+    <div class="ap-body od-scroll" id="mkp-body"></div>
+  </div>
+</dialog>
+
+<!-- Dialog: confirmação de ação destrutiva -->
+<dialog class="dialog" id="confirm" aria-labelledby="confirm-title" aria-describedby="confirm-desc">
+  <div class="dialog-body">
+    <div class="dialog-header">
+      <h2 class="dialog-title" id="confirm-title"></h2>
+      <p class="dialog-description" id="confirm-desc"></p>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-outline" data-action="close-dialog" id="confirm-cancel">Cancelar</button>
+      <button type="button" class="btn btn-destructive" id="confirm-ok"></button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Dialog: novo agente -->
+<dialog class="dialog agent-new" id="agent-new" aria-labelledby="an-title" aria-describedby="an-desc">
+  <div class="dialog-body">
+    <div class="dialog-header">
+      <h2 class="dialog-title" id="an-title">Novo agente</h2>
+      <p class="dialog-description" id="an-desc">Um agente é um colega com uma especialidade. Ele pode usar todas as ferramentas disponíveis no computador do Boto e pede sua permissão na primeira vez que usa cada uma numa sessão.</p>
+    </div>
+    <div class="field">
+      <label class="label" for="an-name">Nome</label>
+      <input class="input" id="an-name" type="text" maxlength="32" autocomplete="off" aria-describedby="an-name-error" aria-invalid="false">
+      <p class="field-error" id="an-name-error" hidden></p>
+    </div>
+    <div class="field">
+      <label class="label" for="an-role">O que ele faz <span class="label-opt">(opcional)</span></label>
+      <textarea class="textarea" id="an-role" rows="2" maxlength="140" placeholder="Por exemplo: confere as notas fiscais e atualiza a planilha do financeiro"></textarea>
+    </div>
+    <div class="an-row od-row">
+      <span class="od-field od-fill">
+        <span class="ap-row-name" id="an-approval-label">Pedir aprovação</span>
+        <span class="ap-row-help" id="an-approval-help">Para e pergunta antes de enviar e-mail, publicar ou abrir um PR.</span>
+      </span>
+      <button type="button" class="switch od-fixed" role="switch" aria-checked="true" aria-labelledby="an-approval-label" aria-describedby="an-approval-help" id="an-approval"></button>
+    </div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-outline" data-action="close-dialog">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="an-create">Criar agente</button>
+    </div>
+  </div>
+  <button type="button" class="btn btn-ghost btn-icon btn-sm dialog-close" data-action="close-dialog" aria-label="Fechar">
+    <svg class="od-icon" aria-hidden="true"><use href="#i-x"></use></svg>
+  </button>
+</dialog>
+
+<!-- Dialog: apresentação do Boto em três passos -->
+<dialog class="dialog onboarding" id="onboarding" aria-label="Apresentação do Boto">
+  <div class="ob-visual" aria-hidden="true">
+    <div class="ob-scene" data-ob-scene="1">
+      <svg class="ob-ripples" viewBox="0 0 340 300" width="340" height="300">
+        <circle cx="170" cy="128" r="76"/>
+        <circle cx="170" cy="128" r="106"/>
+        <circle cx="170" cy="128" r="136"/>
+        <circle cx="170" cy="128" r="166"/>
+        <circle cx="170" cy="128" r="196"/>
+      </svg>
+      <svg class="ob-hero-mark" viewBox="0 0 64 64" width="120" height="120"><use href="#boto-mark"></use></svg>
+      <p class="ob-equation">
+        <span>bot</span><span class="ob-eq-op">+</span><span class="ob-eq-o">o</span><span class="ob-eq-op">=</span>
+        <svg viewBox="0 0 120 40" width="72" height="24"><use href="#boto-wordmark"></use></svg>
+      </p>
+    </div>
+
+    <div class="ob-scene" data-ob-scene="2" hidden>
+      <div class="ob-mock ob-memory">
+        <div class="ob-mock-head od-row">
+          <span class="ob-mock-avatar"><svg viewBox="0 0 64 64" width="15" height="15"><use href="#boto-mark"></use></svg></span>
+          <div class="od-field od-fill"><p class="ob-mock-title">Memória do Boto</p><p class="ob-mock-meta">Usada em todas as sessões</p></div>
+        </div>
+        <dl class="ob-memory-list">
+          <div><dt>Nome</dt><dd id="ob-mem-name"></dd></div>
+          <div><dt>Sobre você</dt><dd class="od-clamp-3" id="ob-mem-about"></dd></div>
+        </dl>
+        <div class="ob-memory-greet">
+          <p class="ob-memory-greet-sub" id="ob-mem-greet"></p>
+          <p class="ob-memory-greet-title">O que eu devo fazer hoje?</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="ob-scene" data-ob-scene="3" hidden>
+      <div class="ob-mock" id="ob-mock"></div>
+    </div>
+
+    <div class="ob-scene" data-ob-scene="4" hidden>
+      <div class="ob-mini">
+        <svg class="ob-mini-mark" viewBox="0 0 64 64" width="48" height="48"><use href="#boto-mark"></use></svg>
+        <p class="ob-mini-sub" id="ob-mini-greeting">Boa noite.</p>
+        <p class="ob-mini-title">O que o Boto deve fazer hoje?</p>
+        <div class="ob-mini-composer">
+          <p class="ob-mini-placeholder">Descreva a tarefa e o resultado esperado</p>
+          <div class="ob-mini-bar od-row">
+            <span class="badge badge-secondary ob-mini-mode" id="ob-mini-mode"></span>
+            <span class="badge badge-outline ob-mini-mode" id="ob-mini-private" hidden>
+              <svg class="od-icon" aria-hidden="true"><use href="#i-eye-off"></use></svg>Privada
+            </span>
+            <span class="od-fill"></span>
+            <span class="ob-mini-send"><svg class="od-icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ob-panel">
+    <div class="ob-head od-row">
+      <ol class="ob-progress" aria-label="Passos da apresentação">
+        <li><button type="button" class="ob-dot" data-ob-go="1" aria-label="Passo 1: Boas-vindas"></button></li>
+        <li><button type="button" class="ob-dot" data-ob-go="2" aria-label="Passo 2: Sobre você"></button></li>
+        <li><button type="button" class="ob-dot" data-ob-go="3" aria-label="Passo 3: Três jeitos de delegar"></button></li>
+        <li><button type="button" class="ob-dot" data-ob-go="4" aria-label="Passo 4: Do seu jeito"></button></li>
+      </ol>
+      <p class="ob-count od-nowrap" id="ob-count">Passo 1 de 4</p>
+      <span class="od-fill"></span>
+      <button type="button" class="btn btn-ghost btn-sm ob-skip" id="ob-skip">Pular</button>
+    </div>
+    <p class="sr-only" aria-live="polite" id="ob-live"></p>
+
+    <div class="ob-content od-scroll">
+      <section class="ob-step" data-ob-step="1" aria-labelledby="ob-title-1">
+        <div class="ob-intro">
+          <p class="ob-eyebrow">Boas-vindas</p>
+          <h2 class="ob-title" id="ob-title-1">Oi, eu sou o Boto.</h2>
+          <p class="ob-lead">Um colega de trabalho virtual. Trabalho num computador próprio na nuvem e levo a tarefa até o fim: pesquiso, escrevo código, preencho planilhas e entrego o resultado. O nome vem do boto-cor-de-rosa, o golfinho dos rios da Amazônia, com um trocadilho: bot + o.</p>
+        </div>
+        <ul class="ob-points">
+          <li>
+            <svg class="od-icon" aria-hidden="true"><use href="#i-circle-check"></use></svg>
+            <span>Você acompanha cada etapa e a tela do meu computador enquanto eu trabalho.</span>
+          </li>
+          <li>
+            <svg class="od-icon" aria-hidden="true"><use href="#i-circle-check"></use></svg>
+            <span>Peço sua aprovação antes de ações externas, como enviar e-mail, publicar ou abrir um PR.</span>
+          </li>
+          <li class="ob-point-note">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-info"></use></svg>
+            <span>Posso errar. Confira as entregas antes de usar.</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="ob-step" data-ob-step="2" aria-labelledby="ob-title-2" hidden>
+        <div class="ob-intro">
+          <p class="ob-eyebrow">Sobre você</p>
+          <h2 class="ob-title" id="ob-title-2">Como devo te chamar?</h2>
+          <p class="ob-lead">Não tem cadastro nem conta. O Boto só guarda o que você contar aqui, para personalizar as sessões.</p>
+        </div>
+        <div class="field">
+          <label class="label" for="ob-name">Como você quer ser chamado</label>
+          <input class="input" id="ob-name" type="text" maxlength="40" autocomplete="nickname" placeholder="Por exemplo: Iara">
+        </div>
+        <div class="field">
+          <label class="label" for="ob-about">Sobre você <span class="label-opt">(opcional)</span></label>
+          <textarea class="textarea" id="ob-about" rows="4" maxlength="600" aria-describedby="ob-about-help" placeholder="Sou dev front-end, prefiro respostas curtas, trabalho com React"></textarea>
+          <p class="field-help od-row" id="ob-about-help">
+            <span class="od-fill">Fica na memória do Boto e personaliza as sessões. Dá para editar ou apagar nas Configurações.</span>
+            <span class="od-nowrap" id="ob-about-count">0/600</span>
+          </p>
+        </div>
+      </section>
+
+      <section class="ob-step" data-ob-step="3" aria-labelledby="ob-title-3" hidden>
+        <div class="ob-intro">
+          <p class="ob-eyebrow">Delegar</p>
+          <h2 class="ob-title" id="ob-title-3">Três jeitos de delegar</h2>
+          <p class="ob-lead">Escolha como o Boto deve começar as tarefas. As opções ficam logo abaixo da caixa de tarefa e mudam quando você quiser.</p>
+        </div>
+        <div class="ob-options" role="radiogroup" aria-label="Jeito de delegar" id="ob-modes">
+          <button type="button" class="ob-option" role="radio" aria-checked="false" data-ob-mode="agora" tabindex="-1">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-play"></use></svg>
+            <span class="od-field od-fill">
+              <span class="ob-option-name">Executar agora</span>
+              <span class="ob-option-desc">Começa assim que você delega e segue até o fim sem parar.</span>
+            </span>
+            <span class="ob-radio" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="ob-option" role="radio" aria-checked="false" data-ob-mode="agendar" tabindex="-1">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-calendar"></use></svg>
+            <span class="od-field od-fill">
+              <span class="ob-option-name">Agendar</span>
+              <span class="ob-option-desc">Você marca o horário ou a repetição, e o Boto executa sozinho.</span>
+            </span>
+            <span class="ob-radio" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="ob-option" role="radio" aria-checked="true" data-ob-mode="aprovacao">
+            <svg class="od-icon" aria-hidden="true"><use href="#i-shield-check"></use></svg>
+            <span class="od-field od-fill">
+              <span class="ob-option-name">Pedir aprovação</span>
+              <span class="ob-option-desc">Começa na hora, mas para e pergunta antes de enviar, publicar ou abrir um PR.</span>
+            </span>
+            <span class="ob-radio" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="ob-note">O jeito marcado aqui vira o padrão da caixa de tarefa.</p>
+      </section>
+
+      <section class="ob-step" data-ob-step="4" aria-labelledby="ob-title-4" hidden>
+        <div class="ob-intro">
+          <p class="ob-eyebrow">Preferências</p>
+          <h2 class="ob-title" id="ob-title-4">Do seu jeito</h2>
+          <p class="ob-lead">Ajuste o básico agora. Dá para mudar tudo depois, nas Configurações.</p>
+        </div>
+        <div class="ob-field-group">
+          <p class="label" id="ob-theme-label">Tema</p>
+          <div class="ob-theme-options" role="radiogroup" aria-labelledby="ob-theme-label" id="ob-themes">
+            <button type="button" class="ob-option ob-theme-option" role="radio" aria-checked="true" data-ob-theme="dark">
+              <span class="ob-swatch" data-swatch="dark" aria-hidden="true"><span></span><span></span></span>
+              <span class="ob-option-row od-row">
+                <span class="ob-option-name od-fill">Escuro</span>
+                <span class="ob-radio" aria-hidden="true"></span>
+              </span>
+            </button>
+            <button type="button" class="ob-option ob-theme-option" role="radio" aria-checked="false" data-ob-theme="light" tabindex="-1">
+              <span class="ob-swatch" data-swatch="light" aria-hidden="true"><span></span><span></span></span>
+              <span class="ob-option-row od-row">
+                <span class="ob-option-name od-fill">Claro</span>
+                <span class="ob-radio" aria-hidden="true"></span>
+              </span>
+            </button>
+          </div>
+        </div>
+        <div class="ob-setting od-row">
+          <span class="od-field od-fill">
+            <span class="ob-setting-name" id="ob-private-label">Tarefa privada</span>
+            <span class="ob-setting-help" id="ob-private-help">Nada fica salvo no histórico.</span>
+          </span>
+          <button type="button" class="switch od-fixed" role="switch" aria-checked="false" aria-labelledby="ob-private-label" aria-describedby="ob-private-help" id="ob-private"></button>
+        </div>
+        <p class="ob-tip od-row">
+          <svg class="od-icon" aria-hidden="true"><use href="#i-keyboard"></use></svg>
+          <span class="od-fill">Busque tarefas, rotinas e ações a qualquer momento.</span>
+          <span class="kbd" data-shortcut-label>⌘K</span>
+        </p>
+      </section>
+    </div>
+
+    <div class="ob-foot">
+      <button type="button" class="btn btn-outline" id="ob-back" hidden>Voltar</button>
+      <button type="button" class="btn btn-primary" id="ob-next">
+        <span class="ob-next-label">Continuar</span>
+        <svg class="od-icon" aria-hidden="true"><use href="#i-arrow-right"></use></svg>
+      </button>
+    </div>
+  </div>
+</dialog>
+
+<script src="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/boto-ui.js?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np"></script>
+<script src="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/app.js?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np"></script>
+</body>
+</html>

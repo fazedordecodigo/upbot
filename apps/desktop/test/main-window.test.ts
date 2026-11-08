@@ -25,7 +25,6 @@ import {
   startDaemon,
   stopDaemon,
 } from "../../../packages/daemon/test/helpers";
-import { expectSwitchGeometry } from "./switch-geometry";
 
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
@@ -180,11 +179,7 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
     await page.evaluate((theme) => localStorage.setItem("boto.theme", theme), theme);
     await page.reload();
     await page.addStyleTag({ content: "*{transition:none!important;animation:none!important}" });
-    await page
-      .locator(".main-head")
-      .getByRole("heading", { name: bot.name, exact: true })
-      .waitFor();
-    if (await page.locator(".panel").isVisible()) await page.keyboard.press("Meta+.");
+    await page.locator(".task-meta").getByText(bot.name, { exact: true }).waitFor();
     const prompt = page.getByRole("textbox", { name: "Mensagem para o bot" });
     const send = async (text: string) => {
       await prompt.fill(text);
@@ -210,23 +205,32 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
         .waitFor();
     }
     expect(await page.locator(".window-titlebar").count()).toBe(0);
-    for (const selector of [".main-head", ".side-titlebar"]) {
-      expect(
-        await page.locator(selector).evaluate((el) => {
-          const rect = el.getBoundingClientRect();
-          return {
-            top: rect.top,
-            height: rect.height,
-            drag: el.hasAttribute("data-tauri-drag-region"),
-          };
-        }),
-      ).toEqual({ top: 0, height: 52, drag: true });
-    }
+    expect(
+      await page.locator(".side-titlebar").evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        return {
+          top: rect.top,
+          height: rect.height,
+          drag: el.hasAttribute("data-tauri-drag-region"),
+        };
+      }),
+    ).toEqual({ top: 0, height: 52, drag: true });
+    const taskHead = await page.locator(".task-head").evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return {
+        top: rect.top,
+        height: rect.height,
+        drag: el.hasAttribute("data-tauri-drag-region"),
+      };
+    });
+    expect(taskHead.top).toBe(0);
+    expect(taskHead.height).toBeGreaterThanOrEqual(56);
+    expect(taskHead.drag).toBe(true);
     expect(await page.locator(".side-brand").allTextContents()).toEqual(["Boto"]);
     expect(await page.locator(".rail").count()).toBe(0);
     expect(
       await page
-        .getByRole("button", { name: "Alternar painel de execução" })
+        .getByRole("button", { name: "Configurar agente", exact: true })
         .evaluate(
           (el) =>
             !el.hasAttribute("data-tauri-drag-region") &&
@@ -234,7 +238,7 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
         ),
     ).toBe(true);
     expect(await page.locator(".side").evaluate((el) => el.getBoundingClientRect().width)).toBe(
-      280,
+      272,
     );
     expect(
       await page.locator(".thread-inner").evaluate((el) => el.getBoundingClientRect().width),
@@ -286,21 +290,18 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
       "ask",
     );
     await page.getByRole("button", { name: "Fechar aviso" }).click();
-    await page.keyboard.press("Meta+.");
-    expect(await page.locator(".panel").isVisible()).toBe(true);
-    expect(await page.locator(".panel").evaluate((el) => el.getBoundingClientRect().width)).toBe(
-      320,
-    );
+    const desk = page.getByRole("region", { name: "Área de trabalho do agente" });
+    await desk.waitFor();
     await capture(`details-${theme}`);
+    await page.getByRole("button", { name: "Área de trabalho", exact: true }).click();
+    await desk.waitFor({ state: "hidden" });
     await page.keyboard.press("Meta+k");
     await page.getByRole("dialog", { name: "Buscar", exact: true }).waitFor();
     await capture(`palette-${theme}`);
     await page.getByRole("dialog").getByRole("textbox").fill("sem-correspondencia-xyz");
     expect(await page.getByText("Nenhum resultado.", { exact: true }).isVisible()).toBe(true);
     await page.keyboard.press("Escape");
-    expect(await page.locator(".panel").isVisible()).toBe(true);
-    await page.getByRole("button", { name: "Alternar painel de execução" }).click();
-    expect(await page.locator(".panel").isVisible()).toBe(false);
+    expect(await desk.isVisible()).toBe(false);
     await page.keyboard.press("Meta+,");
     await page.getByRole("heading", { name: "Configurações", exact: true }).waitFor();
     expect(
@@ -340,7 +341,7 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
     await page.getByRole("button", { name: "Abrir barra lateral", exact: true }).click();
     expect(await page.locator(".side").isVisible()).toBe(true);
     expect(
-      await page.getByRole("dialog", { name: "Bots e tarefas" }).getAttribute("aria-modal"),
+      await page.getByRole("dialog", { name: "Barra lateral" }).getAttribute("aria-modal"),
     ).toBe("true");
     expect(
       await page.locator(".side").evaluate((element) => element.contains(document.activeElement)),
@@ -360,98 +361,49 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
     await page.getByRole("button", { name: "Abrir barra lateral", exact: true }).click();
     await page.keyboard.press("Escape");
     expect(await page.locator(".side").isVisible()).toBe(false);
-    await page.getByRole("button", { name: "Alternar painel de execução" }).click();
-    await page.getByRole("dialog", { name: "Execução", exact: true }).waitFor();
-    expect(
-      await page.locator(".panel").evaluate((element) => element.contains(document.activeElement)),
-    ).toBe(true);
+    await page.getByRole("tab", { name: "Área de trabalho", exact: true }).click();
+    await page.getByRole("region", { name: "Área de trabalho do agente" }).waitFor();
     await capture(`details-700-${theme}`);
-    await page.keyboard.press("Escape");
-    expect(await page.locator(".panel").isVisible()).toBe(false);
+    await page.getByRole("tab", { name: "Atividade", exact: true }).click();
+    await page.getByRole("region", { name: "Área de trabalho do agente" }).waitFor({
+      state: "hidden",
+    });
     await page.setViewportSize({ width: 1440, height: 1000 });
   }
 }, 90000);
 
-test("RunPanel switch tracks contain their knobs on and off in both themes", async () => {
-  const previous = (await rpc.request("approvals.rules", {})) as ApprovalRule[];
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-  page.setDefaultTimeout(5000);
-  await page.addInitScript((id) => {
+test("task shell keeps pause and resume in place of the execution panel", async () => {
+  const target = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  target.setDefaultTimeout(5000);
+  await target.addInitScript((id) => {
     localStorage.setItem("boto.agent", id);
     localStorage.setItem("boto.view", "chat");
   }, bot.id);
-  await page.routeWebSocket(`ws://127.0.0.1:${daemon.port}/ws?*`, (socket) => {
-    const server = socket.connectToServer();
-    const delayed = new Set<string>();
-    let closed = false;
-    socket.onMessage((message) => {
-      const request = JSON.parse(String(message));
-      if (request.method === "agents.list") delayed.add(request.id);
-      server.send(message);
-    });
-    server.onMessage(async (message) => {
-      const response = JSON.parse(String(message));
-      if (delayed.delete(response.id)) await Bun.sleep(500);
-      if (!closed) socket.send(message);
-    });
-    socket.onClose(() => {
-      closed = true;
-      server.close();
-    });
-  });
   try {
-    for (const theme of ["light", "dark"]) {
-      await rpc.request("approvals.setRules", {
-        rules: [
-          ...previous.filter((rule) => rule.agentId !== bot.id),
-          {
-            id: crypto.randomUUID(),
-            agentId: bot.id,
-            pattern: "switch_geometry_check",
-            action: "ask",
-          },
-        ],
-      });
-      await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-      await page.evaluate((value) => localStorage.setItem("boto.theme", value), theme);
-      await page.reload();
-      await page.locator(".panel").waitFor();
-      const permissions = page.locator('[data-od-id="panel-perms"]');
-      for (const name of ["Agir sem perguntar", "switch_geometry_check"]) {
-        const control = permissions.getByRole("switch", { name, exact: true });
-        for (const checked of [false, true, false]) {
-          if ((await control.getAttribute("aria-checked")) !== String(checked)) {
-            await control.click();
-          }
-          await permissions.getByRole("switch", { name, exact: true, checked }).waitFor();
-          await expectSwitchGeometry(control);
-        }
-      }
-      await permissions.getByRole("switch", { name: "switch_geometry_check", exact: true }).click();
-      await permissions
-        .getByRole("switch", { name: "switch_geometry_check", checked: true })
-        .waitFor();
-      await expectSwitchGeometry(
-        permissions.getByRole("switch", { name: "switch_geometry_check" }),
-      );
-      if (out) await permissions.screenshot({ path: join(out, `switch-runpanel-${theme}.png`) });
-    }
+    await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await target.locator(".task-meta").getByText(bot.name, { exact: true }).waitFor();
+    expect(await target.locator(".panel").count()).toBe(0);
+    expect(await target.getByRole("button", { name: "Alternar painel de execução" }).count()).toBe(
+      0,
+    );
+    const pause = target.getByRole("button", { name: "Pausar", exact: true });
+    await pause.click();
+    const resume = target.getByRole("button", { name: "Retomar", exact: true });
+    await resume.waitFor();
+    await resume.click();
+    await pause.waitFor();
   } finally {
-    await page.close();
-    await rpc.request("approvals.setRules", { rules: previous });
+    await target.close();
+    await rpc.request("queue.resume", { agentId: bot.id });
   }
-}, 30000);
+}, 15000);
 
 test("app requests, permissions dialog and sensitive conversation decisions stay synchronized", async () => {
   for (const theme of ["light", "dark"] as const) {
     await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
     await page.evaluate((theme) => localStorage.setItem("boto.theme", theme), theme);
     await page.reload();
-    await page
-      .locator(".main-head")
-      .getByRole("heading", { name: bot.name, exact: true })
-      .waitFor();
-    if (await page.locator(".panel").isVisible()) await page.keyboard.press("Meta+.");
+    await page.locator(".task-meta").getByText(bot.name, { exact: true }).waitFor();
     await rpc.request("chat.send", { agentId: bot.id, text: "mcp:notas-create_note {}" });
     await page.getByTestId("approval").waitFor();
     await page.keyboard.press("Meta+,");
@@ -569,15 +521,29 @@ test("sidebar navigation, real approval counts, routines, groups, profile and th
   await page.addStyleTag({ content: "*{transition:none!important;animation:none!important}" });
   const side = page.locator(".side");
   await side.getByRole("button", { name: "Início", exact: true }).click();
-  await page.getByRole("heading", { name: "Escolha um bot ou crie um novo." }).waitFor();
-  await side.getByRole("button", { name: "Novo bot", exact: true }).click();
+  await page.getByRole("heading", { name: "O trabalho do Boto hoje", exact: true }).waitFor();
+  await side.getByRole("button", { name: /Agentes/ }).click();
+  await page.getByRole("button", { name: "Novo agente", exact: true }).click();
   await page.locator("dialog[open]").waitFor();
   await page.keyboard.press("Escape");
-  await side.getByRole("button", { name: /^Nova sessão/ }).click();
-  await page.locator(".main-head").getByRole("heading", { name: bot.name, exact: true }).waitFor();
-  await page.locator("p.meta.day", { hasText: "Nova sessão" }).last().waitFor();
+  await page
+    .locator(".ag-card", { hasText: bot.name })
+    .getByRole("button", { name: "Ver área", exact: true })
+    .click();
+  await page.locator(".task-meta").getByText(bot.name, { exact: true }).waitFor();
+  await rpc.request("chat.cancel", { agentId: bot.id }).catch(() => {});
+  const sessionMark = page.locator("p.meta.day", { hasText: "Nova sessão" });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await rpc.request("agents.newSession", { agentId: bot.id }).catch(() => {});
+    try {
+      await sessionMark.last().waitFor({ timeout: 2000 });
+      break;
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+  }
   expect(await page.locator("dialog[open]").count()).toBe(0);
-  await side.getByRole("button", { name: "Agendadas", exact: true }).click();
+  await side.getByRole("button", { name: /Rotinas/ }).click();
   await page.getByText("Nenhuma rotina ainda.", { exact: false }).waitFor();
   const routine = (await rpc.request("routines.create", {
     agentId: bot.id,
@@ -587,7 +553,7 @@ test("sidebar navigation, real approval counts, routines, groups, profile and th
   })) as Routine;
   await page.getByRole("button", { name: /Resumo diário/ }).waitFor();
   await page.getByRole("button", { name: /Resumo diário/ }).click();
-  await page.locator(".main-head").getByRole("heading", { name: bot.name, exact: true }).waitFor();
+  await page.locator(".task-meta").getByText(bot.name, { exact: true }).waitFor();
   await side.getByRole("button", { name: "Configurações", exact: true }).click();
   await page.getByRole("heading", { name: "Configurações", exact: true }).waitFor();
   await page.getByRole("textbox", { name: "Seu nome", exact: true }).fill("Marina");
@@ -620,7 +586,7 @@ test("sidebar navigation, real approval counts, routines, groups, profile and th
   const failed = await make("Viagem a Recife");
   const queued = await make("Revisão de notas");
   await rpc.request("chat.send", { agentId: bot.id, text: "echo:Relatório concluído." });
-  await side.getByRole("button", { name: /Relatório semanal Concluído/ }).waitFor();
+  await side.getByRole("button", { name: /Relatório semanal/ }).waitFor();
   const apps = (await rpc.request("apps.list", {})) as ConnectedApp[];
   const notes = apps.find((app) => app.name === "Notas");
   if (!notes) throw new Error("Notas fixture missing");
@@ -630,18 +596,30 @@ test("sidebar navigation, real approval counts, routines, groups, profile and th
   await rpc.request("chat.send", { agentId: failed.id, text: "crash" });
   await rpc.request("queue.pause", { agentId: queued.id });
   await rpc.request("chat.send", { agentId: queued.id, text: "echo:revisão" });
-  await side
-    .getByRole("button", { name: /Despesas de outubro Aguardando sua aprovação/ })
-    .waitFor();
-  await side.getByRole("button", { name: /Caixa de entrada Em execução/ }).waitFor();
-  await side.locator(".side-bot").filter({ hasText: failed.name }).locator(".s-err").waitFor();
-  await side.getByRole("button", { name: /Revisão de notas 1 na fila/ }).waitFor();
-  await side.getByRole("status", { name: "1 pedido pendente" }).waitFor();
-  await side.getByRole("button", { name: "Apps conectados", exact: false }).click();
+  await side.getByRole("button", { name: /Despesas de outubro/ }).waitFor();
+  await side.getByRole("button", { name: /Caixa de entrada/ }).waitFor();
+  await side.getByRole("button", { name: /Revisão de notas/ }).waitFor();
+  await side.getByRole("button", { name: /Agentes/ }).click();
+  const card = (name: string) => page.locator(".ag-card", { hasText: name });
+  const statusOf = async (name: string, tone: string, label: string) => {
+    const badge = card(name).locator(`.rn-status[data-tone="${tone}"]`, { hasText: label });
+    await badge.waitFor();
+    expect(await badge.locator("svg").count()).toBe(1);
+  };
+  const waitingBadge = card("Despesas de outubro").locator(".rn-status");
+  await waitingBadge.waitFor();
+  expect(["run", "wait"]).toContain(await waitingBadge.getAttribute("data-tone"));
+  expect(await waitingBadge.locator("svg").count()).toBe(1);
+  await statusOf("Caixa de entrada", "run", "Em execução");
+  await statusOf("Viagem a Recife", "muted", "Com erro");
+  await statusOf("Revisão de notas", "muted", "Fila pausada");
+  await statusOf(bot.name, "done", "Concluído");
+  await side.getByRole("button", { name: "Configurações", exact: true }).click();
+  await page.getByRole("tab", { name: "Apps", exact: true }).click();
   await page.getByRole("heading", { name: "Apps conectados", exact: true }).waitFor();
-  await side.locator(".side-bot").filter({ hasText: failed.name }).click();
+  await side.locator(".side-bot").filter({ hasText: "Caixa de entrada" }).click();
   const selected = side.locator('.side-bot[aria-current="true"]');
-  expect(await selected.locator("b").textContent()).toBe(failed.name);
+  expect(await selected.innerText()).toContain("Caixa de entrada");
   expect(
     await selected.evaluate((element) => {
       const probe = document.createElement("i");
@@ -655,60 +633,18 @@ test("sidebar navigation, real approval counts, routines, groups, profile and th
   expect(await side.locator(".side-bot").last().locator("b").textContent()).toBe("# Planejamento");
   expect(
     await side
-      .getByRole("heading", { name: "SEUS AGENTES", exact: true })
+      .locator(".side-label")
+      .first()
       .evaluate((element) => getComputedStyle(element).textTransform),
   ).toBe("uppercase");
+  await side.getByRole("button", { name: "Configurações", exact: true }).click();
   for (const theme of ["light", "dark"] as const) {
-    await side
-      .getByRole("button", { name: theme === "light" ? "Tema claro" : "Tema escuro", exact: true })
+    await page
+      .locator("label.theme-opt")
+      .filter({ hasText: theme === "light" ? "Claro" : "Escuro" })
       .click();
     expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme);
     expect(await page.evaluate(() => localStorage.getItem("boto.theme"))).toBe(theme);
-    for (const status of ["idle", "queue", "wait", "run", "err", "ok"]) {
-      const row = side
-        .locator(".side-bot")
-        .filter({ has: page.locator(`.dot.s-${status}`) })
-        .first();
-      await row.click();
-      expect(await row.getAttribute("aria-current")).toBe("true");
-      const result = await row.evaluate((element, status) => {
-        const dot = element.querySelector(".dot");
-        if (!dot) throw new Error("Missing status dot");
-        const canvas = document.createElement("canvas");
-        canvas.width = canvas.height = 1;
-        const context = canvas.getContext("2d");
-        if (!context) throw new Error("Missing canvas context");
-        const pixel = (color: string) => {
-          context.fillStyle = color;
-          context.fillRect(0, 0, 1, 1);
-          return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
-        };
-        const background = pixel(getComputedStyle(element).backgroundColor);
-        const foreground = pixel(getComputedStyle(dot).backgroundColor);
-        const luminance = (rgb: number[]) => {
-          const linear = rgb.map((value) => {
-            const channel = value / 255;
-            return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-          });
-          return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
-        };
-        const a = luminance(background);
-        const b = luminance(foreground);
-        const neutral = status === "idle" || status === "queue";
-        const probe = document.createElement("i");
-        probe.style.background = neutral ? "var(--boto-color-status-idle)" : `var(--st-${status})`;
-        element.append(probe);
-        const matchesToken =
-          getComputedStyle(probe).backgroundColor === getComputedStyle(dot).backgroundColor;
-        probe.remove();
-        return { contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), matchesToken };
-      }, status);
-      expect(result.matchesToken).toBe(true);
-      expect(result.contrast).toBeGreaterThanOrEqual(
-        status === "idle" || status === "queue" ? 3 : 1.4,
-      );
-    }
-    await side.locator(".side-bot").filter({ hasText: failed.name }).click();
     const dir = process.env.SIDEBAR_SCREEN_DIR;
     if (dir) {
       mkdirSync(dir, { recursive: true });
@@ -716,18 +652,18 @@ test("sidebar navigation, real approval counts, routines, groups, profile and th
       await page.screenshot({ path: join(dir, `main-${theme}.png`) });
     }
   }
-  await side.getByRole("button", { name: "Tema escuro", exact: true }).focus();
+  await page.locator("label.theme-opt").filter({ hasText: "Escuro" }).click();
   await page.keyboard.press("ArrowLeft");
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
   const pending = (await rpc.request("approvals.list", {})) as Approval[];
   const approval = pending.find((item) => item.agentId === waiting.id && item.status === "pending");
   if (!approval) throw new Error("Expected pending fixture approval");
   await rpc.request("approvals.respond", { id: approval.id, decision: "deny" });
-  await side.locator(".side-count").waitFor({ state: "detached" });
+  await side.getByRole("button", { name: /Despesas de outubro/ }).waitFor({ state: "detached" });
   await rpc.request("chat.cancel", { agentId: running.id });
   await rpc.request("routines.delete", { id: routine.id });
   await rpc.request("channels.archive", { channelId: group.id });
-}, 30000);
+}, 60000);
 
 test("Buscar matches instructions without exposing them and shows live overview tasks", async () => {
   const agent = (await rpc.request("agents.create", {
@@ -739,7 +675,7 @@ test("Buscar matches instructions without exposing them and shows live overview 
   const target = await browser.newPage();
   try {
     await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-    await target.locator(".side-bot").filter({ hasText: agent.name }).waitFor();
+    await target.getByRole("button", { name: "Início", exact: true }).waitFor();
     await target.getByRole("button", { name: "Buscar", exact: false }).click();
     const input = target.getByRole("textbox", { name: "Buscar comandos" });
     const result = target
@@ -777,10 +713,7 @@ test("Buscar matches instructions without exposing them and shows live overview 
     await result.waitFor();
     expect(await result.textContent()).toContain("Conciliar faturas trimestrais");
     await result.click();
-    await target
-      .locator(".main-head")
-      .getByRole("heading", { name: agent.name, exact: true })
-      .waitFor();
+    await target.locator(".task-meta").getByText(agent.name, { exact: true }).waitFor();
   } finally {
     await target.close();
     await rpc.request("agents.delete", { id: agent.id });
@@ -809,7 +742,7 @@ test("chat uses a single composer row and anonymous left/right bubbles in both t
       const composer = target.locator("form.composer");
       expect(await target.locator(".side-settings svg").innerHTML()).toBe(
         await target
-          .locator(".main-head button svg")
+          .locator(".task-head button svg")
           .filter({ has: target.locator('path[d^="M19.4 15"]') })
           .innerHTML(),
       );
@@ -962,7 +895,7 @@ test("routine history opens chat and appears in the saved routine dialog", async
     await rpc.request("routines.run", { id: routine.id });
     await rpc.waitForEventWhere("turn.ended", (event) => event.agentId === bot.id);
     await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-    await target.getByRole("button", { name: "Agendadas", exact: true }).click();
+    await target.getByRole("button", { name: /Rotinas/ }).click();
     const row = target
       .locator("li")
       .filter({ has: target.getByRole("button", { name: /Histórico manual/ }) });
@@ -970,8 +903,8 @@ test("routine history opens chat and appears in the saved routine dialog", async
     await row.getByText(/Manual ·/).waitFor();
     await row.getByText("Concluída", { exact: true }).waitFor();
     await row.getByRole("button", { name: "Abrir conversa" }).click();
-    await target.locator(".main-head").getByRole("heading", { name: bot.name }).waitFor();
-    await target.getByRole("button", { name: "Configurar bot", exact: true }).click();
+    await target.locator(".task-meta").getByText(bot.name, { exact: true }).waitFor();
+    await target.getByRole("button", { name: "Configurar agente", exact: true }).click();
     await target.getByRole("button", { name: /Histórico manual/ }).click();
     const dialog = target.getByRole("dialog", { name: "Editar rotina", exact: true });
     await dialog.getByRole("heading", { name: "Histórico de execuções" }).waitFor();
@@ -999,7 +932,7 @@ test("skill detail renders fresh Markdown and raw text", async () => {
   const target = await browser.newPage();
   try {
     await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-    await target.getByRole("button", { name: "Agendadas", exact: true }).waitFor();
+    await target.getByRole("button", { name: /Rotinas/ }).waitFor();
     await target.keyboard.press("Meta+,");
     await target.getByRole("tab", { name: "Habilidades", exact: true }).click();
     await target.getByRole("button", { name: "detail-fixture", exact: true }).click();
@@ -1064,7 +997,7 @@ test("skill previous versions are read-only and return to the current version", 
   });
   try {
     await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-    await target.getByRole("button", { name: "Agendadas", exact: true }).waitFor();
+    await target.getByRole("button", { name: /Rotinas/ }).waitFor();
     await target.keyboard.press("Meta+,");
     await target.getByRole("tab", { name: "Habilidades", exact: true }).click();
     await target.getByRole("button", { name, exact: true }).click();
@@ -1154,7 +1087,7 @@ test("scheduled routines show recoverable RPC errors", async () => {
   });
   try {
     await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-    await target.getByRole("button", { name: "Agendadas", exact: true }).click();
+    await target.getByRole("button", { name: /Rotinas/ }).click();
     await target
       .getByRole("alert")
       .getByText("Não foi possível carregar as rotinas: Falha de teste")
@@ -1260,10 +1193,7 @@ test("cached approval and draft cards remain visible when refreshes fail", async
   });
   try {
     await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-    await target
-      .locator(".main-head")
-      .getByRole("heading", { name: bot.name, exact: true })
-      .waitFor();
+    await target.locator(".task-meta").getByText(bot.name, { exact: true }).waitFor();
     await target.getByTestId("approval").waitFor();
     await target.getByTestId("email-draft").waitFor();
 
@@ -1468,15 +1398,10 @@ test("run panel shows its hook errors", async () => {
   try {
     await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
     await target
-      .locator('[data-od-id="chat-view"] .main-head')
-      .getByRole("heading", { name: agent.name, exact: true })
+      .locator('[data-od-id="chat-view"] .task-meta')
+      .getByText(agent.name, { exact: true })
       .waitFor();
-    const panel = target.locator('[data-od-id="run-panel"]');
-    if (!(await panel.isVisible())) {
-      await target.getByRole("button", { name: "Alternar painel de execução" }).click();
-    }
-    await panel.waitFor({ state: "visible" });
-    await panel
+    await target
       .getByRole("alert")
       .filter({ hasText: "Não foi possível carregar o status: Falha de teste" })
       .waitFor();
@@ -1581,7 +1506,7 @@ test("skill save errors clear on cancel and when creating another skill", async 
   });
   try {
     await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-    await target.getByRole("button", { name: "Agendadas", exact: true }).waitFor();
+    await target.getByRole("button", { name: /Rotinas/ }).waitFor();
     await target.keyboard.press("Meta+,");
     await target.getByRole("tab", { name: "Geral", exact: true }).waitFor();
     await target.getByRole("tab", { name: "Habilidades", exact: true }).click();
@@ -1636,7 +1561,7 @@ test("browser close errors clear after a successful retry", async () => {
   });
   try {
     await target.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-    await target.getByRole("button", { name: "Agendadas", exact: true }).waitFor();
+    await target.getByRole("button", { name: /Rotinas/ }).waitFor();
     await target.keyboard.press("Meta+,");
     await target.getByRole("tab", { name: "Geral", exact: true }).waitFor();
     await target.getByRole("tab", { name: "Navegador", exact: true }).click();

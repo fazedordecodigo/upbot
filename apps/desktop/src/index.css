@@ -3,12 +3,17 @@
 @import "./styles/tokens.css";
 @import "./styles/legacy-bridge.css";
 @import "./styles/boto.css";
+@import "./styles/surfaces.css";
 
 dialog {
   margin: auto;
 }
 
-:is(button, input:not([type="checkbox"]):not([type="radio"]), select, summary, a[href]) {
+button,
+select,
+summary,
+a[href],
+input:not([type="checkbox"]):not([type="radio"]) {
   min-height: 44px;
 }
 button { min-width: 44px; }

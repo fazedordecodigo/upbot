@@ -1,5 +1,4 @@
 import type { Agent, AgentStatusInfo, ProviderId, Turn } from "@boto/protocol";
-import { StatusPill } from "../components/ds/controls";
 import {
   BotoSimboloCurrentcolorIcon,
   CalIcon,
@@ -9,6 +8,7 @@ import {
   ReceiptIcon,
   SheetIcon,
 } from "../components/ds/icons";
+import { Icon, type IconName } from "../components/icons";
 
 export const PROVIDER_NAMES: Record<ProviderId, string> = {
   devin: "Devin",
@@ -35,6 +35,36 @@ export const ST = {
 } as const;
 
 export type UiStatus = keyof typeof ST;
+
+/** Tons do DESIGN. `queue` cai em `wait`; `err` cai em `muted`. */
+export type StatusTone = "run" | "wait" | "muted" | "done";
+
+const STATUS_TONE: Record<UiStatus, StatusTone> = {
+  run: "run",
+  wait: "wait",
+  queue: "wait",
+  err: "muted",
+  ok: "done",
+  idle: "done",
+};
+
+const STATUS_ICON: Record<UiStatus, IconName> = {
+  run: "load",
+  wait: "hand",
+  queue: "hand",
+  err: "alert",
+  ok: "check",
+  idle: "check",
+};
+
+export function statusTone(status: UiStatus): StatusTone {
+  return STATUS_TONE[status];
+}
+
+export function statusIcon(status: UiStatus, paused = false): IconName {
+  if (paused && status !== "run" && status !== "wait") return "pause";
+  return STATUS_ICON[status];
+}
 
 export function mono(name: string) {
   return `${name.slice(0, 1).toUpperCase()}${name.slice(1, 2)}`;
@@ -130,10 +160,9 @@ export function MonoAv({
 }
 
 export function Pill({ st }: { st: UiStatus }) {
-  if (st !== "idle" && st !== "queue") return <StatusPill status={st} />;
   return (
-    <span className={`status ${st}`}>
-      <i className={`dot s-${st}`} />
+    <span className="rn-status" data-tone={statusTone(st)}>
+      <Icon name={statusIcon(st)} size={13} />
       {ST[st]}
     </span>
   );

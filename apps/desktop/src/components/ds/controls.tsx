@@ -7,6 +7,7 @@ import type {
 } from "react";
 import { useEffect, useId, useRef } from "react";
 import { useLayerFocus } from "../../hooks/useLayerFocus";
+import { statusIcon, statusTone } from "../../lib/ui";
 import { Icon } from "../icons";
 import s from "./controls.module.css";
 
@@ -183,14 +184,19 @@ export const statusLabels = {
 export type Status = keyof typeof statusLabels;
 export function StatusPill({ status }: { status: Status }) {
   return (
-    <span className={`${s.pill} ${s[status]}`}>
-      <span aria-hidden="true" className={s.pillDot} />
+    <span className={s.pill} data-tone={statusTone(status)}>
+      <Icon name={statusIcon(status)} size={13} />
       {statusLabels[status]}
     </span>
   );
 }
 export function StatusDot({ status }: { status: Status }) {
-  return <span role="img" aria-label={statusLabels[status]} className={`${s.dot} ${s[status]}`} />;
+  return (
+    <span className={s.dot} data-tone={statusTone(status)}>
+      <Icon name={statusIcon(status)} size={13} />
+      <span className="sr">{statusLabels[status]}</span>
+    </span>
+  );
 }
 export function Counter({ children, selected = false }: { children: number; selected?: boolean }) {
   return <span className={`${s.counter} ${selected ? s.counterSelected : ""}`}>{children}</span>;

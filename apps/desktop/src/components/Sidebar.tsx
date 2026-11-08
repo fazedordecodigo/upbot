@@ -2,22 +2,11 @@ import type { Agent, AgentStatusInfo, Channel } from "@boto/protocol";
 import type { RefObject } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import type { AgentOverview } from "../hooks/useOverview";
+import { agentSituation } from "../lib/agent-surface";
 import type { DaemonClient } from "../lib/daemon";
-import { moveControlFocus } from "../lib/keyboard";
-import { isMac, mod } from "../lib/platform";
-import { useThemePref } from "../lib/theme";
+import { mod } from "../lib/platform";
 import { fmtTime } from "../lib/ui";
-import {
-  BotoSimboloCurrentcolorIcon,
-  BotPlusIcon,
-  ClockIcon,
-  HomeIcon,
-  MoonIcon,
-  PlugIcon,
-  PlusIcon,
-  SearchIcon,
-  SunIcon,
-} from "./ds/icons";
+import { BotoSimboloCurrentcolorIcon } from "./ds/icons";
 import { Icon } from "./icons";
 
 export function Sidebar({
@@ -35,12 +24,12 @@ export function Sidebar({
   drawer,
   sideRef,
   onClose,
-  onNewSession,
-  onNewBot,
+  onNewTask,
   onSearch,
   onHome,
+  onAgents,
   onScheduled,
-  onApps,
+  onMarketplace,
   onSettings,
   onAgent,
   onChannel,
@@ -59,36 +48,77 @@ export function Sidebar({
   drawer: boolean;
   sideRef: RefObject<HTMLElement | null>;
   onClose: () => void;
-  onNewSession: () => void;
-  onNewBot: () => void;
+  onNewTask: () => void;
   onSearch: () => void;
   onHome: () => void;
+  onAgents: () => void;
   onScheduled: () => void;
-  onApps: () => void;
+  onMarketplace: () => void;
   onSettings: () => void;
   onAgent: (id: string) => void;
   onChannel: (id: string) => void;
 }) {
-  const { data: approvals = [] } = useDaemonQuery(
+  const { data: routines } = useDaemonQuery(
     client,
-    "approvals.list",
+    "routines.list",
     {},
     {
       enabled: ready,
-      events: { "approval.updated": true },
+      events: { "routine.updated": true, "routine.deleted": true },
     },
   );
-  const [theme, setTheme] = useThemePref();
-  const pending = approvals.filter((item) => item.status === "pending" && item.appId).length;
-  const dark =
-    theme === "auto" ? document.documentElement.dataset.theme === "dark" : theme === "dark";
   const name = profileName.trim() || "Você";
+  const activeCount = agents.filter((agent) => {
+    const situation = agentSituation(overview[agent.id]);
+    return situation === "working" || situation === "waiting";
+  }).length;
+  const routineCount = routines?.length ?? 0;
+  const groups = [
+    {
+      id: "working",
+      label: "Em andamento",
+      items: agents.filter((agent) => agentSituation(overview[agent.id]) === "working"),
+    },
+    {
+      id: "waiting",
+      label: "Aguardando você",
+      items: agents.filter((agent) => agentSituation(overview[agent.id]) === "waiting"),
+    },
+    {
+      id: "paused",
+      label: "Pausadas",
+      items: agents.filter((agent) => agentSituation(overview[agent.id]) === "paused"),
+    },
+    {
+      id: "recent",
+      label: "Recentes",
+      items: agents
+        .filter((agent) => {
+          const item = overview[agent.id];
+          return (
+            agentSituation(item) === "idle" &&
+            item?.latestTurn?.status === "completed" &&
+            Boolean(item.task)
+          );
+        })
+        .sort(
+          (a, b) =>
+            (overview[b.id]?.latestTurn?.endedAt ?? 0) - (overview[a.id]?.latestTurn?.endedAt ?? 0),
+        )
+        .slice(0, 8),
+    },
+  ];
+  const named = (agent: Agent) =>
+    agentNameOverride?.agentId === agent.id
+      ? agentNameOverride.name.trim() || "Sem nome"
+      : agent.name;
+
   return (
     <aside
       ref={sideRef}
       id="bot-drawer"
       className="side"
-      aria-label="Bots e tarefas"
+      aria-label="Barra lateral"
       {...(drawer ? { role: "dialog" as const, "aria-modal": true } : {})}
     >
       {drawer && (
@@ -103,30 +133,20 @@ export function Sidebar({
       )}
       <div className="side-titlebar" data-tauri-drag-region />
       <div className="side-top">
-        <div className="side-brand" role="img" aria-label="Boto">
-          <BotoSimboloCurrentcolorIcon />
-          <span>Boto</span>
-        </div>
         <button
           type="button"
-          className="icon-btn side-new-bot"
-          aria-label="Novo bot"
-          title={`Novo bot (${mod}${isMac ? "⇧" : "Shift+"}N)`}
-          onClick={onNewBot}
+          className="side-brand"
+          aria-label="Boto, ir para o início"
+          onClick={onHome}
         >
-          <BotPlusIcon />
+          <BotoSimboloCurrentcolorIcon />
+          <span>Boto</span>
         </button>
       </div>
       <nav className="side-actions" aria-label="Navegação principal">
-        <button type="button" className="side-btn new" onClick={onNewSession}>
-          <PlusIcon />
-          <span>Nova sessão</span>
-          <kbd>{mod}N</kbd>
-        </button>
-        <button type="button" className="side-btn" onClick={onSearch}>
-          <SearchIcon />
-          <span>Buscar</span>
-          <kbd>{mod}K</kbd>
+        <button type="button" className="side-btn new" onClick={onNewTask}>
+          <Icon name="plus" />
+          <span>Nova tarefa</span>
         </button>
         <button
           type="button"
@@ -134,8 +154,23 @@ export function Sidebar({
           aria-current={current === "home" ? "page" : undefined}
           onClick={onHome}
         >
-          <HomeIcon />
+          <Icon name="home" />
           <span>Início</span>
+        </button>
+        <button
+          type="button"
+          className="side-btn"
+          aria-current={current === "agents" ? "page" : undefined}
+          onClick={onAgents}
+        >
+          <Icon name="agents" />
+          <span>Agentes</span>
+          {activeCount > 0 && (
+            <span className="side-count">
+              <span className="sr">{activeCount} em atividade</span>
+              <span aria-hidden="true">{activeCount}</span>
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -143,100 +178,89 @@ export function Sidebar({
           aria-current={current === "scheduled" ? "page" : undefined}
           onClick={onScheduled}
         >
-          <ClockIcon />
-          <span>Agendadas</span>
+          <Icon name="repeat" />
+          <span>Rotinas</span>
+          {routineCount > 0 && <span className="side-count">{routineCount}</span>}
         </button>
         <button
           type="button"
           className="side-btn"
-          aria-current={current === "apps" ? "page" : undefined}
-          onClick={onApps}
+          aria-current={current === "marketplace" ? "page" : undefined}
+          onClick={onMarketplace}
         >
-          <PlugIcon />
-          <span>Apps conectados</span>
-          {pending > 0 && (
-            <span
-              className="side-count"
-              role="status"
-              aria-label={`${pending} ${pending === 1 ? "pedido pendente" : "pedidos pendentes"}`}
-            >
-              {pending}
-            </span>
-          )}
+          <Icon name="store" />
+          <span>Marketplace</span>
+        </button>
+        <button type="button" className="side-btn" onClick={onSearch}>
+          <Icon name="search" />
+          <span>Buscar</span>
+          <kbd>{mod}K</kbd>
         </button>
       </nav>
-      <div className="side-scroll">
-        <h2 className="side-label" id="sidebar-bots">
-          SEUS AGENTES
-        </h2>
-        <ul className="side-bots" aria-labelledby="sidebar-bots">
-          {agents.map((agent) => {
-            const item = overview[agent.id];
-            const state = item?.pending ? "wait" : (item?.status ?? "idle");
-            const summary =
-              state === "wait"
-                ? "Aguardando sua aprovação"
-                : state === "run"
-                  ? "Em execução"
-                  : state === "queue"
-                    ? `${item?.queued ?? 0} na fila`
-                    : state === "err"
-                      ? "Erro na última tarefa"
-                      : state === "ok"
-                        ? `Concluído · ${fmtTime(item?.latestTurn?.endedAt)}`
-                        : "Pronto para uma tarefa";
-            return (
-              <li key={agent.id}>
-                <button
-                  type="button"
-                  className="side-bot"
-                  aria-current={
-                    (current === "chat" || current === "agent-settings") && selectedId === agent.id
-                      ? "true"
-                      : undefined
-                  }
-                  onClick={() => onAgent(agent.id)}
-                >
-                  <b>
-                    {agentNameOverride?.agentId === agent.id
-                      ? agentNameOverride.name.trim() || "Sem nome"
-                      : agent.name}
-                  </b>
-                  <small title={state === "err" ? (statuses[agent.id]?.error ?? summary) : summary}>
-                    {summary}
-                  </small>
-                  <i className={`dot s-${state}`} aria-hidden="true" />
-                </button>
-              </li>
-            );
-          })}
-          {agents.length === 0 && <li className="side-empty">Nenhum bot ainda.</li>}
-          {channels.map((channel) => (
-            <li key={channel.id}>
-              <button
-                type="button"
-                className="side-bot"
-                aria-current={
-                  current === "channel" && channelId === channel.id ? "true" : undefined
-                }
-                onClick={() => onChannel(channel.id)}
-              >
-                <b># {channel.name}</b>
-                <small>
-                  {channel.status === "active"
-                    ? "Conversa ativa"
-                    : channel.status === "archived"
-                      ? "Conversa arquivada"
-                      : "Conversa parada"}
-                </small>
-                <i
-                  className={`dot ${channel.status === "active" ? "s-run" : "s-idle"}`}
-                  aria-hidden="true"
-                />
-              </button>
-            </li>
-          ))}
-        </ul>
+      <div className="side-scroll side-history">
+        {groups.every((group) => group.items.length === 0) && channels.length === 0 && (
+          <p className="side-empty">Nenhuma tarefa ainda.</p>
+        )}
+        {groups.map((group) =>
+          group.items.length === 0 ? null : (
+            <section key={group.id} aria-label={group.label}>
+              <h2 className="side-label">{group.label}</h2>
+              <ul className="side-bots">
+                {group.items.map((agent) => {
+                  const item = overview[agent.id];
+                  const summary = item?.task || named(agent);
+                  const when = fmtTime(item?.latestTurn?.endedAt ?? item?.latestTurn?.startedAt);
+                  return (
+                    <li key={agent.id}>
+                      <button
+                        type="button"
+                        className="side-bot"
+                        aria-current={
+                          current === "chat" && selectedId === agent.id ? "true" : undefined
+                        }
+                        onClick={() => onAgent(agent.id)}
+                      >
+                        <b>{summary}</b>
+                        <small title={statuses[agent.id]?.error ?? named(agent)}>
+                          {named(agent)}
+                          {when !== "—" ? ` · ${when}` : ""}
+                        </small>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ),
+        )}
+        {channels.length > 0 && (
+          <section aria-label="Conversas">
+            <h2 className="side-label">Conversas</h2>
+            <ul className="side-bots">
+              {channels.map((channel) => (
+                <li key={channel.id}>
+                  <button
+                    type="button"
+                    className="side-bot"
+                    aria-current={
+                      current === "channel" && channelId === channel.id ? "true" : undefined
+                    }
+                    onClick={() => onChannel(channel.id)}
+                  >
+                    <b># {channel.name}</b>
+                    <small>
+                      {channel.status === "active"
+                        ? "Conversa ativa"
+                        : channel.status === "archived"
+                          ? "Conversa arquivada"
+                          : "Conversa parada"}
+                    </small>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
       <footer className="side-foot">
         <span className="side-avatar" aria-hidden="true">
@@ -246,31 +270,11 @@ export function Sidebar({
           <b title={name}>{name}</b>
           <span>Pessoal</span>
         </div>
-        <fieldset className="side-theme" onKeyDown={moveControlFocus}>
-          <legend className="sr">Tema da interface</legend>
-          <button
-            type="button"
-            aria-label="Tema claro"
-            aria-pressed={!dark}
-            tabIndex={dark ? -1 : 0}
-            onClick={() => setTheme("light")}
-          >
-            <SunIcon />
-          </button>
-          <button
-            type="button"
-            aria-label="Tema escuro"
-            aria-pressed={dark}
-            tabIndex={dark ? 0 : -1}
-            onClick={() => setTheme("dark")}
-          >
-            <MoonIcon />
-          </button>
-        </fieldset>
         <button
           type="button"
           className="side-settings"
           aria-label="Configurações"
+          aria-current={current === "settings" ? "page" : undefined}
           onClick={onSettings}
         >
           <Icon name="gear" />

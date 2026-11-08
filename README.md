@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="apps/desktop/public/assets/boto-logo-branco.svg">
-    <source media="(prefers-color-scheme: light)" srcset="apps/desktop/public/assets/boto-logo.svg">
-    <img alt="Boto" src="apps/desktop/public/assets/boto-logo.svg" width="240">
+    <source media="(prefers-color-scheme: dark)" srcset="apps/desktop/public/assets/boto-logo.svg">
+    <source media="(prefers-color-scheme: light)" srcset="apps/desktop/public/assets/boto-logo-claro.svg">
+    <img alt="Boto" src="apps/desktop/public/assets/boto-logo-claro.svg" width="240">
   </picture>
 </p>
 
@@ -77,8 +77,8 @@ remains opt-in per bot; read-aloud uses `espeak-ng` when available.
 Boto was BobAgent, then UpBot, and is now Boto — each rename migrated your bots, chats and
 vault automatically. The next release is **0.5.0**, which brings:
 
-- the new Eco design system (dark theme, Host Grotesk and DM Mono fonts) and a
-  Brazilian Portuguese interface;
+- the Rio Negro design system (dark by default, Bricolage Grotesque, Inter and
+  JetBrains Mono) and a Brazilian Portuguese interface;
 - native approval notifications on Linux (freedesktop D-Bus) and pending-approval badges
   on macOS, Windows and Linux;
 - a persistent approval audit trail, interrupted-approval recovery after restarts, and
@@ -116,7 +116,7 @@ Architecture and conventions: [AGENTS.md](AGENTS.md). Contributions are welcome 
 
 ## Fonts
 
-The desktop app bundles Host Grotesk and DM Mono under the SIL Open Font License 1.1;
+The desktop app bundles Bricolage Grotesque, Inter and JetBrains Mono under the SIL Open Font License 1.1;
 the license texts ship in `apps/desktop/src/fonts/`.
 
 ## License

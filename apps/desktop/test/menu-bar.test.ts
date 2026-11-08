@@ -435,7 +435,7 @@ test("native bridge navigation and commands retain real daemon data", async () =
     await native.getByRole("heading", { name: "Apps conectados", exact: true }).waitFor();
     await navigate(second.id);
     await native.getByRole("textbox", { name: "Mensagem para o bot" }).waitFor();
-    expect(await native.locator(".main-head").innerText()).toContain(second.name);
+    expect(await native.locator(".task-head").innerText()).toContain(second.name);
     await native.evaluate(() => {
       location.hash = "#/menubar";
     });

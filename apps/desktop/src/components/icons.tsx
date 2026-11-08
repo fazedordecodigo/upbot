@@ -37,6 +37,16 @@ const I = {
   page: '<path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M10 12h5M10 15.5h5"/>',
   group:
     '<circle cx="9" cy="9" r="3.5"/><path d="M3 19a6 6 0 0 1 12 0M16 5.5a3.5 3.5 0 0 1 0 7M21 19a6 6 0 0 0-4-5.6"/>',
+  repeat:
+    '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+  store: '<path d="M3 9 5 4h14l2 5"/><path d="M4 9h16v11H4z"/><path d="M9 20v-6h6v6"/>',
+  monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  pause:
+    '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  play: '<path d="m8 5 11 7-11 7z"/>',
+  power: '<path d="M12 3v9"/><path d="M7.5 5.5a8 8 0 1 0 9 0"/>',
+  pointer: '<path d="m4 4 7.5 16 2.2-6.3L20 11.5z"/>',
+  home: '<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/>',
 };
 
 const paths = {

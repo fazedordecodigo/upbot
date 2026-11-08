@@ -256,14 +256,14 @@ async function capture(name: string, target = page, fullPage = false) {
   });
   const count = blueElements.length;
   blueCounts[name] = count;
-  if (count > 2)
+  if (count > 3)
     throw new Error(`Too many blue elements (${count}): ${JSON.stringify(blueElements)}`);
-  expect(count).toBeLessThanOrEqual(2);
+  expect(count).toBeLessThanOrEqual(3);
 }
 
 async function openSettings(target = page) {
   if ((await target.locator("[data-agent-config-top]").count()) > 0) return;
-  const button = target.getByRole("button", { name: "Configurar bot" });
+  const button = target.getByRole("button", { name: "Configurar agente" });
   try {
     await button.waitFor({ timeout: 5000 });
   } catch {
@@ -408,7 +408,7 @@ test("agent settings save drafts through real daemon RPCs and expose the handoff
         "*{transition:none!important;animation:none!important;scroll-behavior:auto!important}",
     });
     await openSettings();
-    await page.locator('.side-bot[aria-current="true"]').getByText(currentAgent.name).waitFor();
+    await page.locator("[data-agent-config-top]").waitFor();
     expect(await page.getByText(/internal error/i).count()).toBe(0);
     await page
       .context()

@@ -11,9 +11,9 @@
 .intro p { color: var(--muted); }
 .intro p:first-child { font: var(--fs-label)/1.5 var(--font-mono); letter-spacing: .08em; margin-bottom: var(--gap-xs); }
 .intro a { display: inline-block; padding-block: var(--gap-sm); color: var(--fg); text-decoration: underline; font-size: var(--fs-meta); }
-.intro a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.intro a:focus-visible { outline: var(--boto-size-focus-ring) solid var(--boto-color-focus); outline-offset: var(--boto-size-focus-offset); }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap-md); }
-.card { padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.card { padding: 28px; border: 1px solid var(--border); border-radius: var(--boto-radius-lg); background: var(--surface); }
 .row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--gap-sm); margin-block: var(--gap-md); }
 .card > div:first-of-type { margin-top: 0; }
 .card > div:last-child { margin-bottom: 0; }

@@ -135,18 +135,19 @@ test("theme persists, focus is visible, colors invert, reduced motion stops puls
     await page
       .getByText("Em execução", { exact: true })
       .first()
-      .locator("span")
+      .locator("svg")
       .evaluate((el) => getComputedStyle(el).animationName),
   ).toBe("none");
   await page.getByRole("button", { name: "Tema claro" }).click();
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
 });
 
-test("kit loads packaged Host Grotesk and DM Mono", async () => {
+test("kit loads packaged Bricolage Grotesque, Inter and JetBrains Mono", async () => {
   const loaded = await page.evaluate(async () => {
     await document.fonts.ready;
-    const hostFaces = await document.fonts.load('600 16px "Host Grotesk"');
-    const monoFaces = await document.fonts.load('400 13px "DM Mono"');
+    const displayFaces = await document.fonts.load('600 16px "Bricolage Grotesque"');
+    const sansFaces = await document.fonts.load("400 16px Inter");
+    const monoFaces = await document.fonts.load('400 13px "JetBrains Mono"');
     const h1 = document.querySelector("h1");
     const probe = document.createElement("p");
     probe.className = "meta";
@@ -154,26 +155,50 @@ test("kit loads packaged Host Grotesk and DM Mono", async () => {
     document.body.appendChild(probe);
     const h1Family = h1 ? getComputedStyle(h1).fontFamily : "";
     const metaFamily = getComputedStyle(probe).fontFamily;
+    const bodyFamily = getComputedStyle(document.body).fontFamily;
     probe.remove();
     const unquote = (family: string) => family.replaceAll(/["']/g, "");
     return {
-      host: document.fonts.check('600 16px "Host Grotesk"'),
-      mono: document.fonts.check('400 13px "DM Mono"'),
-      hostFaces: hostFaces.length,
+      display: document.fonts.check('600 16px "Bricolage Grotesque"'),
+      sans: document.fonts.check("400 16px Inter"),
+      mono: document.fonts.check('400 13px "JetBrains Mono"'),
+      displayFaces: displayFaces.length,
+      sansFaces: sansFaces.length,
       monoFaces: monoFaces.length,
       h1Family: unquote(h1Family),
       metaFamily: unquote(metaFamily),
+      bodyFamily: unquote(bodyFamily),
     };
   });
-  expect(loaded.h1Family.split(",")[0]?.trim()).toBe("Host Grotesk");
-  expect(loaded.metaFamily.split(",")[0]?.trim()).toBe("DM Mono");
-  expect(loaded.host).toBe(true);
+  expect(loaded.h1Family.split(",")[0]?.trim()).toBe("Bricolage Grotesque");
+  expect(loaded.bodyFamily.split(",")[0]?.trim()).toBe("Inter");
+  expect(loaded.metaFamily.split(",")[0]?.trim()).toBe("JetBrains Mono");
+  expect(loaded.display).toBe(true);
+  expect(loaded.sans).toBe(true);
   expect(loaded.mono).toBe(true);
-  expect(loaded.hostFaces).toBeGreaterThan(0);
+  expect(loaded.displayFaces).toBeGreaterThan(0);
+  expect(loaded.sansFaces).toBeGreaterThan(0);
   expect(loaded.monoFaces).toBeGreaterThan(0);
 });
 
-test("Library screens use the kit and scoped Eco tokens", () => {
+test("kit controls use Rio Negro height, radius and focus tokens", () => {
+  const source = fileURLToPath(new URL("../src/components/ds", import.meta.url));
+  const controls = readFileSync(join(source, "controls.module.css"), "utf8");
+  const menu = readFileSync(join(source, "Menu.module.css"), "utf8");
+  for (const css of [controls, menu]) {
+    expect(css).toContain("var(--boto-size-control)");
+    expect(css).toContain("pointer: coarse");
+    expect(css).toContain("var(--boto-size-target)");
+    expect(css).toContain("var(--boto-size-focus-ring)");
+    expect(css).toContain("var(--boto-color-focus)");
+  }
+  expect(controls).toContain("var(--boto-size-control-sm)");
+  expect(controls).toContain("var(--boto-radius-md)");
+  expect(controls).toContain('data-tone="run"');
+  expect(controls).not.toContain("pillDot");
+});
+
+test("Library screens use the kit and scoped Rio Negro tokens", () => {
   const source = fileURLToPath(new URL("../src/components", import.meta.url));
   const component = readFileSync(join(source, "Library.tsx"), "utf8");
   const css = readFileSync(join(source, "Library.module.css"), "utf8");
@@ -221,8 +246,8 @@ test("all authored colors are token-based and dark controls retain visible focus
     expect(computed.outline).toBe("2px");
     expect(computed.offset).toBe("3px");
     expect(computed.transition).toBe("0s");
-    expect(computed.width).toBeGreaterThanOrEqual(44);
-    expect(computed.height).toBeGreaterThanOrEqual(44);
+    expect(computed.width).toBeGreaterThanOrEqual(36);
+    expect(computed.height).toBe(36);
     const out = process.env.PHASE6_SCREEN_DIR;
     if (out) {
       mkdirSync(out, { recursive: true });
@@ -232,25 +257,25 @@ test("all authored colors are token-based and dark controls retain visible focus
   await page.emulateMedia({ reducedMotion: "no-preference" });
 });
 
-/** Pares da paleta Eco (guia / design-system do Versace), não calculados pelo gerador. */
-const ECO = {
+/** Pares da paleta Rio Negro (DESIGN.md), não calculados pelo gerador. */
+const RIO = {
   light: {
-    "--fg": [17, 14, 18],
-    "--bg": [237, 230, 234],
-    "--surface": [248, 245, 247],
-    "--muted": [122, 74, 110],
-    "--accent": [122, 74, 110],
-    "--on-accent": [237, 230, 234],
-    "--focus": [194, 85, 123],
+    "--fg": [12, 20, 22],
+    "--bg": [246, 248, 247],
+    "--surface": [255, 255, 255],
+    "--muted": [85, 103, 106],
+    "--accent": [194, 69, 107],
+    "--on-accent": [255, 255, 255],
+    "--focus": [194, 69, 107],
   },
   dark: {
-    "--fg": [237, 230, 234],
-    "--bg": [17, 14, 18],
-    "--surface": [32, 29, 33],
-    "--muted": [171, 165, 169],
-    "--accent": [242, 155, 178],
-    "--on-accent": [17, 14, 18],
-    "--focus": [242, 155, 178],
+    "--fg": [232, 238, 238],
+    "--bg": [12, 20, 22],
+    "--surface": [19, 29, 32],
+    "--muted": [147, 163, 165],
+    "--accent": [240, 138, 166],
+    "--on-accent": [12, 20, 22],
+    "--focus": [240, 138, 166],
   },
 } as const;
 
@@ -271,7 +296,7 @@ function contrastRatio(a: [number, number, number], b: [number, number, number])
   return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
 }
 
-test("eco palette meets AA contrast from computed colors in both themes", async () => {
+test("Rio Negro palette meets AA contrast from computed colors in both themes", async () => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   for (const theme of ["light", "dark"] as const) {
     await page
@@ -297,7 +322,7 @@ test("eco palette meets AA contrast from computed colors in both themes", async 
         buttonFg: button?.color ?? "",
       };
     });
-    const expected = ECO[theme];
+    const expected = RIO[theme];
     for (const [name, rgb] of Object.entries(expected)) {
       expect(parseRgb(measured.colors[name] ?? "")).toEqual([...rgb]);
     }
@@ -372,7 +397,7 @@ test("every custom property used in the desktop app resolves on the kit", async 
   expect(missing).toEqual([]);
 });
 
-test("kit titles are semibold and the Eco palette is on the page", async () => {
+test("kit titles are semibold and the Rio Negro palette is on the page", async () => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Tema claro", exact: true }).click();
   expect(await page.locator("h1").evaluate((element) => getComputedStyle(element).fontWeight)).toBe(
@@ -385,16 +410,16 @@ test("kit titles are semibold and the Eco palette is on the page", async () => {
       .evaluate((element) => getComputedStyle(element).fontWeight),
   ).toBe("600");
   expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe("16px");
-  const swatch = page.getByRole("list", { name: "Paleta Eco" });
+  const swatch = page.getByRole("list", { name: "Paleta Rio Negro" });
   const accent = await swatch
     .getByRole("listitem", { name: "Destaque", exact: true })
     .evaluate((element) => getComputedStyle(element).backgroundColor);
-  expect(parseRgb(accent)).toEqual([122, 74, 110]);
+  expect(parseRgb(accent)).toEqual([194, 69, 107]);
   await page.getByRole("button", { name: "Tema escuro", exact: true }).click();
   const darkAccent = await swatch
     .getByRole("listitem", { name: "Destaque", exact: true })
     .evaluate((element) => getComputedStyle(element).backgroundColor);
-  expect(parseRgb(darkAccent)).toEqual([242, 155, 178]);
+  expect(parseRgb(darkAccent)).toEqual([240, 138, 166]);
   await page.emulateMedia({ reducedMotion: "no-preference" });
 });
 
@@ -484,7 +509,7 @@ test("the agent is deleted only from the Excluir agente button", async () => {
   expect(await page.getByRole("status").textContent()).toBe("Agente “Revisor de PR” excluído.");
 });
 
-test("chat column max-width follows the Eco token", async () => {
+test("chat column max-width follows the Rio Negro token", async () => {
   const maxWidth = await page.evaluate(() => {
     const column = document.createElement("div");
     column.className = "thread-inner";
@@ -496,7 +521,7 @@ test("chat column max-width follows the Eco token", async () => {
   expect(maxWidth).toBe("760px");
 });
 
-test("Hosts and E-mail settings use scoped Eco controls without migrating composer drafts", () => {
+test("Hosts and E-mail settings use scoped Rio Negro controls without migrating composer drafts", () => {
   const source = fileURLToPath(new URL("../src/components", import.meta.url));
   for (const name of ["HostsView", "EmailView"]) {
     const component = readFileSync(join(source, `${name}.tsx`), "utf8");

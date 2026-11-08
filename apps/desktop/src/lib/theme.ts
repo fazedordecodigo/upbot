@@ -5,7 +5,8 @@ export type ThemePreference = "light" | "dark" | "auto";
 const changed = "boto:theme-changed";
 
 function apply(preference: string | null) {
-  const pref = preference === "light" || preference === "dark" ? preference : "auto";
+  const pref =
+    preference === "light" || preference === "dark" || preference === "auto" ? preference : "dark";
   document.documentElement.dataset.themePref = pref;
   document.documentElement.dataset.theme =
     pref === "auto"

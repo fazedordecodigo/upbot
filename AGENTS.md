@@ -28,7 +28,7 @@ when the task touches that area — do not preload every reference.
 | Hosts, Firecracker placement, subagents (implementation) | [docs/agents/remote.md](docs/agents/remote.md) |
 | Host setup / guest image (operator guide) | [docs/remote-hosts.md](docs/remote-hosts.md) |
 | CI, release, updater, branding | [docs/agents/shipping.md](docs/agents/shipping.md) |
-| Eco design system | [docs/design-system.md](docs/design-system.md) |
+| Rio Negro design system | [DESIGN.md](DESIGN.md) |
 
 ## Layout
 
@@ -48,9 +48,9 @@ when the task touches that area — do not preload every reference.
 - `apps/desktop` — Tauri 2 + React 19 + Vite + Tailwind 4. Rust spawns the sidecar via
   `tauri-plugin-shell`, parses the READY line, and exposes `daemon_connection` ->
   `{port, token}`. Frontend WS client: `src/lib/daemon.ts`.
-  Design system (Eco): `apps/desktop/src/styles/tokens.json` is the source of truth;
+  Design system (Rio Negro): `apps/desktop/src/styles/tokens.json` is the source of truth;
   `bun scripts/build-tokens.ts` writes `tokens.css` (`--boto-*`) and `legacy-bridge.css`.
-  Host Grotesk and DM Mono are packaged in `apps/desktop/src/fonts/` (SIL OFL).
+  Bricolage Grotesque, Inter and JetBrains Mono are packaged in `apps/desktop/src/fonts/` (SIL OFL).
   Icons live in `apps/desktop/src/components/ds/icons.tsx`. See `docs/design-system.md`.
 - `spikes` — `acp-probe.ts` probes agent CLIs for ACP support:
   `bun spikes/acp-probe.ts <name> -- <cmd...>` writes `spikes/out/acp-<name>.json`.

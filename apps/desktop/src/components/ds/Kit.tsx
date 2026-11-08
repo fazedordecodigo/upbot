@@ -52,7 +52,7 @@ const iconLabels: Record<string, string> = {
 };
 
 export default function Kit() {
-  const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? "light");
+  const [theme, setTheme] = useState(document.documentElement.dataset.theme ?? "dark");
   const [filter, setFilter] = useState("all");
   const [enabled, setEnabled] = useState(true);
   const [daily, setDaily] = useState(false);
@@ -100,7 +100,7 @@ export default function Kit() {
           <h2>Paleta</h2>
           {/* list-style: none tira o papel implícito de lista no Chrome. */}
           {/* biome-ignore lint/a11y/noRedundantRoles: o papel explícito restaura a lista */}
-          <ul className={s.palette} role="list" aria-label="Paleta Eco">
+          <ul className={s.palette} role="list" aria-label="Paleta Rio Negro">
             {(
               [
                 ["Fundo", "var(--bg)", "var(--fg)"],
