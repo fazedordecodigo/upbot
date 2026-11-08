@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Browser, Page } from "playwright-core";
+import type { Browser, Locator, Page } from "playwright-core";
 import { chromium } from "playwright-core";
 import { expectSwitchGeometry } from "./switch-geometry";
 
@@ -335,6 +335,10 @@ test("Rio Negro palette meets AA contrast from computed colors in both themes", 
           requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
         ),
     );
+    await waitForBackground(
+      page.getByRole("button", { name: "Salvar", exact: true }).first(),
+      RIO[theme]["--accent"],
+    );
     const measured = await page.evaluate(() => {
       const probe = document.createElement("div");
       probe.style.setProperty("transition", "none", "important");
@@ -431,19 +435,12 @@ test("every custom property used in the desktop app resolves on the kit", async 
   expect(missing).toEqual([]);
 });
 
-async function waitForAccent(rgb: [number, number, number]) {
-  await page
-    .waitForFunction(
-      (expected) => {
-        const item = document.querySelector(
-          '[aria-label="Paleta Rio Negro"] [aria-label="Destaque"]',
-        );
-        return item ? getComputedStyle(item).backgroundColor === expected : false;
-      },
-      `rgb(${rgb.join(", ")})`,
-      { timeout: 3000 },
-    )
-    .catch(() => {});
+async function waitForBackground(locator: Locator, rgb: readonly number[]) {
+  const expected = `rgb(${rgb.join(", ")})`;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if ((await locator.evaluate((el) => getComputedStyle(el).backgroundColor)) === expected) return;
+    await page.waitForTimeout(30);
+  }
 }
 
 test("kit titles are semibold and the Rio Negro palette is on the page", async () => {
@@ -466,7 +463,10 @@ test("kit titles are semibold and the Rio Negro palette is on the page", async (
   ).toBe("600");
   expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe("16px");
   const swatch = page.getByRole("list", { name: "Paleta Rio Negro" });
-  await waitForAccent([194, 69, 107]);
+  await waitForBackground(
+    swatch.getByRole("listitem", { name: "Destaque", exact: true }),
+    [194, 69, 107],
+  );
   const accent = await swatch
     .getByRole("listitem", { name: "Destaque", exact: true })
     .evaluate((element) => getComputedStyle(element).backgroundColor);
@@ -478,7 +478,10 @@ test("kit titles are semibold and the Rio Negro palette is on the page", async (
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       ),
   );
-  await waitForAccent([240, 138, 166]);
+  await waitForBackground(
+    swatch.getByRole("listitem", { name: "Destaque", exact: true }),
+    [240, 138, 166],
+  );
   const darkAccent = await swatch
     .getByRole("listitem", { name: "Destaque", exact: true })
     .evaluate((element) => getComputedStyle(element).backgroundColor);
