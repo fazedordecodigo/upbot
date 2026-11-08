@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="pt-BR" data-theme="light">
+<html lang="pt-BR" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Boto — system design</title>
 <meta name="description" content="Arquitetura técnica do Boto: agentes autônomos que executam tarefas de ponta a ponta, cada um num computador próprio, com filas, permissões, aprovações, memória e rotinas.">
-<link rel="icon" href="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/favicon.svg?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np" type="image/svg+xml">
+<link rel="icon" href="../../apps/desktop/public/assets/favicon.svg" type="image/svg+xml">
 <style>
 /* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio, geometry.
    Put this @layer first; product CSS outside the layer wins ordinary layout rules.
@@ -16,15 +16,15 @@
 
   :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
 
-  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
-  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
-  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
-  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, var(--boto-space-2)); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, var(--boto-space-2)); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, var(--boto-space-2)); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, var(--boto-space-2)); }
   .od-fill    { flex: 1 1 0; min-width: 0; }
   .od-fixed   { flex: none; }
-  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+  .od-grid    { display: grid; gap: var(--od-gap, var(--boto-space-3)); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
 
-  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, var(--boto-space-1)); }
   :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
   .od-tile { display: grid; grid-template-rows: auto 1fr; }
   :where(.od-tile) > :where(*) { display: block; }
@@ -45,22 +45,20 @@
   .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
   .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
 
-  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
-             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail { display: flex; gap: var(--od-gap, var(--boto-space-2)); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, var(--boto-space-4)); scroll-padding-inline: var(--od-rail-pad, var(--boto-space-4)); }
   .od-rail::-webkit-scrollbar { display: none; }
   :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
-  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, var(--boto-space-4)); }
 
   .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
-  .od-touch  { min-width: 44px; min-height: 44px; }
+  .od-touch  { min-width: var(--boto-size-target); min-height: var(--boto-size-target); }
 }
 :root [hidden]:where(:not([hidden="until-found" i])) { display: none; }
 /* /OD-LAYOUT-PRIMITIVES v1 */
 </style>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="/api/projects/efd11e42-0296-4d52-98f8-489f74061057/raw/assets/boto-ui.css?workspaceId=mi5r4nj4a5odpzxhp1lhdc4o&workspaceMemberId=psizxp03y5ckpov2uyl307np">
+<link rel="stylesheet" href="../../apps/desktop/src/styles/tokens.css">
+<link rel="stylesheet" href="assets/boto-ui.css">
 <style>
   :root {
     --measure: 72ch;
@@ -120,8 +118,8 @@
   /* Artigo */
   .doc { min-width: 0; }
   .doc > header { padding-bottom: var(--space-10); border-bottom: 1px solid var(--border); margin-bottom: var(--space-10); }
-  .eyebrow { display: block; font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-foreground); }
-  .doc h1 { font-size: clamp(36px, 5vw, var(--text-4xl)); letter-spacing: -0.02em; margin: var(--space-3) 0 var(--space-5); max-width: 20ch; }
+  .eyebrow { display: block; font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground); }
+  .doc h1 { font-size: clamp(var(--text-3xl), 5vw, var(--text-4xl)); letter-spacing: -0.03em; margin: var(--space-3) 0 var(--space-5); max-width: 20ch; }
   .lead { font-size: var(--text-lg); color: var(--muted-foreground); max-width: 62ch; }
   .meta { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); margin-top: var(--space-6); font-size: var(--text-sm); color: var(--muted-foreground); }
   .meta b { color: var(--foreground); font-weight: 500; }
@@ -147,7 +145,7 @@
   .tag {
     display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 var(--space-2);
     border: 1px solid var(--border); border-radius: var(--radius-full);
-    font-family: var(--font-mono); font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; vertical-align: 2px;
+    font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 500; line-height: 1; white-space: nowrap; vertical-align: 2px;
     color: var(--foreground); background: var(--card);
   }
   .tag::before { content: ""; width: 7px; height: 7px; flex: none; }
@@ -161,8 +159,8 @@
     max-width: var(--measure); margin: var(--space-6) 0; padding: var(--space-4) var(--space-5);
     border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card);
   }
-  .note-label { display: block; font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-foreground); margin-bottom: var(--space-2); }
-  .note p { font-size: 15px; }
+  .note-label { display: block; font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground); margin-bottom: var(--space-2); }
+  .note p { font-size: var(--text-sm); }
 
   /* Tabelas */
   .table-wrap { margin: var(--space-6) 0; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
@@ -208,7 +206,7 @@
   .ah { fill: var(--muted-foreground); }
 
   /* Passos dos diagramas de sequência */
-  ol.seq-steps { margin: 0; padding: var(--space-4) var(--space-5) var(--space-5) calc(var(--space-5) + var(--space-6)); border-top: 1px solid var(--border); font-size: var(--text-sm); }
+  ol.seq-steps { margin: 0; padding: var(--space-4) var(--space-5) var(--space-5) calc(var(--space-5) + var(--space-6)); border-top: 1px solid var(--border); font-size: var(--text-base); }
   ol.seq-steps li { max-width: var(--measure); }
   ol.seq-steps li::marker { font-family: var(--font-mono); color: var(--muted-foreground); }
 
@@ -1344,7 +1342,7 @@
     </section>
 
     <footer>
-      <p>Este documento descreve uma proposta. O <a href="index.html">protótipo</a> simula todo o comportamento no navegador; nenhum dos componentes descritos aqui existe ainda. As tecnologias citadas são recomendações para avaliar, e os exemplos (agentes, máquinas, PRs e e-mails) são fictícios, coerentes com os roteiros do protótipo.</p>
+      <p>Este documento descreve uma proposta. A versão local do <a href="index.html">protótipo</a> preserva a navegação, o tema e as abas; a simulação de tarefas e máquinas do export original não está disponível. As tecnologias citadas são recomendações para avaliar, e os exemplos (agentes, máquinas, PRs e e-mails) são fictícios.</p>
     </footer>
   </main>
 </div>
@@ -1360,7 +1358,7 @@
     root.dataset.theme = t;
     btn.setAttribute('aria-pressed', String(t === 'dark'));
   };
-  apply(read() === 'dark' ? 'dark' : 'light');
+  apply(read() === 'light' ? 'light' : 'dark');
   btn.addEventListener('click', () => {
     const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
     apply(next); write(next);

@@ -14,10 +14,21 @@ select,
 summary,
 a[href],
 input:not([type="checkbox"]):not([type="radio"]) {
-  min-height: 44px;
+  min-height: var(--boto-size-control);
 }
-button { min-width: 44px; }
-:focus-visible { outline: 2px solid var(--focus) !important; outline-offset: 3px !important; }
+button { min-width: var(--boto-size-control); }
+
+@media (pointer: coarse) {
+  button,
+  select,
+  summary,
+  a[href],
+  input:not([type="checkbox"]):not([type="radio"]) {
+    min-height: var(--boto-size-target) !important;
+  }
+  button { min-width: var(--boto-size-target) !important; }
+}
+:focus-visible { outline: var(--boto-size-focus-ring) solid var(--focus) !important; outline-offset: var(--boto-size-focus-offset) !important; }
 
 .hint.is-err,
 .notice.is-err {
@@ -26,10 +37,26 @@ button { min-width: 44px; }
 
 button.bg-sky-600, button.bg-sky-700 {
   color: var(--bg);
-  min-height: 44px;
+  min-height: var(--boto-size-control);
 }
 
-@media (max-width: 759px) {
+.side-count {
+  background: var(--boto-color-secondary);
+  color: var(--boto-color-muted-foreground);
+}
+
+@media (max-width: 1023px) {
+  .app,
+  .app.no-panel,
+  .app.view-agents,
+  .app.view-tasks,
+  .app.view-settings { grid-template-columns: minmax(0, 1fr); }
+  .side { display: none; }
+  .window-menu { display: grid; }
+  .home-inner,
+  .agents-inner,
+  .app > main > .view > .page { padding-top: var(--boto-space-16); }
+  .task-head { padding-left: var(--boto-space-16); }
   .side-titlebar { display: none; }
   .side > button[aria-label="Fechar barra lateral"] { position: absolute; top: 4px; right: 4px; }
   .side-top { padding-right: 52px; }

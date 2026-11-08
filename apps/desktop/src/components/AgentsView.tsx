@@ -79,7 +79,7 @@ export function AgentsView({
   };
 
   return (
-    <section className="view on agents-cockpit">
+    <section className="view on agents-cockpit" aria-labelledby="agents-title">
       <div className="agents-inner">
         <div className="page-head">
           <div>
