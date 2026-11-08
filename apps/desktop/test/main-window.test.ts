@@ -293,6 +293,11 @@ test("real chat, approval once/always/undo, details, palette, settings and drawe
     await page.getByRole("button", { name: "Fechar aviso" }).click();
     const desk = page.getByRole("region", { name: "Área de trabalho do agente" });
     await desk.waitFor();
+    const deskStatus = await desk.locator(".desk-top .status[data-tone]").evaluate((element) => ({
+      ink: getComputedStyle(element).color,
+      inherited: getComputedStyle(element.parentElement as Element).color,
+    }));
+    expect(deskStatus.ink).not.toBe(deskStatus.inherited);
     await capture(`details-${theme}`);
     await page.getByRole("button", { name: "Área de trabalho", exact: true }).click();
     await desk.waitFor({ state: "hidden" });

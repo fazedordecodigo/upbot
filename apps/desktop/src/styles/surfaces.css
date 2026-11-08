@@ -45,7 +45,10 @@
 .status[data-tone="wait"] { color: var(--boto-color-primary); }
 .status[data-tone="muted"],
 .status[data-tone="done"] { color: var(--boto-color-muted-foreground); }
-.agent-desk .status[data-tone] { color: inherit; }
+.agent-desk .status[data-tone="run"] { color: color-mix(in srgb, var(--boto-color-status-run) 70%, var(--boto-color-preview-dark-fg)); }
+.agent-desk .status[data-tone="wait"] { color: color-mix(in srgb, var(--boto-color-status-wait) 70%, var(--boto-color-preview-dark-fg)); }
+.agent-desk .status[data-tone="muted"],
+.agent-desk .status[data-tone="done"] { color: color-mix(in srgb, var(--boto-color-status-muted) 70%, var(--boto-color-preview-dark-fg)); }
 .status[data-tone="run"] svg { animation: rn-spin var(--boto-duration-pulse) linear infinite; }
 @keyframes rn-spin { to { transform: rotate(360deg); } }
 
@@ -350,6 +353,7 @@ dialog.agent-panel {
   cursor: col-resize;
   background: var(--border);
 }
+.task-split:focus-visible { outline-offset: 2px !important; }
 .task-desk-pane { flex: 1 1 46%; min-width: 260px; min-height: 0; display: flex; padding: var(--boto-space-3); }
 .task-body[data-desk="off"] .task-desk-pane,
 .task-body[data-desk="off"] .task-split { display: none; }

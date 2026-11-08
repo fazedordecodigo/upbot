@@ -101,9 +101,10 @@ export function HomeView({
   const hello = name ? `${greeting().replace(/\.$/, "")}, ${name}.` : greeting();
   const working = agents.filter((agent) => agentSituation(overview[agent.id]) === "working");
   const waiting = agents.filter((agent) => agentSituation(overview[agent.id]) === "waiting");
-  const active = agents.filter(
-    (agent) => workspaceOf(agent.id, placements, hosts, overview[agent.id]?.status).occupied,
-  );
+  const active = agents.filter((agent) => {
+    const status = overview[agent.id]?.status;
+    return status === "run" || status === "wait";
+  });
   const recent = agents
     .filter((agent) => {
       const item = overview[agent.id];
