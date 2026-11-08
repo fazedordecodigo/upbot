@@ -30,7 +30,7 @@
     },
     {
       "files": ["stripe-icon.svg"],
-      "source": "https://github.com/simple-icons/simple-icons (stripe.svg), recolorido para #635BFF, a cor da marca",
+      "source": "https://github.com/simple-icons/simple-icons (stripe.svg), sem alteração",
       "author": "Simple Icons e colaboradores",
       "license": "CC0 1.0 (coleção); marca registrada da Stripe"
     },
@@ -44,7 +44,7 @@
   "missing": [
     {
       "name": "Aider",
-      "reason": "O site oficial só publica o logotipo por extenso, sem símbolo quadrado. O protótipo usa um monograma."
+      "reason": "O site oficial só publica o logotipo por extenso, sem símbolo quadrado. Sem arquivo oficial, o Boto não exibe logo para o Aider."
     }
   ]
 }
