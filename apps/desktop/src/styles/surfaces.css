@@ -353,7 +353,6 @@ dialog.agent-panel {
   cursor: col-resize;
   background: var(--border);
 }
-.task-split:focus-visible { outline-offset: 2px !important; }
 .task-desk-pane { flex: 1 1 46%; min-width: 260px; min-height: 0; display: flex; padding: var(--boto-space-3); }
 .task-body[data-desk="off"] .task-desk-pane,
 .task-body[data-desk="off"] .task-split { display: none; }
