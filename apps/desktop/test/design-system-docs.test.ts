@@ -20,7 +20,16 @@ test("docs name the token source, generator, Rio Negro mapping and OFL fonts", (
   expect(doc).toContain("Inter");
   expect(doc).toContain("JetBrains Mono");
   expect(doc).toContain("legacy-bridge.css");
-  for (const hex of ["#0c1416", "#131d20", "#e8eeee", "#f08aa6", "#c2456b", "#3bb7a5", "#f6f8f7"]) {
+  for (const hex of [
+    "#0c1416",
+    "#131d20",
+    "#e8eeee",
+    "#f08aa6",
+    "#c2456b",
+    "#3bb7a5",
+    "#1a7d6f",
+    "#f6f8f7",
+  ]) {
     expect(doc).toContain(hex);
   }
   expect(doc).toContain("accent");
