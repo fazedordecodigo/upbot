@@ -265,7 +265,11 @@ test(
         expect(await page.locator("#where-label").innerText()).toBe("Só navegador");
         expect(await page.locator("#approval-switch").getAttribute("aria-checked")).toBe("false");
         expect(await page.locator("#when-label").innerText()).toBe(
-          schedule === "daily 08:00" ? "Todo dia às 8h" : (schedule ?? "Agora"),
+          schedule === "daily 08:00"
+            ? "Todo dia às 8h"
+            : schedule === "every 2h"
+              ? "A cada 2 horas"
+              : "Agora",
         );
         expect((await rpc.request("tasks.list", {})).items.length).toBe(beforeTasks);
         expect((await rpc.request("routines.list", {})).length).toBe(beforeRoutines);
@@ -360,9 +364,6 @@ test(
       await page.locator("#send").click();
       await until(
         async () => (await page.locator("#main").getAttribute("data-view")) === "routines",
-      );
-      const routine = (await rpc.request("routines.list", {})).find(
-        (item) => item.prompt === "Uma tarefa com anexo",
       );
       expect(routine?.attachments?.[0]?.name).toBe("arquivo.txt");
     } finally {

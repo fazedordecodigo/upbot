@@ -1,4 +1,4 @@
-import type { Template } from "@boto/protocol";
+import { type Template, WHEN_SCHEDULES, type When } from "@boto/protocol";
 
 const weekdays: Record<string, string> = {
   mon: "segunda",
@@ -37,4 +37,18 @@ export function templateMeta(template: Template): string {
   if (template.toolMode === "terminal") details.push("só terminal");
   if (template.requireApproval) details.push("com aprovação");
   return ["Agora", ...details].join(" · ");
+}
+
+export function composerScheduleLabel(schedule: string): string {
+  const label = templateScheduleLabel(schedule);
+  if (/^weekly\s/.test(schedule.trim().toLowerCase()))
+    return `${/^(sábado|domingo)/.test(label) ? "Todo" : "Toda"} ${label}`;
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+export function templateWhen(template: Template): When | undefined {
+  if (template.kind !== "routine") return undefined;
+  if (template.schedule === WHEN_SCHEDULES.daily) return "daily";
+  if (template.schedule === WHEN_SCHEDULES.weekly) return "weekly";
+  return undefined;
 }

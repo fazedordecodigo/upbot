@@ -35,6 +35,7 @@ function NewTaskComposer() {
   const [files, setFiles] = useState<File[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [templateMissing, setTemplateMissing] = useState(false);
   const [retry, setRetry] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -57,12 +58,18 @@ function NewTaskComposer() {
     setLoadError(false);
     void Promise.all([
       client.request("profile.get", {}),
-      params.templateId ? client.request("templates.use", { id: params.templateId }) : null,
+      params.templateId
+        ? client.request("templates.use", { id: params.templateId }).catch((cause: unknown) => {
+            if ((cause as { code?: unknown })?.code !== "not_found") throw cause;
+            return null;
+          })
+        : null,
     ])
       .then(([profile, template]) => {
         if (!active) return;
         setToolMode(template?.toolMode ?? profile.defaults.toolMode);
         setRequireApproval(template?.requireApproval ?? profile.defaults.requireApproval);
+        setTemplateMissing(Boolean(params.templateId) && !template);
         if (template) {
           setText(template.prompt);
           setTemplateId(template.templateId);
@@ -318,6 +325,17 @@ function NewTaskComposer() {
             </p>
           ) : !agentExists ? (
             <p>Este agente não está disponível. Escolha outro agente.</p>
+          ) : templateMissing && !text.trim() ? (
+            <p>
+              Este modelo não está mais disponível. Descreva a tarefa ou{" "}
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => navigate("templates")}
+              >
+                escolha outro modelo
+              </button>
+            </p>
           ) : text.trim() && invalid ? (
             <p>{invalid}</p>
           ) : null}

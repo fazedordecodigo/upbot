@@ -1,5 +1,6 @@
 import type { ToolMode, When } from "@boto/protocol";
 import { toolLabels, whenLabels } from "../../lib/new-task";
+import { composerScheduleLabel } from "../../lib/templates";
 import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from "../../ui/Dropdown";
 import { Icon } from "../../ui/icons";
 
@@ -41,7 +42,7 @@ export function WhenPicker({
           <Icon name="clock" />
           <span className="opt-key">Quando</span>
           <span className="opt-value" id="when-label">
-            {schedule ?? whenLabels[when]}
+            {schedule ? composerScheduleLabel(schedule) : whenLabels[when]}
           </span>
           <Icon name="chevron-down" className="opt-chevron" />
         </button>

@@ -98,6 +98,15 @@ test("real template cards match daemon data and hand off to the composer without
       expect(await page.locator('[data-template="inbox"] .template-meta').innerText()).toBe(
         "Rotina · todo dia às 8h",
       );
+      expect(await page.locator('[data-template="sales"]').getAttribute("data-template-when")).toBe(
+        "weekly",
+      );
+      expect(await page.locator('[data-template="inbox"]').getAttribute("data-template-when")).toBe(
+        "daily",
+      );
+      expect(
+        await page.locator('[data-template="ci"]').getAttribute("data-template-when"),
+      ).toBeNull();
       await page.locator(`[data-template="${selected}"]`).focus();
       await page.keyboard.press("Enter");
       await page.locator("#view-new").waitFor();
@@ -125,12 +134,15 @@ test("template changes, hiding, restoration and genuine empty sections update li
       name: "Revisão de arquivos",
       description: "Conferir os arquivos do projeto.",
       prompt: "echo:files",
-      icon: "folder",
+      icon: "rocket",
       schedule: "every 2h",
       requireApproval: true,
     });
     customId = custom.id;
     await page.getByText(custom.name, { exact: true }).waitFor();
+    expect(await page.locator(`[data-template="${custom.id}"] use`).getAttribute("href")).toBe(
+      "/assets/icons.svg#i-file-text",
+    );
     expect(await page.locator(`[data-template="${custom.id}"] .template-meta`).innerText()).toBe(
       "Rotina · a cada 2 horas",
     );
@@ -175,6 +187,46 @@ test("an unavailable connection never substitutes sample templates and reload re
     await openTemplates(page);
     await until(async () => (await page.locator(".template").count()) === 6);
     expect(await page.getByRole("alert").count()).toBe(0);
+  } finally {
+    await page.close();
+  }
+}, 30_000);
+
+test("a template removed before it is used leaves a usable blank composer", async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  let dropTemplateEvents = false;
+  await page.routeWebSocket(/\/ws/, (ws) => {
+    const server = ws.connectToServer();
+    server.onMessage((message) => {
+      if (dropTemplateEvents && String(message).includes('"templates.changed"')) return;
+      ws.send(message);
+    });
+  });
+  const stale = await rpc.request("templates.create", {
+    kind: "task",
+    name: "Modelo removido",
+    prompt: "echo:removido",
+  });
+  try {
+    await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
+    await openTemplates(page);
+    await page.locator(`[data-template="${stale.id}"]`).waitFor();
+    dropTemplateEvents = true;
+    await rpc.request("templates.delete", { id: stale.id });
+    await page.locator(`[data-template="${stale.id}"]`).click();
+    await page.locator("#view-new").waitFor();
+    await until(() => page.locator("#composer-input").isEnabled());
+    expect(await page.locator("#new-task-status").innerText()).toContain(
+      "Este modelo não está mais disponível.",
+    );
+    expect(await page.locator("#composer-input").inputValue()).toBe("");
+    await page.locator("#composer-input").fill("echo:em branco");
+    await until(() => page.locator("#send").isEnabled());
+    expect(await page.locator("#new-task-status").innerText()).not.toContain("modelo");
+    await page.locator("#composer-input").fill("");
+    await page.getByRole("button", { name: "escolha outro modelo" }).click();
+    await page.locator("#templates-title").waitFor();
+    expect((await rpc.request("tasks.list", {})).items).toHaveLength(0);
   } finally {
     await page.close();
   }
