@@ -6,3 +6,6 @@
 .template { display: flex; align-items: flex-start; gap: var(--boto-space-3); border: 1px solid var(--boto-color-border); background: var(--boto-color-card); }
 .template-name { font-weight: 600; }
 .template-desc, .template-meta { font-size: var(--boto-font-size-sm); }
+.template-name, .template-desc { overflow-wrap: anywhere; }
+.templates-state, .templates-empty { color: var(--boto-color-muted-foreground); }
+.templates-state { margin-block: var(--boto-space-8); justify-items: start; }
