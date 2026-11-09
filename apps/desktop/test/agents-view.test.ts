@@ -36,7 +36,6 @@ beforeAll(async () => {
   daemon = await startDaemon(join(state, "data"), join(state, "agents"), token, {
     BOTO_PROVIDER_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
     BOTO_PROVIDER_COMMAND_CLAUDE: JSON.stringify(["definitely-missing-boto-config-provider"]),
-    BOTO_VAULT_KEY: "12".repeat(32),
     FAKE_ACP_NEW_DELAY_MS: "1500",
   });
   rpc = await DaemonClient.connect(daemon.port, token);
