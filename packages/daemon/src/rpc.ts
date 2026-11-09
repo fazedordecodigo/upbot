@@ -15,6 +15,7 @@ import type { Marketplace } from "./marketplace";
 import type { MemoryStore } from "./memories";
 import type { MobileServer } from "./mobile";
 import type { PageLibrary } from "./pages";
+import type { ProfileService } from "./profile";
 import { ProviderError } from "./providers/types";
 import type { VmCredentials } from "./remote/credentials";
 import type { HostStore } from "./remote/hosts";
@@ -87,6 +88,7 @@ export class Rpc {
       team: TeamClient;
       hosts: HostStore;
       subagents: SubagentService;
+      profile: ProfileService;
     },
   ) {}
 
@@ -156,6 +158,21 @@ export class Rpc {
 
   private async dispatch(method: MethodName, params: unknown): Promise<unknown> {
     switch (method) {
+      case "profile.get":
+        return this.extras.profile.get();
+      case "profile.update":
+        return this.extras.profile.update(params as MethodParsedParams<typeof method>);
+      case "profile.forget":
+        return this.extras.profile.forget();
+      case "onboarding.complete":
+        return this.extras.profile.complete();
+      case "onboarding.reset":
+        return this.extras.profile.reset();
+      case "memories.usage": {
+        const { turnId } = params as MethodParsedParams<typeof method>;
+        if (!this.chat.getTurn(turnId)) throw new RpcError("not_found", "turn not found");
+        return this.memories.usage(turnId);
+      }
       case "agents.list":
         return this.agents.list();
       case "agents.create": {

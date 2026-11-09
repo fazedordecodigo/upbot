@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { MemoryUsage, type Profile, profileMethods } from "./profile";
+
+export * from "./profile";
 
 export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   devin: "~/.config/devin/config.json",
@@ -172,7 +175,11 @@ export const ChatItem = z.discriminatedUnion("kind", [
       .optional(),
     attachments: z.array(ChatAttachment).optional(),
   }),
-  ChatItemBase.extend({ kind: z.literal("agent_message"), text: z.string() }),
+  ChatItemBase.extend({
+    kind: z.literal("agent_message"),
+    text: z.string(),
+    memoryUsage: MemoryUsage.optional(),
+  }),
   ChatItemBase.extend({ kind: z.literal("agent_thought"), text: z.string() }),
   ChatItemBase.extend({
     kind: z.literal("tool_call"),
@@ -880,6 +887,7 @@ export const ChannelsReassignParams = z
 // ---- Typed method map ----
 
 export const methodMap = {
+  ...profileMethods,
   "agents.list": { params: AgentsListParams, result: AgentsListResult },
   "agents.create": { params: AgentsCreateParams, result: AgentsCreateResult },
   "agents.update": { params: AgentsUpdateParams, result: AgentsUpdateResult },
@@ -1273,6 +1281,7 @@ export type MethodParsedParams<M extends MethodName> = z.infer<(typeof methodMap
 export type MethodResult<M extends MethodName> = z.infer<(typeof methodMap)[M]["result"]>;
 
 export type DaemonEventMap = {
+  "profile.changed": Profile;
   "agent.created": Agent;
   "agent.updated": Agent;
   "agent.deleted": { id: string };

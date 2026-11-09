@@ -1,5 +1,23 @@
 import type { Database } from "bun:sqlite";
+import { Profile, ProfileDefaults } from "@boto/protocol";
 import type { z } from "zod";
+
+export const profileSettings = {
+  "profile.name": Profile.shape.name,
+  "profile.defaults": ProfileDefaults,
+  "onboarding.completed_at": Profile.shape.onboardingCompletedAt,
+  "ui.theme": Profile.shape.theme,
+  "ui.sidebar_width": Profile.shape.sidebarWidth,
+};
+
+export function getProfileDefaults(db: Database): ProfileDefaults {
+  return getSetting(db, "profile.defaults", ProfileDefaults, {
+    private: false,
+    requireApproval: true,
+    delegationMode: "now",
+    toolMode: "both",
+  });
+}
 
 export class InvalidSettingError extends Error {
   constructor(

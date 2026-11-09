@@ -5,6 +5,7 @@ import type {
   AgentUsage,
   ChatItem,
   ConfigOption,
+  MemoryUsage,
   PendingPermission,
   PermissionOption,
   QueueState,
@@ -190,6 +191,7 @@ export class AgentRuntime {
   private compacting = false;
   private capture: string[] | null = null;
   private disposing = false;
+  private turnMemoryUsage: MemoryUsage = { count: 0, kinds: [] };
 
   constructor(
     private agent: Agent,
@@ -198,9 +200,10 @@ export class AgentRuntime {
     private queue: QueueStore,
     private broadcast: Broadcast,
     private mcpServers: (agentId: string) => McpServerSpec[] = () => [],
-    private sessionContext: (agentId: string) => string = () => "",
+    private sessionContext: (agentId: string, turnId: string, fresh: boolean) => string = () => "",
     private remoteFor: (agentId: string) => RemoteLaunch | null = () => null,
     private sharedDirs: () => string[] = () => [],
+    private memoryUsage: (turnId: string) => MemoryUsage = () => ({ count: 0, kinds: [] }),
   ) {}
 
   /** Agent-to-agent hop count of the running turn (0 when idle or user-initiated). */
@@ -454,11 +457,11 @@ export class AgentRuntime {
 
       let promptText = text;
       const instructions = this.agent.instructions.trim();
-      if (!session.resumed && this.sessionPromptCount === 0) {
+      const fresh = !session.resumed && this.sessionPromptCount === 0;
+      if (fresh) {
         if (instructions) {
           promptText = `<agent_instructions>\n${instructions}\n</agent_instructions>\n\n${promptText}`;
         }
-        promptText = this.sessionContext(this.agent.id) + promptText;
         const all = this.store.history(this.agent.id, undefined, 500).items;
         let start = 0;
         let summary: string | null = null;
@@ -484,6 +487,9 @@ export class AgentRuntime {
         const handoff = buildHandoff(prior, summary);
         if (handoff) promptText = handoff + promptText;
       }
+      promptText = this.sessionContext(this.agent.id, turnId, fresh) + promptText;
+      const { count, kinds } = this.memoryUsage(turnId);
+      this.turnMemoryUsage = { count, kinds };
       this.sessionPromptCount += 1;
       const dbgDir = process.env.BOTO_DEBUG_PROMPTS_DIR;
       if (dbgDir) {
@@ -887,7 +893,10 @@ export class AgentRuntime {
       this.broadcast("item.delta", { agentId: this.agent.id, itemId: item.id, text });
     } else {
       this.closeTextItem();
-      const item = this.store.createItem(this.agent.id, turn.id, kind, { text });
+      const item = this.store.createItem(this.agent.id, turn.id, kind, {
+        text,
+        ...(kind === "agent_message" ? { memoryUsage: this.turnMemoryUsage } : {}),
+      });
       this.openTextItem = { id: item.id, seq: item.seq, kind, text, pendingBytes: 0 };
       this.broadcast("item.created", item);
     }
