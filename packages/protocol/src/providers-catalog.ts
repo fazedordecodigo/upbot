@@ -27,6 +27,7 @@ export const ProviderInfo = z.object({
   loggedIn: z.boolean().nullable(),
   hasApiKey: z.boolean(),
   apiKeyMasked: z.string().nullable(),
+  canLogin: z.boolean(),
   loginRunning: z.boolean(),
   ready: z.boolean(),
 });
