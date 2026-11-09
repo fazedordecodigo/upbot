@@ -1,8 +1,8 @@
 import type { Template } from "@boto/protocol";
 import { useTemplates } from "../hooks/useTemplates";
-import { templateMeta } from "../lib/templates";
+import { templateMeta, templateWhen } from "../lib/templates";
 import { useRouter } from "../shell/router";
-import { Icon } from "../ui/icons";
+import { Icon, isIconName } from "../ui/icons";
 import "./TemplatesView.css";
 
 export function TemplatesView() {
@@ -87,13 +87,10 @@ export function TemplatesView() {
                       className="template"
                       key={template.id}
                       data-template={template.id}
+                      data-template-when={templateWhen(template)}
                       onClick={() => navigate("new", { templateId: template.id })}
                     >
-                      <svg className="od-icon" aria-hidden="true">
-                        <use
-                          href={`/assets/icons.svg#i-${/^[a-z][a-z0-9-]*$/.test(template.icon) ? template.icon : "file-text"}`}
-                        />
-                      </svg>
+                      <Icon name={isIconName(template.icon) ? template.icon : "file-text"} />
                       <span className="od-field od-fill">
                         <span className="template-name">{template.name}</span>
                         <span className="template-desc">{template.description}</span>

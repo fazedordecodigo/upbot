@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 import type { Template } from "@boto/protocol";
-import { templateMeta, templateScheduleLabel } from "../src/lib/templates";
+import {
+  composerScheduleLabel,
+  templateMeta,
+  templateScheduleLabel,
+  templateWhen,
+} from "../src/lib/templates";
+import { isIconName } from "../src/ui/icons";
 
 const template: Template = {
   id: "custom",
@@ -55,4 +61,31 @@ test("schedule labels cover the real daemon grammar and unknown values honestly"
     [null, "a definir"],
   ] as const)
     expect(templateScheduleLabel(schedule)).toBe(label);
+});
+
+test("composer labels custom template schedules in pt-BR instead of the wire grammar", () => {
+  for (const [schedule, label] of [
+    ["every 2h", "A cada 2 horas"],
+    ["every 1m", "A cada 1 minuto"],
+    ["daily 07:30", "Todo dia às 7h30"],
+    ["weekly fri 17:00", "Toda sexta às 17h"],
+    ["weekly sat 10:00", "Todo sábado às 10h"],
+    ["weekly sun 10:00", "Todo domingo às 10h"],
+    ["cron 1 2 3", "A definir"],
+  ] as const)
+    expect(composerScheduleLabel(schedule)).toBe(label);
+});
+
+test("routine cards expose the composer preset like the prototype's data-template-when", () => {
+  expect(templateWhen(template)).toBeUndefined();
+  const routine = { ...template, kind: "routine" as const };
+  expect(templateWhen({ ...routine, schedule: "daily 08:00" })).toBe("daily");
+  expect(templateWhen({ ...routine, schedule: "weekly mon 09:00" })).toBe("weekly");
+  expect(templateWhen({ ...routine, schedule: "every 2h" })).toBeUndefined();
+});
+
+test("only icons present in the sprite are accepted for template cards", () => {
+  expect(isIconName("git-pull-request")).toBe(true);
+  expect(isIconName("rocket")).toBe(false);
+  expect(isIconName("constructor")).toBe(false);
 });
