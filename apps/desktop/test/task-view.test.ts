@@ -334,6 +334,16 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
       el.scrollTop = 0;
     });
     await capture("390-activity", 390, 844);
+    for (const id of ["#ctl-live", "#ctl-pause", "#ctl-takeover", "#ctl-stop"]) {
+      const label = page.locator(`${id} .ctl-label`);
+      expect(await label.isVisible()).toBe(true);
+      const box = await label.boundingBox();
+      expect((box?.width ?? 0) > 20).toBe(true);
+      expect((box?.x ?? 0) + (box?.width ?? 0) <= 390).toBe(true);
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
     await page.locator("#pane-tab-activity").focus();
     await page.keyboard.press("End");
     expect(await page.locator("#pane-tab-computer").getAttribute("aria-selected")).toBe("true");
