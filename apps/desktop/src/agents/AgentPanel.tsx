@@ -127,13 +127,25 @@ export function AgentPanel({
             <div id="ap-live" className="ap-stack">
               <section className="ap-section">
                 <h3 className="ap-sec-title">Agora</h3>
-                <p>
-                  {overview.instances.active} de {overview.instances.max ?? "a definir"} instâncias
-                </p>
+                <div className="ap-row od-row">
+                  <span className="ap-row-name">Instâncias</span>
+                  <span className="od-nowrap">
+                    {overview.instances.active} de {overview.instances.max ?? "a definir"}
+                  </span>
+                </div>
                 <TaskRows overview={overview} />
               </section>
               <section className="ap-section">
-                <h3 className="ap-sec-title">Fila</h3>
+                <div className="od-row">
+                  <h3 className="ap-sec-title od-fill">Fila</h3>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => void toggleQueue()}
+                  >
+                    {overview.paused ? "Retomar fila" : "Pausar fila"}
+                  </button>
+                </div>
                 {queue.error ? (
                   <p role="alert">{queue.error}</p>
                 ) : !queue.data ? (
@@ -161,13 +173,6 @@ export function AgentPanel({
                 ) : (
                   <p className="ag-empty">Fila vazia.</p>
                 )}
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => void toggleQueue()}
-                >
-                  {overview.paused ? "Retomar fila" : "Pausar fila"}
-                </button>
               </section>
               <section className="ap-section">
                 <h3 className="ap-sec-title">Última resposta</h3>
