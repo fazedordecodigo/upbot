@@ -52,7 +52,7 @@ export function AgentsView() {
         <div className="page-head">
           <div className="od-field od-fill">
             <h1 className="page-title" id="agents-title" tabIndex={-1}>
-              Agentes
+              Bots
             </h1>
             <p className="page-sub">
               O quadro de todos os agentes do Boto. Cada agente tem uma especialidade, trabalha em

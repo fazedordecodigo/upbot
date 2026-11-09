@@ -261,7 +261,7 @@ const MODIFIERS: Record<string, [string, number]> = {
   shift: ["shift", 16],
 };
 
-export function keyCommand(backend: ComputerBackend, key: string, modifiers: unknown) {
+function keyParts(key: string, modifiers: unknown) {
   const lower = key.toLowerCase();
   const code = Object.hasOwn(KEYS, lower) ? KEYS[lower] : undefined;
   const single = /^[a-z0-9]$/.test(lower) ? lower : null;
@@ -270,6 +270,24 @@ export function keyCommand(backend: ComputerBackend, key: string, modifiers: unk
   const mods = [...new Set((Array.isArray(modifiers) ? modifiers : []).map(String))];
   if (mods.some((mod) => !Object.hasOwn(MODIFIERS, mod)))
     throw new Error("modifiers: command, control, option, shift");
+  return {
+    lower,
+    code,
+    single,
+    mods,
+    keysym: [
+      ...mods.map((mod) => (MODIFIERS[mod] as [string, number])[0]),
+      code ? code[1] : single,
+    ].join("+"),
+  };
+}
+
+export function x11KeyCombo(key: string, modifiers: unknown): string {
+  return keyParts(key, modifiers).keysym;
+}
+
+export function keyCommand(backend: ComputerBackend, key: string, modifiers: unknown) {
+  const { lower, code, single, mods, keysym } = keyParts(key, modifiers);
   switch (backend.platform) {
     case "darwin": {
       const using = mods.length ? ` using {${mods.map((mod) => `${mod} down`).join(", ")}}` : "";
@@ -282,14 +300,6 @@ export function keyCommand(backend: ComputerBackend, key: string, modifiers: unk
         `${WINDOWS_INPUT}\n[BotoInput]::Key(${code ? code[2] : lower.toUpperCase().charCodeAt(0)}, ${code?.[3] ?? 0}, [uint16[]]@(${mods.map((mod) => (MODIFIERS[mod] as [string, number])[1]).join(",")}))`,
       );
     case "linux":
-      return [
-        backend.xdotool,
-        "key",
-        "--clearmodifiers",
-        [
-          ...mods.map((mod) => (MODIFIERS[mod] as [string, number])[0]),
-          code ? code[1] : single,
-        ].join("+"),
-      ];
+      return [backend.xdotool, "key", "--clearmodifiers", keysym];
   }
 }

@@ -26,7 +26,10 @@ function NewTaskComposer() {
   const { privateMode } = usePrivateMode();
   const toast = useToast();
   const [text, setText] = useState("");
-  const [agentId, setAgentId] = useState(params.agentId ?? "");
+  const agentId =
+    agents.find((agent) => agent.id === params.agentId)?.id ??
+    agents.find((agent) => agent.isDefault)?.id ??
+    "";
   const [when, setWhen] = useState<When>(params.when === "daily" ? "daily" : "now");
   const [schedule, setSchedule] = useState<string | null>(null);
   const [toolMode, setToolMode] = useState<ToolMode>("both");
@@ -97,11 +100,6 @@ function NewTaskComposer() {
     };
   }, [client, connected, loaded, params.templateId, params.when, retry]);
 
-  useEffect(() => {
-    if (!agentId && !params.agentId && agents.length)
-      setAgentId([...agents].sort((a, b) => a.createdAt - b.createdAt)[0]?.id ?? "");
-  }, [agentId, agents, params.agentId]);
-
   const agentExists = agents.some((agent) => agent.id === agentId);
   const draft = {
     agentId: agentExists ? agentId : "",
@@ -114,7 +112,7 @@ function NewTaskComposer() {
     templateId,
     files,
   };
-  const invalid = draftError(draft);
+  const invalid = agentId ? draftError(draft) : "O bot padrão não está disponível.";
   const busy = submitting || !loaded;
   const submit = async () => {
     if (pending.current || !connected || !loaded || invalid) return;
@@ -324,17 +322,17 @@ function NewTaskComposer() {
             <p>Carregando opções da tarefa…</p>
           ) : !agents.length ? (
             <p>
-              Nenhum agente disponível.{" "}
+              Nenhum bot disponível.{" "}
               <button
                 type="button"
                 className="btn btn-outline btn-sm"
                 onClick={() => navigate("agents")}
               >
-                Criar agente
+                Criar bot
               </button>
             </p>
           ) : !agentExists ? (
-            <p>Este agente não está disponível. Escolha outro agente.</p>
+            <p>O bot padrão não está disponível. Você pode delegar a outro bot em Bots.</p>
           ) : templateMissing && !text.trim() ? (
             <p>
               Este modelo não está mais disponível. Descreva a tarefa ou{" "}

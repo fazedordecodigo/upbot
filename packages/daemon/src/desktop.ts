@@ -14,6 +14,7 @@ import type {
 } from "@boto/protocol";
 import type { ApprovalService } from "./approvals";
 import type { RemoteComputer } from "./computer";
+import { x11KeyCombo } from "./computer-platform";
 import { spawnEnv } from "./env/login-path";
 import { envOverride } from "./env/vars";
 import { BUN_PATH, HELPER, type HostStore, shq, sshArgs } from "./remote/hosts";
@@ -116,6 +117,10 @@ export class DesktopService {
 
   taskFor: ((agentId: string) => string | null) | null = null;
 
+  placementChanged(agentId: string): void {
+    this.machineFor(agentId);
+  }
+
   list(): Machine[] {
     const out: Machine[] = [];
     for (const p of this.hosts.placements()) {
@@ -128,10 +133,28 @@ export class DesktopService {
 
   private machineFor(agentId: string): MachineState | null {
     const placement = this.hosts.placement(agentId);
-    if (placement.isolation !== "firecracker") return null;
+    const existing = this.stateFor(agentId);
     const agent = this.agentById(agentId);
-    if (!agent) return null;
-    for (const st of this.states.values()) if (st.agentId === agentId) return st;
+    if (placement.isolation !== "firecracker" || !agent) {
+      if (existing) {
+        this.closeChild(existing);
+        existing.hostId = placement.hostId;
+        this.emitMachine(existing);
+      }
+      return null;
+    }
+    if (existing) {
+      if (existing.hostId !== placement.hostId) {
+        this.closeChild(existing);
+        existing.hostId = placement.hostId;
+        this.db
+          .query("UPDATE machines SET host_id = ? WHERE id = ?")
+          .run(placement.hostId, existing.id);
+        this.emitMachine(existing);
+        if (this.wanted(existing)) this.ensure(existing);
+      }
+      return existing;
+    }
     let row = this.db
       .query("SELECT id, name, host_id FROM machines WHERE agent_id = ?")
       .get(agentId) as { id: string; name: string; host_id: string | null } | null;
@@ -197,12 +220,10 @@ export class DesktopService {
 
   private get(machineId: string): MachineState {
     const st = this.states.get(machineId);
-    if (
-      st &&
-      this.hosts.placement(st.agentId).isolation === "firecracker" &&
-      this.agentById(st.agentId)
-    )
-      return st;
+    if (st) {
+      const current = this.machineFor(st.agentId);
+      if (current) return current;
+    }
     if (!st) {
       const row = this.db.query("SELECT agent_id FROM machines WHERE id = ?").get(machineId) as {
         agent_id: string;
@@ -316,12 +337,7 @@ export class DesktopService {
         return this.agentAction(st, { type: "agent", events: [{ type: "type", text }] });
       },
       key: async (_agent, key, modifiers) => {
-        const mods = Array.isArray(modifiers)
-          ? modifiers.filter((m): m is string => typeof m === "string")
-          : [];
-        const combo = [...mods, key].join("+");
-        if (!/^[A-Za-z0-9_]{1,32}(\+[A-Za-z0-9_]{1,32}){0,4}$/.test(combo))
-          throw new Error("key must be an X keysym name with up to four modifiers");
+        const combo = x11KeyCombo(key, modifiers);
         return this.agentAction(st, { type: "agent", events: [{ type: "key", keysym: combo }] });
       },
     };
@@ -397,18 +413,7 @@ export class DesktopService {
     st.controller = controller;
     st.owner = owner;
     if (st.child && st.ready) this.write(st, { type: "controller", controller });
-    if (controller === "agent" && changed) this.finishTakeoverApprovals(st.agentId);
     if (changed) this.emitMachine(st);
-  }
-
-  private finishTakeoverApprovals(agentId: string) {
-    if (!this.approvals) return;
-    for (const a of this.approvals.list(agentId)) {
-      if (a.kind !== "takeover" || a.status !== "pending") continue;
-      this.approvals.respond({ id: a.id, decision: "done" }).catch((e) => {
-        this.log("desktop takeover approval", { error: errorFields(e) });
-      });
-    }
   }
 
   private applyStreamMode(st: MachineState) {
@@ -522,10 +527,11 @@ export class DesktopService {
 
   private closeChild(st: MachineState) {
     this.clearReconnect(st);
+    this.clearImage(st);
+    st.lastSpawnAt = 0;
     const child = st.child;
     if (!child) return;
     st.child = null;
-    st.lastSpawnAt = 0;
     try {
       child.stdin?.end();
       child.kill("SIGTERM");
@@ -535,6 +541,7 @@ export class DesktopService {
 
   private ended(st: MachineState, code: number | null) {
     const wasReady = st.ready;
+    this.clearImage(st);
     st.ready = false;
     st.status = wasReady || code === 0 ? "stopped" : "error";
     if (!wasReady && code !== 0) this.log("desktop stream ended", { code });
@@ -545,10 +552,18 @@ export class DesktopService {
     this.emitMachine(st);
   }
 
+  private clearImage(st: MachineState) {
+    st.thumbnail = null;
+    st.width = 0;
+    st.height = 0;
+    st.lastFrameSentAt = 0;
+  }
+
   private onGuestMessage(st: MachineState, child: ChildProcess, m: GuestMessage) {
     if (st.child !== child) return;
     switch (m.type) {
       case "ready": {
+        this.clearImage(st);
         st.ready = true;
         st.status = "ready";
         if (typeof m.width === "number") st.width = m.width;
