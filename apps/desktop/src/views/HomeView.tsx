@@ -1,7 +1,8 @@
-import type { Task } from "@boto/protocol";
+import type { Approval, PendingPermission, Task } from "@boto/protocol";
 import { useEffect, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
-import { addDelivery, taskLanes, upsertTask } from "../lib/tasks";
+import { useHomeTasks } from "../hooks/useHomeTasks";
+import { addDelivery, taskLanes } from "../lib/tasks";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
 import { Icon, type IconName } from "../ui/icons";
@@ -39,6 +40,58 @@ function relative(at: number, now: number) {
       ? formatter.format(Math.round(minutes / 60), "hour")
       : formatter.format(Math.round(minutes / 1440), "day");
 }
+function WaitingContext({
+  task,
+  approvals,
+  permissions,
+}: {
+  task: Task;
+  approvals: Approval[];
+  permissions: PendingPermission[];
+}) {
+  const { client, connected } = useDaemon();
+  const pendingApprovals = approvals.filter(
+    (entry) => entry.status === "pending" && entry.agentId === task.agentId,
+  );
+  const pendingPermissions = permissions.filter((entry) => entry.agentId === task.agentId);
+  const history = useDaemonQuery(
+    client,
+    "tasks.history",
+    { id: task.id, limit: 500 },
+    {
+      enabled: connected && (pendingApprovals.length > 0 || pendingPermissions.length > 0),
+      events: {
+        "task.updated": (entry) => entry.id === task.id,
+        "permission.requested": true,
+        "approval.updated": true,
+      },
+    },
+  );
+  const belongs = (entry: { turnId?: string | null; agentId: string }) =>
+    "turnId" in entry
+      ? !!entry.turnId &&
+        history.data?.turns.some((turn) => turn.id === entry.turnId && turn.taskId === task.id)
+      : entry.agentId === task.agentId;
+  const approval = pendingApprovals.find(belongs);
+  const permission = pendingPermissions.find(belongs);
+  return (
+    <>
+      {history.error && (
+        <span role="alert" className="home-muted">
+          {history.error}
+        </span>
+      )}
+      {(approval || permission) && (
+        <span className="od-truncate home-muted">
+          {approval
+            ? `Aprovação pendente: ${approval.title}`
+            : `Permissão pendente: ${permission?.title}`}
+        </span>
+      )}
+    </>
+  );
+}
+
 export function HomeView() {
   const { client, agents, connected } = useDaemon();
   const { navigate } = useRouter();
@@ -52,12 +105,7 @@ export function HomeView() {
     {},
     { enabled: connected, events: { "profile.changed": true } },
   );
-  const tasks = useDaemonQuery(
-    client,
-    "tasks.list",
-    { limit: 200, includePrivate: true },
-    { enabled: connected },
-  );
+  const tasks = useHomeTasks(client, connected);
   const deliveries = useDaemonQuery(
     client,
     "tasks.deliveries",
@@ -82,21 +130,13 @@ export function HomeView() {
     {},
     { enabled: connected, events: { "desktop.machine": true } },
   );
-  const { setData: setTasks } = tasks;
   const { setData: setDeliveries } = deliveries;
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
     return () => clearInterval(timer);
   }, []);
   useEffect(() => {
-    const update = (task: Task) =>
-      setTasks((previous) => ({
-        items: upsertTask(previous?.items ?? [], task),
-        nextCursor: previous?.nextCursor ?? null,
-      }));
     const offs = [
-      client.on("task.created", update),
-      client.on("task.updated", update),
       client.on("task.delivery", (delivery) =>
         setDeliveries((previous) => addDelivery(previous ?? [], delivery, 6)),
       ),
@@ -104,7 +144,7 @@ export function HomeView() {
     return () => {
       for (const off of offs) off();
     };
-  }, [client, setTasks, setDeliveries]);
+  }, [client, setDeliveries]);
   const items = tasks.data?.items ?? [];
   const missingKey = [
     ...new Set([
@@ -136,8 +176,7 @@ export function HomeView() {
   }, [client, missingKey, titleRevision]);
   const title = (id: string) =>
     items.find((task) => task.id === id)?.title ?? titles[id] ?? "Carregando…";
-  const agentName = (id: string) =>
-    agents.find((agent) => agent.id === id)?.name ?? "Bot a definir";
+  const agentName = (id: string) => agents.find((agent) => agent.id === id)?.name ?? "a definir";
   const lanes = taskLanes(items);
   const hour = new Date(now).getHours();
   const greeting =
@@ -185,7 +224,7 @@ export function HomeView() {
                   {label}
                 </h2>
                 <span className="badge badge-secondary" id={`lane-${lane}-count`}>
-                  {tasks.loaded ? list.length : "a definir"}
+                  {tasks.loaded ? list.length : ""}
                 </span>
               </div>
               <div id={`lane-${lane}`} aria-busy={!tasks.loaded && !tasks.error}>
@@ -194,12 +233,6 @@ export function HomeView() {
                   {list.map((task) => {
                     const [icon, text] =
                       task.situation === "done" ? status.muted : status[task.situation];
-                    const approval = approvals.data?.find(
-                      (entry) => entry.agentId === task.agentId && entry.status === "pending",
-                    );
-                    const permission = permissions.data?.find(
-                      (entry) => entry.agentId === task.agentId,
-                    );
                     return (
                       <li key={task.id}>
                         <button
@@ -212,12 +245,12 @@ export function HomeView() {
                             {text}
                           </span>
                           <strong className="od-truncate">{task.title}</strong>
-                          {task.situation === "wait" && (approval || permission) && (
-                            <span className="od-truncate home-muted">
-                              {approval
-                                ? `Aprovação pendente: ${approval.title}`
-                                : `Permissão pendente: ${permission?.title}`}
-                            </span>
+                          {task.situation === "wait" && (
+                            <WaitingContext
+                              task={task}
+                              approvals={approvals.data ?? []}
+                              permissions={permissions.data ?? []}
+                            />
                           )}
                           <span className="home-meta">
                             <span className="od-truncate">{agentName(task.agentId)}</span>

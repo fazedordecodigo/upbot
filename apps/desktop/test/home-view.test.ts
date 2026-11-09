@@ -102,7 +102,11 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
     const runner = await createAgent("Código");
     const waiter = await createAgent("Pesquisa");
     const writer = await createAgent("Resumo");
-    await rpc.request("tasks.create", { agentId: runner.id, text: "slow", private: true });
+    const running = await rpc.request("tasks.create", {
+      agentId: runner.id,
+      text: "slow",
+      private: true,
+    });
     await page.locator("#lane-running .lane-item").waitFor();
     expect(await page.locator("#lane-running-count").innerText()).toBe("1");
     await rpc.request("tasks.create", { agentId: waiter.id, text: "tool" });
@@ -114,6 +118,41 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
     await rpc.request("tasks.create", { agentId: writer.id, text: "echo:Resumo entregue" });
     await page.locator("#deliveries .delivery-item").waitFor();
     expect(await page.locator("#deliveries").innerText()).toContain("Resumo");
+    const db = new Database(join(state, "data", "boto.db"));
+    try {
+      const row = db.query("SELECT * FROM tasks WHERE id = ?").get(running.id) as Record<
+        string,
+        string | number | null
+      >;
+      const columns = Object.keys(row);
+      const insert = db.query(
+        `INSERT INTO tasks (${columns.join(",")}) VALUES (${columns.map(() => "?").join(",")})`,
+      );
+      db.transaction(() => {
+        for (let i = 0; i < 201; i++) {
+          const completed = {
+            ...row,
+            id: `home-completed-${i}`,
+            situation: "done",
+            private: 0,
+            created_at: Date.now() + i,
+          };
+          insert.run(
+            ...columns.map((column) => completed[column as keyof typeof completed] ?? null),
+          );
+        }
+      })();
+    } finally {
+      db.close();
+    }
+    await page.reload();
+    await page.locator("#lane-running .lane-item").waitFor();
+    await page
+      .locator("#lane-waiting .lane-item")
+      .filter({ hasText: "Permissão pendente: Fake tool" })
+      .waitFor();
+    expect(await page.locator("#lane-running-count").innerText()).toBe("1");
+    expect(await page.locator("#lane-waiting-count").innerText()).toBe("1");
     if (process.env.HOME_SCREEN_DIR) {
       mkdirSync(process.env.HOME_SCREEN_DIR, { recursive: true });
       for (const [width, height] of [
