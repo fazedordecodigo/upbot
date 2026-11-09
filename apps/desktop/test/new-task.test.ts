@@ -318,11 +318,48 @@ test(
         mimeType: "text/plain",
         buffer: Buffer.from("arquivo"),
       });
-      expect(await page.locator("#send").isDisabled()).toBe(true);
-      expect(await page.locator("#new-task-status").innerText()).toContain("remova os anexos");
+      expect(await page.locator("#send").isEnabled()).toBe(true);
       await page.getByRole("button", { name: "Remover arquivo.txt" }).click();
       expect(await page.locator("#send").isEnabled()).toBe(true);
+      await page.locator("#file-input").setInputFiles({
+        name: "arquivo.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.from("arquivo"),
+      });
+      await page.locator("#send").click();
+      await page.locator("#routines-title").waitFor();
+      const routine = (await rpc.request("routines.list", {})).find(
+        (r) => r.prompt === "Uma tarefa com anexo",
+      );
+      expect(routine?.schedule).toBe("weekly mon 09:00");
+      expect(routine?.attachments).toEqual([
+        expect.objectContaining({ name: "arquivo.txt", size: 7 }),
+      ]);
     } finally {
+      await page.close();
+    }
+  },
+  T,
+);
+
+test(
+  "saved delegation timing and Nova rotina initialize a scheduled composer, while templates override defaults",
+  async () => {
+    await rpc.request("profile.update", { defaults: { delegationMode: "scheduled" } });
+    const page = await app();
+    try {
+      expect(await page.locator("#when-label").innerText()).toBe("Daqui a 1 hora");
+      await page.locator('#sidebar [data-nav="routines"]').click();
+      await page.getByRole("button", { name: "Nova rotina", exact: true }).click();
+      await until(() => page.locator("#composer-input").isEnabled());
+      expect(await page.locator("#when-label").innerText()).toBe("Todo dia às 8h");
+      await page.locator('#sidebar [data-nav="templates"]').click();
+      await page.locator('[data-template="ci"]').click();
+      await until(() => page.locator("#composer-input").isEnabled());
+      expect(await page.locator("#when-label").innerText()).toBe("Agora");
+      expect(await page.locator("#approval-switch").getAttribute("aria-checked")).toBe("true");
+    } finally {
+      await rpc.request("profile.update", { defaults: { delegationMode: "approval" } });
       await page.close();
     }
   },

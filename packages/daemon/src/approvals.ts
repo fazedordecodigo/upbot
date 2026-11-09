@@ -57,6 +57,11 @@ const recordSchema = z.object({
   background: z.boolean(),
   expiresAt: z.number(),
 });
+const decidedSchema = recordSchema.extend({
+  status: z.enum(["approved", "denied", "expired", "done"]),
+  createdAt: z.number(),
+  resolvedAt: z.number(),
+});
 type RecordRow = {
   id: string;
   agent_id: string;
@@ -164,7 +169,7 @@ export class ApprovalService {
     try {
       this.insertAudit(event, data, a);
     } catch (error) {
-      console.error("[botod] approval.audit_write_failed", (error as Error).message);
+      console.error("[botod] approval.audit_write_failed", errorDiagnostics(error));
     }
   }
 
@@ -372,9 +377,56 @@ export class ApprovalService {
 
   list(agentId?: string): Approval[] {
     const all = [...this.pending.values(), ...this.recent, ...this.interrupted(agentId)];
+    const known = new Set(all.map((a) => a.id));
+    for (const a of this.decided(agentId)) if (!known.has(a.id)) all.push(a);
     return all
       .filter((a) => !agentId || a.agentId === agentId)
       .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  private decided(agentId?: string): Approval[] {
+    try {
+      const rows = this.db
+        .query(
+          `SELECT approval_id, agent_id, turn_id, data_json FROM approval_audit
+         WHERE event = 'approval.decided' ${agentId ? "AND agent_id = ?" : ""}
+         ORDER BY seq DESC LIMIT 50`,
+        )
+        .all(...(agentId ? [agentId] : [])) as {
+        approval_id: string;
+        agent_id: string;
+        turn_id: string | null;
+        data_json: string;
+      }[];
+      return rows.flatMap((row) => {
+        const parsed = decidedSchema.safeParse(JSON.parse(row.data_json));
+        if (!parsed.success) return [];
+        const r = parsed.data;
+        return [
+          {
+            id: row.approval_id,
+            agentId: row.agent_id,
+            turnId: row.turn_id,
+            kind: r.kind,
+            tool: r.tool,
+            secretName: r.secretName,
+            title: recordTitle(r),
+            detail: "",
+            background: r.background,
+            status: r.status,
+            createdAt: r.createdAt,
+            expiresAt: r.expiresAt,
+            resolvedAt: r.resolvedAt,
+            ...(r.appId ? { appId: r.appId } : {}),
+            ...(r.appName ? { appName: r.appName } : {}),
+            ...(r.permission ? { permission: r.permission } : {}),
+          },
+        ];
+      });
+    } catch (error) {
+      console.error("[botod] approval.audit_read_failed", errorDiagnostics(error));
+      return [];
+    }
   }
 
   private open(
@@ -429,7 +481,7 @@ export class ApprovalService {
     if (!a) return null;
     this.pending.delete(id);
     this.unpersist(id);
-    const done = { ...a, status };
+    const done = { ...a, status, resolvedAt: Date.now() };
     this.recent = [done, ...this.recent].slice(0, 50);
     this.audit(
       "approval.decided",
@@ -439,6 +491,7 @@ export class ApprovalService {
         kind: done.kind,
         tool: done.tool,
         appId: done.appId ?? null,
+        appName: done.appName ?? null,
         permission: done.permission ?? null,
         secretName: done.kind === "secret" ? done.secretName : null,
         status,
@@ -447,7 +500,10 @@ export class ApprovalService {
         reason: outcome?.reason ?? null,
         failure: outcome?.failure ?? null,
         background: done.background,
-        ageMs: Date.now() - done.createdAt,
+        createdAt: done.createdAt,
+        expiresAt: done.expiresAt,
+        resolvedAt: done.resolvedAt,
+        ageMs: done.resolvedAt - done.createdAt,
       },
       done,
     );

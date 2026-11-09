@@ -13,7 +13,11 @@ import "./NewTaskView.css";
 
 export function NewTaskView() {
   const { params } = useRouter();
-  return <NewTaskComposer key={`${params.agentId ?? ""}:${params.templateId ?? ""}`} />;
+  return (
+    <NewTaskComposer
+      key={`${params.agentId ?? ""}:${params.templateId ?? ""}:${params.when ?? ""}`}
+    />
+  );
 }
 
 function NewTaskComposer() {
@@ -59,6 +63,13 @@ function NewTaskComposer() {
         if (!active) return;
         setToolMode(template?.toolMode ?? profile.defaults.toolMode);
         setRequireApproval(template?.requireApproval ?? profile.defaults.requireApproval);
+        setWhen(
+          params.when === "daily"
+            ? "daily"
+            : profile.defaults.delegationMode === "scheduled"
+              ? "in1h"
+              : "now",
+        );
         if (template) {
           setText(template.prompt);
           setTemplateId(template.templateId);
@@ -74,7 +85,7 @@ function NewTaskComposer() {
     return () => {
       active = false;
     };
-  }, [client, connected, loaded, params.templateId, retry]);
+  }, [client, connected, loaded, params.templateId, params.when, retry]);
 
   useEffect(() => {
     if (!agentId && !params.agentId && agents.length)

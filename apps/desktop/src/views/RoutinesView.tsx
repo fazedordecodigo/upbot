@@ -161,7 +161,7 @@ export function RoutinesView() {
             className="btn btn-primary"
             id="new-routine"
             data-action="new-routine"
-            onClick={() => navigate("new")}
+            onClick={() => navigate("new", { when: "daily" })}
           >
             <Icon name="plus" />
             Nova rotina

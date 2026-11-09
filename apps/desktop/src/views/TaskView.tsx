@@ -72,7 +72,11 @@ function Memory({ item }: { item: Extract<ChatItem, { kind: "agent_message" }> }
           ) : (
             <p>Carregando memória…</p>
           )}
-          <button type="button" className="btn btn-link" onClick={() => navigate("settings")}>
+          <button
+            type="button"
+            className="btn btn-link"
+            onClick={() => navigate("settings", { tab: "memory" })}
+          >
             Editar memória
           </button>
         </div>
@@ -377,7 +381,7 @@ function TaskSurface() {
                   {rows.map((row) => {
                     if ("approval" in row) {
                       const a = row.approval;
-                      const decidedAt = a.interruptedAt ?? data.approvalTimes[a.id];
+                      const decidedAt = a.resolvedAt ?? a.interruptedAt;
                       return (
                         <article
                           className="task-card"

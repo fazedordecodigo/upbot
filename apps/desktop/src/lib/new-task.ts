@@ -64,7 +64,6 @@ export function draftError(draft: NewTaskDraft): string | null {
     return scheduled
       ? "A tarefa agendada deve ter no máximo 20.000 caracteres."
       : "A tarefa deve ter no máximo 100.000 caracteres.";
-  if (scheduled && draft.files.length) return "Para agendar, remova os anexos ou execute agora.";
   return attachmentError(draft.files);
 }
 
@@ -81,11 +80,15 @@ export async function delegateTask(client: DaemonClient, draft: NewTaskDraft) {
   const timing = draft.schedule
     ? { schedule: draft.schedule, runAt: null }
     : whenToRoutine(draft.when);
+  const attachments = draft.files.length
+    ? await Promise.all(draft.files.map(attachment))
+    : undefined;
   if (timing) {
     const routine = await client.request("routines.create", {
       ...policy,
       name: draft.text.trim().split("\n")[0]?.slice(0, 80) ?? "",
       prompt: draft.text.trim(),
+      ...(attachments ? { attachments } : {}),
       ...timing,
       webhook: false,
       enabled: true,
@@ -95,7 +98,7 @@ export async function delegateTask(client: DaemonClient, draft: NewTaskDraft) {
   const params: MethodParams<"tasks.create"> = {
     ...policy,
     text: draft.text.trim(),
-    ...(draft.files.length ? { attachments: await Promise.all(draft.files.map(attachment)) } : {}),
+    ...(attachments ? { attachments } : {}),
   };
   const task = await client.request("tasks.create", params);
   return { view: "task", id: task.id } as const;

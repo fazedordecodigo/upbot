@@ -716,6 +716,7 @@ export const Approval = z.object({
   status: z.enum(["pending", "approved", "denied", "expired", "done", "interrupted"]),
   createdAt: z.number(),
   expiresAt: z.number(),
+  resolvedAt: z.number().optional(),
   /** Set when a daemon restart ended the approval before any decision. */
   interruptedAt: z.number().optional(),
 });
@@ -792,6 +793,7 @@ export type BrowserState = z.infer<typeof BrowserState>;
 // ---- Routines ----
 
 export const Routine = z.object({
+  attachments: z.array(ChatAttachment).optional(),
   runAt: z.number().nullable(),
   toolMode: ToolMode,
   requireApproval: z.boolean(),
@@ -1216,6 +1218,7 @@ export const methodMap = {
     params: z
       .object({
         agentId: z.string(),
+        attachments: ChatSendParams.shape.attachments,
         name: RoutineFields.name,
         runAt: z.number().nullable().optional(),
         toolMode: ToolMode.optional(),

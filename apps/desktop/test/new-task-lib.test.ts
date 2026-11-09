@@ -18,12 +18,10 @@ test("new-task validates text, agent, limits and never drops scheduled attachmen
   expect(draftError({ ...draft, agentId: "" })).toContain("Escolha um agente");
   expect(draftError({ ...draft, text: "x".repeat(100_001) })).toContain("100.000");
   expect(draftError({ ...draft, text: "x".repeat(20_001), when: "daily" })).toContain("20.000");
-  expect(draftError({ ...draft, when: "in1h", files: [new File(["a"], "a.txt")] })).toContain(
-    "remova os anexos",
-  );
+  expect(draftError({ ...draft, when: "in1h", files: [new File(["a"], "a.txt")] })).toBeNull();
   expect(
     draftError({ ...draft, schedule: "every 2h", files: [new File(["a"], "a.txt")] }),
-  ).toContain("remova os anexos");
+  ).toBeNull();
 });
 
 test("new-task enforces the daemon's attachment count, size and filename limits", () => {

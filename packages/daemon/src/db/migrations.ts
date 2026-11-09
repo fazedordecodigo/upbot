@@ -372,4 +372,6 @@ export const migrations: string[] = [
   `ALTER TABLE agents ADD COLUMN role TEXT NOT NULL DEFAULT '';
   ALTER TABLE agents ADD COLUMN require_approval INTEGER NOT NULL DEFAULT 1;
   ALTER TABLE agents ADD COLUMN max_instances INTEGER`,
+  // 29: persist scheduled-task attachments as workspace references, never base64 payloads
+  `ALTER TABLE routines ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'`,
 ];
