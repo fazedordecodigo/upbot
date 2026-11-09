@@ -71,7 +71,9 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     await page.locator(".sb-user").first().click();
     await page.getByRole("menuitem", { name: "Conhecer o Boto" }).click();
     await page.locator("#ob-next:not([disabled])").waitFor();
-    expect(await page.locator("#ob-private").getAttribute("aria-checked")).toBe("false");
+    await page.waitForFunction(
+      () => document.querySelector("#ob-private")?.getAttribute("aria-checked") === "false",
+    );
     expect((await client.request("profile.get", {})).defaults.private).toBe(false);
     await page.locator("#ob-skip").click();
     await page.locator("#onboarding[open]").waitFor({ state: "hidden" });

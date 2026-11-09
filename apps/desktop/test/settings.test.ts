@@ -182,8 +182,9 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
     expect((await p.locator("#st-themes .ob-swatch").first().boundingBox())?.height).toBe(64);
     await p.locator('[data-st-theme="light"]').click();
     expect(await p.locator("html").getAttribute("data-theme")).toBe("light");
+    await until(async () => (await rpc.request("profile.get", {})).theme === "light");
     await p.keyboard.press("ArrowLeft");
-    expect(await p.locator("html").getAttribute("data-theme")).toBe("dark");
+    await until(async () => (await p.locator("html").getAttribute("data-theme")) === "dark");
     await p.locator("#st-width").fill("320");
     expect(await p.locator("#st-width-out").innerText()).toBe("320 px");
     expect(await p.locator("#sb-resizer").getAttribute("aria-valuenow")).toBe("320");
@@ -235,7 +236,7 @@ test("installed CLIs with a login command can sign in and show the waiting state
     expect(await button.innerText()).toBe("Entrar");
     await button.click();
     await until(async () => (await button.innerText()) === "Aguardando o navegador…");
-    expect(await button.isDisabled()).toBe(true);
+    await until(async () => await button.isDisabled());
     await until(
       async () => (await button.innerText()) === "Entrar" && !(await button.isDisabled()),
     );

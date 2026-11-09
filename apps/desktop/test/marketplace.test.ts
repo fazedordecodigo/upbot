@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
 import {
   DaemonClient,
@@ -213,7 +214,11 @@ test("empty types stay honest and checksum install failures stay inline", async 
     JSON.stringify({
       version: 1,
       items: [
-        { ...entry, url: `${ROOT}/marketplace/skills/code-review.md`, sha256: "0".repeat(64) },
+        {
+          ...entry,
+          url: pathToFileURL(join(ROOT, "marketplace/skills/code-review.md")).href,
+          sha256: "0".repeat(64),
+        },
       ],
     }),
   );
@@ -255,8 +260,32 @@ test("responsive grids, themes and sheet match the shared prototype skeleton", a
       true,
     );
     for (const theme of ["dark", "light"]) {
-      if ((await page.locator("html").getAttribute("data-theme")) !== theme)
-        await page.getByRole("button", { name: "Tema escuro" }).click();
+      if ((await page.locator("html").getAttribute("data-theme")) !== theme) {
+        try {
+          await page.getByRole("button", { name: "Tema escuro" }).click({ timeout: 3000 });
+        } catch (error) {
+          console.log(
+            "toggle geometry",
+            width,
+            height,
+            theme,
+            await page.locator("[data-theme-toggle]").evaluate((toggle) => {
+              const r = toggle.getBoundingClientRect();
+              const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+              return {
+                toggle: r.toJSON(),
+                hit: hit?.outerHTML,
+                hitRect: hit?.getBoundingClientRect().toJSON(),
+                svgs: [...document.querySelectorAll("#view-marketplace svg")].map((svg) =>
+                  svg.getBoundingClientRect().toJSON(),
+                ),
+                dialogs: [...document.querySelectorAll("dialog[open]")].map((d) => d.id),
+              };
+            }),
+          );
+          throw error;
+        }
+      }
       await until(
         async () =>
           (await page.locator(".sb-logo").getAttribute("src")) ===

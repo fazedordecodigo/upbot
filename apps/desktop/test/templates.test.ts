@@ -142,6 +142,8 @@ test("template changes, hiding, restoration and genuine empty sections update li
     for (const template of [...builtins, custom])
       await rpc.request("templates.delete", { id: template.id });
     await until(async () => (await page.locator(".template").count()) === 0);
+    await page.getByText("Nenhum modelo para executar uma vez.").waitFor();
+    await page.getByText("Nenhum modelo de rotina.").waitFor();
     expect(await page.getByText("Nenhum modelo para executar uma vez.").isVisible()).toBe(true);
     expect(await page.getByText("Nenhum modelo de rotina.").isVisible()).toBe(true);
     await rpc.request("templates.restore", { id: "ci" });
