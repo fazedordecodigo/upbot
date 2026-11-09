@@ -1,6 +1,8 @@
 import { type CSSProperties, useEffect, useState } from "react";
+import { ConfirmProvider } from "../dialogs/ConfirmDialog";
 import { OnboardingDialog } from "../dialogs/OnboardingDialog";
 import { ShortcutsDialog } from "../dialogs/ShortcutsDialog";
+import { useFirstRunOnboarding } from "../hooks/useFirstRunOnboarding";
 import { useMediaQuery } from "../hooks/useLayerFocus";
 import { readSidebarWidth, setSidebarWidth } from "../lib/sidebar-width";
 import { readStorage, writeStorage } from "../lib/storage";
@@ -21,6 +23,7 @@ function Shell() {
   const [command, setCommand] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
+  useFirstRunOnboarding(() => setOnboarding(true));
   const [collapsed, setCollapsed] = useState(
     () => readStorage("boto.sidebar-collapsed") === "true",
   );
@@ -175,7 +178,9 @@ export default function App() {
       <RouterProvider>
         <DaemonProvider>
           <PrivateModeProvider>
-            <Shell />
+            <ConfirmProvider>
+              <Shell />
+            </ConfirmProvider>
           </PrivateModeProvider>
         </DaemonProvider>
       </RouterProvider>
