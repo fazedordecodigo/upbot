@@ -8,10 +8,13 @@ import type {
 import type { AgentStore } from "../agents";
 import type { ChatStore, QueueSource, QueueStore } from "../chat-store";
 import type { McpServerSpec, RemoteLaunch } from "../providers/types";
+import type { TaskRuntimeHooks } from "../task-policy";
 import { AgentRuntime, type Broadcast, RpcError } from "./agent-runtime";
 
 export class RuntimeManager {
   private runtimes = new Map<string, AgentRuntime>();
+  /** Task lookups for task-scoped sessions (set by the daemon once TaskService exists). */
+  tasks: TaskRuntimeHooks | null = null;
 
   constructor(
     private agents: AgentStore,
@@ -39,6 +42,7 @@ export class RuntimeManager {
         this.sessionContext,
         this.remoteFor,
         this.sharedDirs,
+        () => this.tasks,
       );
       this.runtimes.set(agentId, rt);
     }
@@ -76,8 +80,33 @@ export class RuntimeManager {
     }
   }
 
-  currentTurn(agentId: string): { id: string; background: boolean } | null {
+  currentTurn(agentId: string): { id: string; background: boolean; taskId: string | null } | null {
     return this.runtimes.get(agentId)?.currentTurn() ?? null;
+  }
+
+  /** Task owning the agent's current provider session (null = plain chat or no runtime). */
+  currentTaskId(agentId: string): string | null {
+    return this.runtimes.get(agentId)?.currentTaskId() ?? null;
+  }
+
+  /** Cancels the agent's running turn when it belongs to the task; the queue keeps going. */
+  cancelTask(agentId: string, taskId: string): void {
+    const rt = this.runtimes.get(agentId);
+    if (rt && rt.currentTurn()?.taskId === taskId) rt.cancel({ pauseQueue: false });
+  }
+
+  /** Drops the task's queued entries (stop); returns how many were removed. */
+  removeTaskQueue(agentId: string, taskId: string): number {
+    const removed = this.queue.removeForTask(taskId);
+    if (removed > 0 && this.agents.get(agentId))
+      this.broadcast("queue.updated", this.getQueue(agentId));
+    return removed;
+  }
+
+  /** Starts the next queued entry when the agent is idle (e.g. a task was resumed). */
+  drain(agentId: string): void {
+    if (this.agents.queuePaused(agentId)) return;
+    this.runtimeFor(agentId).drain();
   }
 
   currentHops(agentId: string): number {

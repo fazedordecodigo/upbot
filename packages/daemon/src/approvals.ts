@@ -574,8 +574,17 @@ export class ApprovalService {
       if (a.agentId === agentId && a.turnId === turnId) this.finish(a.id, "expired");
   }
 
-  /** Blocks until a tool call is allowed; throws when denied or expired. */
-  async gate(agentId: string, tool: string, args: unknown, isAppTool: boolean): Promise<void> {
+  /**
+   * Blocks until a tool call is allowed; throws when denied or expired. `forceAsk` (a task
+   * with "Pedir aprovação" on an external action) can only add an approval, never skip one.
+   */
+  async gate(
+    agentId: string,
+    tool: string,
+    args: unknown,
+    isAppTool: boolean,
+    opts: { forceAsk?: boolean } = {},
+  ): Promise<void> {
     const app = isAppTool ? this.apps.appForTool(tool) : undefined;
     if (isAppTool && !app) throw new RpcError("not_found", "app not found");
     const permission = classifyAppTool(tool);
@@ -589,7 +598,7 @@ export class ApprovalService {
       });
       throw new GateRejection("denied", `${app.name} não permite ${permission}`);
     }
-    if (this.decide(agentId, tool, isAppTool) === "allow") return;
+    if (!opts.forceAsk && this.decide(agentId, tool, isAppTool) === "allow") return;
     const detail = JSON.stringify(args ?? {}, null, 2);
     const { approval } = await this.open(agentId, {
       kind: "tool",

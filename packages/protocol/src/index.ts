@@ -1,4 +1,21 @@
 import { z } from "zod";
+import {
+  Task,
+  TaskDelivery,
+  TasksCreateParams,
+  TasksDeliveriesParams,
+  TasksGetParams,
+  TasksHistoryParams,
+  TasksIdParams,
+  TasksInstructParams,
+  TasksInstructResult,
+  TasksListParams,
+  TasksListResult,
+  TasksRenameParams,
+  TasksSearchParams,
+} from "./tasks";
+
+export * from "./tasks";
 
 export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   devin: "~/.config/devin/config.json",
@@ -116,6 +133,7 @@ export const Turn = z.object({
   error: z.string().nullable(),
   startedAt: z.number(),
   endedAt: z.number().nullable(),
+  taskId: z.string().nullable().optional(),
 });
 export type Turn = z.infer<typeof Turn>;
 
@@ -140,6 +158,7 @@ const ChatItemBase = z.object({
   seq: z.number(),
   agentId: z.string(),
   turnId: z.string().nullable(),
+  taskId: z.string().nullable().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -263,6 +282,7 @@ export const QueueItem = z.object({
   text: z.string(),
   createdAt: z.number(),
   fromAgentId: z.string().nullable().optional(),
+  taskId: z.string().nullable().optional(),
 });
 export const QueueState = z.object({
   agentId: z.string(),
@@ -1264,6 +1284,20 @@ export const methodMap = {
   "channels.archive": { params: ChannelIdParams, result: Channel },
   "channels.restore": { params: ChannelIdParams, result: Channel },
   "channels.reassign": { params: ChannelsReassignParams, result: Channel },
+  "tasks.create": { params: TasksCreateParams, result: Task },
+  "tasks.list": { params: TasksListParams, result: TasksListResult },
+  "tasks.get": { params: TasksGetParams, result: Task },
+  "tasks.history": { params: TasksHistoryParams, result: ChatHistoryResult },
+  "tasks.instruct": { params: TasksInstructParams, result: TasksInstructResult },
+  "tasks.pause": { params: TasksIdParams, result: Task },
+  "tasks.resume": { params: TasksIdParams, result: Task },
+  "tasks.stop": { params: TasksIdParams, result: Task },
+  "tasks.rename": { params: TasksRenameParams, result: Task },
+  "tasks.search": {
+    params: TasksSearchParams,
+    result: z.object({ tasks: z.array(Task), routines: z.array(Routine) }),
+  },
+  "tasks.deliveries": { params: TasksDeliveriesParams, result: z.array(TaskDelivery) },
 } as const;
 
 export type MethodName = keyof typeof methodMap;
@@ -1310,4 +1344,7 @@ export type DaemonEventMap = {
   "channel.created": Channel;
   "channel.updated": Channel;
   "channel.message": ChannelMessage;
+  "task.created": Task;
+  "task.updated": Task;
+  "task.delivery": TaskDelivery;
 };

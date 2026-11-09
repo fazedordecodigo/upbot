@@ -271,4 +271,48 @@ export const migrations: string[] = [
     interrupted_at INTEGER
   );
   CREATE INDEX approval_records_status ON approval_records(status, created_at)`,
+  // 23: tasks (a unit of work over an agent session) and their deliveries. Queue entries,
+  // turns, items and the stored provider session carry the task id; items of private tasks
+  // are flagged so they never reach chat.history, search or deliveries.
+  `CREATE TABLE tasks (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    situation TEXT NOT NULL,
+    outcome TEXT,
+    private INTEGER NOT NULL DEFAULT 0,
+    tool_mode TEXT NOT NULL DEFAULT 'both',
+    require_approval INTEGER NOT NULL DEFAULT 1,
+    session_id TEXT,
+    routine_id TEXT,
+    template_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    ended_at INTEGER
+  );
+  CREATE INDEX tasks_created ON tasks(created_at, id);
+  CREATE INDEX tasks_agent ON tasks(agent_id, situation, created_at);
+  CREATE INDEX tasks_situation ON tasks(situation, created_at);
+  CREATE TABLE task_deliveries (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    path TEXT,
+    url TEXT,
+    mime TEXT,
+    size INTEGER,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX task_deliveries_task ON task_deliveries(task_id, created_at);
+  CREATE INDEX task_deliveries_created ON task_deliveries(created_at);
+  ALTER TABLE queue ADD COLUMN task_id TEXT;
+  ALTER TABLE turns ADD COLUMN task_id TEXT;
+  ALTER TABLE items ADD COLUMN task_id TEXT;
+  ALTER TABLE items ADD COLUMN private INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE agent_sessions ADD COLUMN task_id TEXT;
+  CREATE INDEX queue_task ON queue(task_id, status);
+  CREATE INDEX turns_task ON turns(task_id, started_at);
+  CREATE INDEX items_task_seq ON items(task_id, seq)`,
 ];

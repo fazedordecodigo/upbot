@@ -84,3 +84,24 @@ and a system file such as `/etc/gemini-cli/settings.json`. `general.defaultAppro
 to `default` (prompts) and also accepts auto_edit or plan. Under `--acp`, the session still started
 in `default` when the user settings set `auto_edit` or `yolo`. Settings cannot select yolo; only
 `--yolo` or `--approval-mode` can.
+
+## Tasks
+
+`src/tasks.ts` (`TaskService`) makes a task (`tasks.*` RPC, `task.created|updated|delivery`
+events, schemas in `packages/protocol/src/tasks.ts`) a first-class unit over an agent session.
+Queue entries, turns, items and the stored `agent_sessions` row carry `task_id`; the runtime
+gives each task its own provider session (`AgentRuntime.sessionScope`; the plain chat keeps
+its own) and resumes it from `tasks.session_id`. Situation: `run` (turn running or queued),
+`wait` (permission or approval pending for the task's running turn), `muted` (`tasks.pause`:
+cancels the turn without pausing the agent queue; muted entries are skipped by
+`QueueStore.peek`) and `done` (`completed|stopped|failed`). `tasks.resume` re-prompts in the
+same session; `tasks.stop` never continues. A daemon restart turns live tasks without queued
+entries into `muted`. `src/task-policy.ts` enforces "Onde" (`toolMode`) in bridge
+`tools/list`/`tools/call` and rejects forbidden ACP permission kinds (provider-native tools
+that never ask cannot be blocked: the task preamble asks the agent not to use them), and
+"Pedir aprovação" (`requireApproval`) forces an approval for send/publish/pay/book/delete
+tools via `ApprovalService.gate(..., { forceAsk })` (it only adds asks). Files under
+`<workspace>/tasks/<taskId>/` and the final reply become deliveries. Private tasks: items are
+flagged `private` (never in `chat.history`, `tasks.list` history, search or deliveries), the
+bridge refuses `remember`, and once done their items, queued texts and prompt are purged.
+Defaults come from `settings.task_defaults` (`readTaskDefaults`).
