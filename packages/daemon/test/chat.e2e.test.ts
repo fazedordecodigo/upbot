@@ -129,10 +129,9 @@ describe("chat e2e (fake acp agent)", () => {
     // env leak check: the provider child saw no BOTO_* var and no token
     const envDump = JSON.parse(readFileSync(join(stateDir, "env.json"), "utf8")) as {
       keys: string[];
-      env: Record<string, string>;
     };
     expect(envDump.keys.some((k) => k.startsWith("BOTO_"))).toBe(false);
-    expect(JSON.stringify(envDump.env)).not.toContain(TOKEN);
+    expect(JSON.stringify(envDump)).not.toContain(TOKEN);
   });
 
   test("slow stream: timed flush persists chunks; mid-stream history is complete", async () => {
