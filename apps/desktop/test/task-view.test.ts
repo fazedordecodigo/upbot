@@ -155,6 +155,42 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     );
     await fixture.screenshot({ path: join(dir, "frame.jpg"), type: "jpeg" });
     await fixture.close();
+    // the agent asks for a hand (request_takeover): the card speaks pt-BR and, without a
+    // machine, offers to mark the step done; once the agent gets a machine it hands it over
+    await page.locator("#ctl-pause").click();
+    await page.getByRole("button", { name: "Pausar", exact: true }).waitFor();
+    await client.waitForEventWhere(
+      "task.updated",
+      (value) => value.id === task.id && value.situation === "done",
+    );
+    const handover = await client.request("tasks.instruct", {
+      id: task.id,
+      text: 'mcp:request_takeover {"reason":"Preciso que você faça o login no site"}',
+    });
+    const handoverCard = page
+      .locator(".task-card")
+      .filter({ hasText: "precisa que você assuma o controle" });
+    await handoverCard.waitFor();
+    expect(await handoverCard.locator("h3").innerText()).toBe(
+      "Código precisa que você assuma o controle.",
+    );
+    expect(await handoverCard.innerText()).toContain("Preciso que você faça o login no site");
+    expect(await page.locator("#timeline").innerText()).not.toContain("Take over the bot browser");
+    await page.locator("#task-meta").getByText("Aguardando você", { exact: true }).waitFor();
+    await handoverCard.getByRole("button", { name: "Marcar como concluída", exact: true }).click();
+    await client.waitForEventWhere("turn.ended", (turn) => turn.queueId === handover.queueId);
+    await handoverCard.getByText(/Concluída · \d{2}:\d{2}/).waitFor();
+    await page
+      .getByText(
+        "tool-ok:the user finished in the browser; take a new browser_snapshot and continue",
+        { exact: true },
+      )
+      .waitFor();
+    const paused = await client.request("tasks.instruct", { id: task.id, text: "slow" });
+    await client.waitForEventWhere("turn.started", (turn) => turn.queueId === paused.queueId);
+    await page.locator("#ctl-pause").click();
+    await page.getByRole("button", { name: "Retomar", exact: true }).waitFor();
+    await client.waitForEventWhere("turn.ended", (turn) => turn.queueId === paused.queueId);
     let host = await client.request("hosts.create", {
       name: "Host de verificação",
       target: "bob@vps.example.com",
