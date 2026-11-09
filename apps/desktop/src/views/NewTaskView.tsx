@@ -8,7 +8,7 @@ import { usePrivateMode } from "../shell/Topbar";
 import { Icon } from "../ui/icons";
 import { Switch } from "../ui/Switch";
 import { useToast } from "../ui/Toast";
-import { AgentPicker, ToolPicker, WhenPicker } from "./new-task/ComposerOptions";
+import { ToolPicker, WhenPicker } from "./new-task/ComposerOptions";
 import "./NewTaskView.css";
 
 export function NewTaskView() {
@@ -95,7 +95,6 @@ function NewTaskComposer() {
   };
   const invalid = draftError(draft);
   const busy = submitting || !loaded;
-  const scheduled = when !== "now" || schedule !== null;
   const submit = async () => {
     if (pending.current || !connected || !loaded || invalid) return;
     pending.current = true;
@@ -202,11 +201,7 @@ function NewTaskComposer() {
               setError(null);
             }}
             onKeyDown={(event) => {
-              if (
-                (event.ctrlKey || event.metaKey) &&
-                event.key === "Enter" &&
-                !event.nativeEvent.isComposing
-              ) {
+              if (!event.shiftKey && event.key === "Enter" && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 void submit();
               }
@@ -275,7 +270,6 @@ function NewTaskComposer() {
                 abrir um PR.
               </span>
             </div>
-            <AgentPicker agents={agents} agentId={agentId} disabled={busy} onChange={setAgentId} />{" "}
             <span className="composer-spacer" />
             <button
               type="button"
@@ -320,8 +314,6 @@ function NewTaskComposer() {
             </p>
           ) : !agentExists ? (
             <p>Este agente não está disponível. Escolha outro agente.</p>
-          ) : scheduled && files.length ? (
-            <p>{invalid}</p>
           ) : text.trim() && invalid ? (
             <p>{invalid}</p>
           ) : null}

@@ -792,6 +792,7 @@ export type BrowserState = z.infer<typeof BrowserState>;
 // ---- Routines ----
 
 export const Routine = z.object({
+  attachments: z.array(ChatAttachment).optional(),
   runAt: z.number().nullable(),
   toolMode: ToolMode,
   requireApproval: z.boolean(),
@@ -1216,6 +1217,7 @@ export const methodMap = {
     params: z
       .object({
         agentId: z.string(),
+        attachments: TasksCreateParams.shape.attachments,
         name: RoutineFields.name,
         runAt: z.number().nullable().optional(),
         toolMode: ToolMode.optional(),
@@ -1234,6 +1236,7 @@ export const methodMap = {
     params: z
       .object({
         id: z.string(),
+        attachments: TasksCreateParams.shape.attachments,
         name: RoutineFields.name.optional(),
         runAt: z.number().nullable().optional(),
         toolMode: ToolMode.optional(),

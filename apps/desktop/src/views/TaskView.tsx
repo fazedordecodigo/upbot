@@ -480,11 +480,20 @@ function TaskSurface() {
                           </div>
                         );
                       case "permission": {
+                        const pending =
+                          data.permissionsReady &&
+                          data.permissions.some(
+                            (permission) => permission.requestId === i.requestId,
+                          );
                         const step = data.items.find(
                           (other) => other.kind === "tool_call" && other.turnId === i.turnId,
                         );
                         return (
-                          <article className="task-card" data-pending={!i.resolution} key={i.id}>
+                          <article
+                            className="task-card"
+                            data-pending={!i.resolution && pending}
+                            key={i.id}
+                          >
                             <h3>
                               <Icon name="shield-check" />
                               {i.title}
@@ -504,6 +513,12 @@ function TaskSurface() {
                                   ? "Permitido"
                                   : "Não permitido"}{" "}
                                 · {time(i.updatedAt)}
+                              </p>
+                            ) : !pending ? (
+                              <p className="task-note" role="status">
+                                {data.permissionsReady
+                                  ? "Este pedido não está mais disponível."
+                                  : "Verificando permissão…"}
                               </p>
                             ) : (
                               <div className="task-actions">

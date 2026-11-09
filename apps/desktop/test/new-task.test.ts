@@ -75,14 +75,15 @@ afterAll(async () => {
   for (const dir of dirs) await removeDir(dir);
 }, T);
 
-async function app(templateId?: string) {
+async function app(templateId?: string, agentId?: string) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.setDefaultTimeout(10_000);
-  const route = templateId
-    ? `/test/fixtures/new-task.html?templateId=${encodeURIComponent(templateId)}`
-    : "/";
+  const route =
+    templateId || agentId
+      ? `/test/fixtures/new-task.html?${new URLSearchParams({ ...(templateId ? { templateId } : {}), ...(agentId ? { agentId, nextAgentId: beta.id } : {}) })}`
+      : "/";
   await page.goto(`${base}${route}#port=${daemon.port}&token=${token}`);
-  if (!templateId) {
+  if (!templateId && !agentId) {
     await page.locator("#home-title").waitFor();
     await page.keyboard.press("Control+Shift+O");
   }
@@ -111,11 +112,10 @@ async function taskByPrompt(prompt: string) {
 test(
   "Nova tarefa delegates to the chosen real agent with tools, approval policy and attachments",
   async () => {
-    const page = await app();
+    const page = await app(undefined, beta.id);
     try {
       expect(await page.locator("#send").isDisabled()).toBe(true);
       await page.locator("#composer-input").fill("echo:delegada pelo composer");
-      await choose(page, "#agent-trigger", "Beta");
       await choose(page, "#where-trigger", "Só terminal Código, scripts e arquivos");
       await page.locator("#approval-switch").click();
       await page.locator("#file-input").setInputFiles({
@@ -166,7 +166,6 @@ test(
       ] as const) {
         const prompt = `echo:rotina ${when}`;
         await page.locator("#composer-input").fill(prompt);
-        await choose(page, "#agent-trigger", "Beta");
         await choose(page, "#when-trigger", label);
         const before = Date.now();
         await page.locator("#send").click();
@@ -177,7 +176,7 @@ test(
           (routine) => routine.prompt === prompt,
         );
         expect(routine).toMatchObject({
-          agentId: beta.id,
+          agentId: alpha.id,
           enabled: true,
           webhook: false,
           toolMode: "both",
@@ -223,13 +222,21 @@ test(
         name: "Temporário",
         provider: "devin",
       });
-      await until(async () => await page.locator("#agent-trigger").isEnabled());
-      await choose(page, "#agent-trigger", "Temporário");
-      await page.locator("#composer-input").fill("Não trocar o agente");
-      await rpc.request("agents.delete", { id: disposable.id });
-      await until(() => page.locator("#send").isDisabled());
-      expect(await page.locator("#new-task-status").innerText()).toContain("Escolha outro agente");
-      expect(await page.locator("#composer-input").inputValue()).toBe("Não trocar o agente");
+      await page.close();
+      const unavailable = await app(undefined, disposable.id);
+      try {
+        await unavailable.locator("#composer-input").fill("Não trocar o agente");
+        await rpc.request("agents.delete", { id: disposable.id });
+        await until(() => unavailable.locator("#send").isDisabled());
+        expect(await unavailable.locator("#new-task-status").innerText()).toContain(
+          "Escolha outro agente",
+        );
+        expect(await unavailable.locator("#composer-input").inputValue()).toBe(
+          "Não trocar o agente",
+        );
+      } finally {
+        await unavailable.close();
+      }
     } finally {
       await page.close();
       await rpc.request("queue.resume", { agentId: alpha.id });
@@ -298,7 +305,7 @@ test(
 );
 
 test(
-  "keyboard menus restore focus and attachments cannot be silently discarded by scheduling",
+  "keyboard menus restore focus and scheduled attachments persist",
   async () => {
     const page = await app();
     try {
@@ -318,10 +325,84 @@ test(
         mimeType: "text/plain",
         buffer: Buffer.from("arquivo"),
       });
-      expect(await page.locator("#send").isDisabled()).toBe(true);
-      expect(await page.locator("#new-task-status").innerText()).toContain("remova os anexos");
-      await page.getByRole("button", { name: "Remover arquivo.txt" }).click();
       expect(await page.locator("#send").isEnabled()).toBe(true);
+      await page.locator("#send").click();
+      await until(
+        async () => (await page.locator("#main").getAttribute("data-view")) === "routines",
+      );
+      const routine = (await rpc.request("routines.list", {})).find(
+        (item) => item.prompt === "Uma tarefa com anexo",
+      );
+      expect(routine?.attachments?.[0]?.name).toBe("arquivo.txt");
+    } finally {
+      await page.close();
+    }
+  },
+  T,
+);
+
+test(
+  "Enter delegates, Shift+Enter adds a newline, and composition does not submit",
+  async () => {
+    const page = await app();
+    try {
+      const input = page.locator("#composer-input");
+      await input.fill("echo:keyboard");
+      await input.press("Shift+Enter");
+      await input.press("x");
+      expect(await input.inputValue()).toBe("echo:keyboard\nx");
+      expect(
+        (await rpc.request("tasks.list", {})).items.some(
+          (task) => task.prompt === "echo:keyboard\nx",
+        ),
+      ).toBe(false);
+      await input.dispatchEvent("keydown", { key: "Enter", isComposing: true });
+      expect(await page.locator("#main").getAttribute("data-view")).toBe("new");
+      await input.press("Enter");
+      await until(async () => (await page.locator("#main").getAttribute("data-view")) === "task");
+      expect((await taskByPrompt("echo:keyboard\nx")).agentId).toBe(alpha.id);
+    } finally {
+      await page.close();
+    }
+  },
+  T,
+);
+
+test(
+  "composer bar matches prototype and route recipients get fresh drafts",
+  async () => {
+    const page = await app(undefined, alpha.id);
+    try {
+      expect(
+        await page.locator(".composer-bar").evaluate((bar) =>
+          Array.from(bar.children)
+            .filter((el) => el.tagName !== "INPUT" && !el.classList.contains("composer-spacer"))
+            .map(
+              (el) =>
+                el.id ||
+                el.getAttribute("data-action") ||
+                (el.classList.contains("opt-approval")
+                  ? "approval"
+                  : el.querySelector("button")?.id),
+            ),
+        ),
+      ).toEqual(["attach", "when-trigger", "where-trigger", "approval", "send"]);
+      expect(await page.locator("#agent-trigger").count()).toBe(0);
+      await page.locator("#composer-input").fill("Alpha only");
+      await choose(page, "#where-trigger", "Só terminal Código, scripts e arquivos");
+      await page.locator("#approval-switch").click();
+      await page
+        .locator("#file-input")
+        .setInputFiles({ name: "alpha.txt", mimeType: "text/plain", buffer: Buffer.from("alpha") });
+      await page.getByRole("button", { name: "Switch route agent" }).click();
+      await until(() => page.locator("#composer-input").isEnabled());
+      expect(await page.locator("#composer-input").inputValue()).toBe("");
+      expect(await page.locator("#where-label").innerText()).toBe("Navegador e terminal");
+      expect(await page.locator("#approval-switch").getAttribute("aria-checked")).toBe("true");
+      expect(await page.locator("#composer-files").isVisible()).toBe(false);
+      await page.locator("#composer-input").fill("echo:route Beta");
+      await page.locator("#composer-input").press("Enter");
+      expect((await taskByPrompt("echo:route Beta")).agentId).toBe(beta.id);
     } finally {
       await page.close();
     }

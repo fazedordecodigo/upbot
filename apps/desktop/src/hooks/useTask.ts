@@ -1,4 +1,4 @@
-import type { Approval, ChatItem, Task, Turn } from "@boto/protocol";
+import type { Approval, ChatItem, PendingPermission, Task, Turn } from "@boto/protocol";
 import { useEffect, useRef, useState } from "react";
 import type { DaemonClient } from "../lib/daemon";
 import { errorFields, logError } from "../lib/log";
@@ -13,6 +13,8 @@ const empty = () => ({
   items: [] as ChatItem[],
   turns: [] as Turn[],
   approvals: [] as Approval[],
+  permissions: [] as PendingPermission[],
+  permissionsReady: false,
   agentName: "",
   loading: true,
   error: false,
@@ -34,6 +36,7 @@ export function useTask(client: DaemonClient, taskId?: string) {
     let eventItems: ChatItem[] = [];
     let eventTurns: Turn[] = [];
     let eventApprovals: Approval[] = [];
+    const eventPermissions = new Map<string, PendingPermission | null>();
     const belongs = (item: ChatItem) =>
       item.taskId === taskId || turns.some((turn) => turn.id === item.turnId);
     const publish = () => {
@@ -54,11 +57,13 @@ export function useTask(client: DaemonClient, taskId?: string) {
         eventTurns = [];
         eventApprovals = [];
         eventTask = null;
+        eventPermissions.clear();
+        setState((s) => ({ ...s, permissionsReady: false }));
       }
       paging = older;
       try {
         await client.connect();
-        const [task, history, list, agents] = await Promise.all([
+        const [task, history, list, agents, permissions] = await Promise.all([
           client.request("tasks.get", { id: taskId }),
           client.request("tasks.history", {
             id: taskId,
@@ -66,11 +71,19 @@ export function useTask(client: DaemonClient, taskId?: string) {
           }),
           client.request("approvals.list", {}),
           client.request("agents.list", {}),
+          client.request("permissions.list", {}),
         ]);
         if (!alive || current !== version) return;
         items = older ? merge(history.items, items) : merge(history.items, eventItems);
         turns = older ? merge(history.turns, turns) : merge(history.turns, eventTurns);
         approvals = merge(list, eventApprovals);
+        const pending = new Map(
+          permissions.map((permission) => [permission.requestId, permission]),
+        );
+        for (const [id, permission] of eventPermissions) {
+          if (permission) pending.set(id, permission);
+          else pending.delete(id);
+        }
         setState((s) => ({
           ...s,
           task: eventTask ?? task,
@@ -78,6 +91,8 @@ export function useTask(client: DaemonClient, taskId?: string) {
           hasMore: history.hasMore,
           loading: false,
           error: false,
+          permissions: [...pending.values()],
+          permissionsReady: true,
         }));
         publish();
       } catch (error) {
@@ -109,6 +124,10 @@ export function useTask(client: DaemonClient, taskId?: string) {
       }
     };
     const offs = [
+      client.onDisconnect(() => {
+        version++;
+        setState((s) => ({ ...s, permissionsReady: false }));
+      }),
       client.onReconnect(() => void load()),
       client.on("task.updated", (task) => {
         if (task.id === taskId) {
@@ -128,7 +147,22 @@ export function useTask(client: DaemonClient, taskId?: string) {
       }),
       client.on("turn.started", turn),
       client.on("turn.ended", turn),
+      client.on("permission.requested", (permission) => {
+        eventPermissions.set(permission.requestId, permission);
+        setState((s) => ({
+          ...s,
+          permissions: [
+            ...s.permissions.filter((p) => p.requestId !== permission.requestId),
+            permission,
+          ],
+        }));
+      }),
       client.on("permission.resolved", ({ requestId, optionId }) => {
+        eventPermissions.set(requestId, null);
+        setState((s) => ({
+          ...s,
+          permissions: s.permissions.filter((p) => p.requestId !== requestId),
+        }));
         items = items.map((i) =>
           i.kind === "permission" && i.requestId === requestId
             ? { ...i, resolution: { optionId }, updatedAt: Date.now() }

@@ -302,6 +302,7 @@ async function main() {
         },
         {
           routineId: p.routineId,
+          attachments: p.attachments,
           title: p.title,
           source: {
             prompt: p.sendPrompt,

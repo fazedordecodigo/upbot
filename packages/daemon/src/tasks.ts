@@ -4,6 +4,7 @@ import { extname, join } from "node:path";
 import type {
   Agent,
   Approval,
+  ChatAttachment,
   ChatItem,
   MethodParsedParams,
   Routine,
@@ -497,12 +498,15 @@ export class TaskService {
       routineId?: string;
       title?: string;
       source?: Pick<QueueSource, "prompt" | "meta">;
+      attachments?: ChatAttachment[];
     } = {},
   ): Task {
     const agent = p.agentId ? this.agents.get(p.agentId) : (this.agents.list()[0] ?? null);
     if (!agent) throw new RpcError("not_found", "agent not found");
     const defaults = this.deps.defaults();
-    const saved = p.attachments?.length ? saveAttachments(agent.workspacePath, p.attachments) : [];
+    const saved =
+      extra.attachments ??
+      (p.attachments?.length ? saveAttachments(agent.workspacePath, p.attachments) : []);
     const id = crypto.randomUUID();
     const now = Date.now();
     this.db
@@ -537,7 +541,10 @@ export class TaskService {
         taskId: id,
         ...extra.source,
         ...(saved.length
-          ? { prompt: attachmentsBlock(saved) + p.text, meta: { attachments: saved } }
+          ? {
+              prompt: attachmentsBlock(saved) + (extra.source?.prompt ?? p.text),
+              meta: { ...extra.source?.meta, attachments: saved },
+            }
           : {}),
       });
     } catch (e) {

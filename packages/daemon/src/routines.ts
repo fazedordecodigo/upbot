@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { timingSafeEqual } from "node:crypto";
 import type {
+  ChatAttachment,
   MethodParsedParams,
   Routine,
   RoutineRun,
@@ -8,6 +9,7 @@ import type {
   ToolMode,
 } from "@boto/protocol";
 import type { AgentStore } from "./agents";
+import { attachmentsBlock, saveAttachments } from "./attachments";
 import { envPositiveNumber } from "./env/vars";
 import type { Broadcast } from "./rpc";
 import { asBadRequest, RpcError } from "./runtime/agent-runtime";
@@ -46,6 +48,7 @@ export function parseSchedule(s: string): (from: number) => number {
 }
 
 type Row = {
+  attachments: string;
   run_at: number | null;
   tool_mode: ToolMode;
   require_approval: number;
@@ -116,6 +119,7 @@ export interface RoutineTaskSink {
     templateId: string | null;
     trigger: RoutineTrigger;
     sendPrompt: string;
+    attachments: ChatAttachment[];
   }): { taskId: string; queueId: string | null };
 }
 
@@ -137,6 +141,7 @@ export class RoutineService {
 
   private toRoutine(r: Row): Routine {
     return {
+      attachments: JSON.parse(r.attachments),
       runAt: r.run_at,
       toolMode: r.tool_mode,
       requireApproval: r.require_approval === 1,
@@ -202,7 +207,8 @@ export class RoutineService {
   }
 
   create(p: MethodParsedParams<"routines.create">): Routine {
-    if (!this.agents.get(p.agentId)) throw new RpcError("not_found", "agent not found");
+    const agent = this.agents.get(p.agentId);
+    if (!agent) throw new RpcError("not_found", "agent not found");
     const id = crypto.randomUUID();
     const now = Date.now();
     const schedule = p.schedule?.trim() || null;
@@ -212,10 +218,13 @@ export class RoutineService {
     if (runAt !== null && runAt < now) throw new RpcError("bad_request", "runAt is in the past");
     if (schedule) asBadRequest(() => parseSchedule(schedule));
     const enabled = p.enabled ?? true;
+    const attachments = p.attachments?.length
+      ? saveAttachments(agent.workspacePath, p.attachments)
+      : [];
     this.db
       .query(
-        `INSERT INTO routines (id, agent_id, name, prompt, schedule, webhook_token, enabled, next_run_at, created_at, updated_at, run_at, tool_mode, require_approval, private, template_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO routines (id, agent_id, name, prompt, schedule, webhook_token, enabled, next_run_at, created_at, updated_at, run_at, tool_mode, require_approval, private, template_id, attachments)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -233,6 +242,7 @@ export class RoutineService {
         p.requireApproval ? 1 : 0,
         p.private ? 1 : 0,
         p.templateId ?? null,
+        JSON.stringify(attachments),
       );
     return this.emit(id);
   }
@@ -260,9 +270,17 @@ export class RoutineService {
       r.next_run_at === null
         ? this.nextRun(schedule, enabled, Date.now(), runAt)
         : r.next_run_at;
+    const agent = this.agents.get(r.agent_id);
+    if (!agent) throw new RpcError("not_found", "agent not found");
+    const attachments =
+      p.attachments === undefined
+        ? r.attachments
+        : JSON.stringify(
+            p.attachments.length ? saveAttachments(agent.workspacePath, p.attachments) : [],
+          );
     this.db
       .query(
-        "UPDATE routines SET name = ?, prompt = ?, schedule = ?, webhook_token = ?, enabled = ?, next_run_at = ?, updated_at = ?, run_at = ?, tool_mode = ?, require_approval = ?, private = ? WHERE id = ?",
+        "UPDATE routines SET name = ?, prompt = ?, schedule = ?, webhook_token = ?, enabled = ?, next_run_at = ?, updated_at = ?, run_at = ?, tool_mode = ?, require_approval = ?, private = ?, attachments = ? WHERE id = ?",
       )
       .run(
         p.name ?? r.name,
@@ -276,6 +294,7 @@ export class RoutineService {
         p.toolMode ?? r.tool_mode,
         p.requireApproval === undefined ? r.require_approval : Number(p.requireApproval),
         p.private === undefined ? r.private : Number(p.private),
+        attachments,
         p.id,
       );
     return this.emit(p.id);
@@ -308,6 +327,7 @@ export class RoutineService {
       ? `\n<webhook_payload>\n${payload.slice(0, PAYLOAD_LIMIT)}${payload.length > PAYLOAD_LIMIT ? "\n[truncated]" : ""}\n</webhook_payload>`
       : "";
     const prompt = `<routine name="${r.name.replace(/[<>"&]/g, "")}" trigger="${trigger}">\n${r.prompt}${body}\n</routine>`;
+    const attachments: ChatAttachment[] = JSON.parse(r.attachments);
     let queueId: string | null = null;
     let taskId: string | null = null;
     let error: string | null = null;
@@ -324,13 +344,14 @@ export class RoutineService {
           templateId: r.template_id,
           trigger,
           sendPrompt: prompt,
+          attachments,
         }));
       else
         ({ queueId } = this.runtimes().sendFrom(r.agent_id, r.prompt, {
           agentId: null,
           hops: 0,
-          prompt,
-          meta: { routine: { id: r.id, name: r.name, trigger } },
+          prompt: attachmentsBlock(attachments) + prompt,
+          meta: { routine: { id: r.id, name: r.name, trigger }, attachments },
         }));
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
