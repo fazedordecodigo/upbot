@@ -34,8 +34,8 @@ export function useNativeIntegration() {
   const approvalCount = approvals.data?.filter((item) => item.status === "pending").length;
   useEffect(() => {
     if (approvalCount === undefined) return;
-    void nativeCommand("set_tray_count", { count: approvalCount }).catch(
-      (error: unknown) => setError(errorMessage(error)),
+    void nativeCommand("set_tray_count", { count: approvalCount }).catch((error: unknown) =>
+      setError(errorMessage(error)),
     );
   }, [approvalCount, setError]);
   useEffect(() => {

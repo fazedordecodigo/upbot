@@ -19,7 +19,7 @@ export function NewTaskView() {
 function NewTaskComposer() {
   const { client, connected, agents } = useDaemon();
   const { navigate, params } = useRouter();
-  const { privateMode, setPrivateMode } = usePrivateMode();
+  const { privateMode } = usePrivateMode();
   const toast = useToast();
   const [text, setText] = useState("");
   const [agentId, setAgentId] = useState(params.agentId ?? "");
