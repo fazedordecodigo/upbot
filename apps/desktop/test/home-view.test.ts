@@ -97,9 +97,10 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
     const running = await rpc.request("tasks.create", {
       agentId: runner.id,
       text: "slow",
-      private: true,
     });
     await page.locator("#lane-running .lane-item").waitFor();
+    const privateRunner = await createAgent("Private runner");
+    await rpc.request("tasks.create", { agentId: privateRunner.id, text: "slow", private: true });
     expect(await page.locator("#lane-running-count").innerText()).toBe("1");
     await rpc.request("tasks.create", { agentId: waiter.id, text: "tool" });
     await page
@@ -178,6 +179,7 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
     }
     await page.reload();
     await page.locator("#lane-running .lane-item").waitFor();
+    expect(await page.locator("#lane-running").innerText()).not.toContain("Private runner");
     await page
       .locator("#lane-waiting .lane-item")
       .filter({ hasText: "Permissão pendente: Fake tool" })
