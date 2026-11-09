@@ -13,11 +13,12 @@ import {
   startDaemon,
   stopDaemon,
 } from "../../../packages/daemon/test/helpers";
+import { startVite } from "./vite";
 
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
 let browser: Browser;
-let vite: ReturnType<typeof Bun.spawn>;
+let vite: Awaited<ReturnType<typeof startVite>> | undefined;
 let state: string;
 const token = `templates-${crypto.randomUUID()}`;
 const base = "http://localhost:1420";
@@ -31,23 +32,13 @@ beforeAll(async () => {
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
   await rpc.request("agents.create", { name: "Modelos", provider: "devin" });
-  vite = Bun.spawn(
-    [process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420", "--strictPort"],
-    { cwd: ROOT, stdout: "ignore", stderr: "inherit" },
-  );
-  await until(async () => {
-    if (vite.exitCode !== null) throw new Error("Vite exited before startup");
-    return fetch(base)
-      .then((response) => response.ok)
-      .catch(() => false);
-  }, 15_000);
+  vite = await startVite();
   browser = await chromium.launch({ channel: "chrome", headless: true });
 }, 30_000);
 
 afterAll(async () => {
   await browser?.close();
-  vite?.kill();
-  await vite?.exited;
+  await vite?.stop();
   if (daemon) await stopDaemon(daemon, rpc);
   if (state) await removeDir(state);
 }, 30_000);

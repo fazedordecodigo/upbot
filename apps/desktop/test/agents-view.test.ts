@@ -7,17 +7,17 @@ import {
   DaemonClient,
   type DaemonHandle,
   FAKE_AGENT,
-  ROOT,
   startDaemon,
   stopTestChildren,
 } from "../../../packages/daemon/test/helpers";
 import { agentStatus, relativeTime } from "../src/agents/helpers";
+import { startVite } from "./vite";
 
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
 let browser: Browser;
 let page: Page;
-let vite: ReturnType<typeof Bun.spawn> | undefined;
+let vite: Awaited<ReturnType<typeof startVite>> | undefined;
 let state: string;
 const deletedIds: string[] = [];
 const token = `agents-view-${crypto.randomUUID()}`;
@@ -40,20 +40,7 @@ beforeAll(async () => {
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  const ready = async () => {
-    try {
-      return (await fetch("http://localhost:1420")).ok;
-    } catch {
-      return false;
-    }
-  };
-  if (!(await ready()))
-    vite = Bun.spawn([process.execPath, "run", "dev", "--port", "1420"], {
-      cwd: join(ROOT, "apps/desktop"),
-      stdout: "ignore",
-      stderr: "inherit",
-    });
-  await waitUntil(ready);
+  vite = await startVite();
   browser = await chromium.launch({ channel: "chrome", headless: true });
   page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on("websocket", (socket) => {
@@ -72,8 +59,7 @@ afterAll(async () => {
   await stopTestChildren(state);
   daemon?.proc.kill();
   if (daemon) await daemon.proc.exited;
-  vite?.kill();
-  if (vite) await vite.exited;
+  await vite?.stop();
   if (state) rmSync(state, { recursive: true, force: true });
 }, 30000);
 

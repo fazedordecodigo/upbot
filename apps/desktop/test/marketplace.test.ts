@@ -11,12 +11,13 @@ import {
   startDaemon,
   stopTestChildren,
 } from "../../../packages/daemon/test/helpers";
+import { startVite } from "./vite";
 
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
 let browser: Browser;
 let page: Page;
-let vite: ReturnType<typeof Bun.spawn>;
+let vite: Awaited<ReturnType<typeof startVite>> | undefined;
 let state: string;
 const token = `marketplace-${crypto.randomUUID()}`;
 const base = "http://localhost:1420";
@@ -39,16 +40,7 @@ beforeAll(async () => {
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  vite = Bun.spawn([process.execPath, "run", "dev", "--port", "1420"], {
-    cwd: join(ROOT, "apps/desktop"),
-    stdout: "ignore",
-    stderr: "inherit",
-  });
-  await until(async () =>
-    fetch(base)
-      .then((response) => response.ok)
-      .catch(() => false),
-  );
+  vite = await startVite();
   browser = await chromium.launch({ channel: "chrome", headless: true });
   page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
@@ -59,9 +51,9 @@ beforeAll(async () => {
 afterAll(async () => {
   await browser?.close();
   rpc?.close();
-  vite?.kill();
+  await vite?.stop();
   daemon?.proc.kill();
-  await Promise.all([vite?.exited, daemon?.proc.exited]);
+  await Promise.all([daemon?.proc.exited]);
   await stopTestChildren(state);
   if (state) rmSync(state, { recursive: true, force: true });
 }, 30000);
@@ -79,6 +71,7 @@ test("builtin apps, keyboard tabs, search, category and empty filters use real r
   await until(async () => (await page.locator("#mk-grid .mk-card").count()) === 1);
   expect(await page.locator("#mk-featured").count()).toBe(0);
   await page.locator("#mk-search").fill("");
+  await until(async () => (await page.locator("#mk-grid .mk-card").count()) === 3);
   await page.getByRole("radio", { name: /Documentação/ }).click();
   await until(async () => (await page.locator("#mk-grid .mk-card").count()) === 1);
   expect(await page.locator("#mk-grid").innerText()).toContain("release-notes");

@@ -3,11 +3,11 @@ import { chromium } from "playwright-core";
 import {
   DaemonClient,
   FAKE_AGENT,
-  ROOT,
   removeDirAfterExit,
   startDaemon,
   tmp,
 } from "../../../packages/daemon/test/helpers";
+import { startVite } from "./vite";
 
 test("onboarding persists real profile, handles errors, and exposes working shortcuts", async () => {
   const dir = tmp("boto-onboarding-");
@@ -16,29 +16,13 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     BOTO_ACP_COMMAND_DEVIN: JSON.stringify(["bun", FAKE_AGENT]),
   });
   const client = await DaemonClient.connect(daemon.port, token);
-  const vite = Bun.spawn(
-    ["bun", "apps/desktop/node_modules/vite/bin/vite.js", "apps/desktop", "--port", "1420"],
-    {
-      cwd: ROOT,
-      stdout: "ignore",
-      stderr: "ignore",
-    },
-  );
+  const vite = await startVite();
   const browser = await chromium.launch({
     channel: "chrome",
     headless: true,
     args: ["--no-sandbox"],
   });
   try {
-    let ready = false;
-    for (let i = 0; i < 100; i++) {
-      try {
-        ready = (await fetch("http://localhost:1420")).ok;
-      } catch {}
-      if (ready) break;
-      await Bun.sleep(100);
-    }
-    expect(ready).toBe(true);
     const page = await browser.newPage();
     // 03:00 must greet like Home does ("Boa noite"), not "Bom dia".
     await page.clock.install({ time: new Date(2026, 10, 9, 3, 0) });
@@ -211,7 +195,7 @@ test("onboarding persists real profile, handles errors, and exposes working shor
   } finally {
     await browser.close();
     client.close();
-    await removeDirAfterExit(vite, dir + "-unused");
+    await vite.stop();
     await removeDirAfterExit(daemon.proc, dir);
   }
 }, 60000);

@@ -5,15 +5,15 @@ import {
   DaemonClient,
   type DaemonHandle,
   FAKE_AGENT,
-  ROOT,
   removeDir,
   startDaemon,
   stopDaemon,
   tmp,
 } from "../../../packages/daemon/test/helpers";
+import { startVite } from "./vite";
 
 let browser: Browser;
-let vite: ReturnType<typeof Bun.spawn>;
+let vite: Awaited<ReturnType<typeof startVite>> | undefined;
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
 let directory: string;
@@ -48,15 +48,7 @@ beforeAll(async () => {
   );
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  vite = Bun.spawn(
-    [process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420", "--strictPort"],
-    { cwd: ROOT, stdout: "ignore", stderr: "ignore" },
-  );
-  await until(async () =>
-    fetch(base)
-      .then((response) => response.ok)
-      .catch(() => false),
-  );
+  vite = await startVite();
   browser = await chromium.launch({ channel: "chrome", headless: true });
 }, 30000);
 
@@ -64,8 +56,7 @@ afterAll(async () => {
   await browser?.close();
   rpc?.close();
   if (daemon) await stopDaemon(daemon, undefined);
-  vite?.kill();
-  if (vite) await vite.exited;
+  await vite?.stop();
   if (directory) await removeDir(directory);
 }, 30000);
 

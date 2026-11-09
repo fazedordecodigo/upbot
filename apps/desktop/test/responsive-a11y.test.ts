@@ -7,22 +7,18 @@ import {
   DaemonClient,
   type DaemonHandle,
   FAKE_AGENT,
-  ROOT,
   startDaemon,
   stopDaemon,
 } from "../../../packages/daemon/test/helpers";
+import { startVite } from "./vite";
 
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
 let browser: Browser;
-let vite: ReturnType<typeof Bun.spawn> | undefined;
+let vite: Awaited<ReturnType<typeof startVite>> | undefined;
 let state: string;
 const token = `responsive-test-${crypto.randomUUID()}`;
 const base = "http://localhost:1420";
-const up = () =>
-  fetch(base)
-    .then((response) => response.ok)
-    .catch(() => false);
 
 beforeAll(async () => {
   state = mkdtempSync(join(homedir(), "boto-responsive-test-"));
@@ -33,21 +29,13 @@ beforeAll(async () => {
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  if (!(await up())) {
-    vite = Bun.spawn([process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420"], {
-      cwd: ROOT,
-      stdout: "ignore",
-      stderr: "inherit",
-    });
-    for (let i = 0; i < 300 && !(await up()); i++) await Bun.sleep(100);
-  }
+  vite = await startVite();
   browser = await chromium.launch({ channel: "chrome", headless: true });
 }, 60000);
 
 afterAll(async () => {
   await browser?.close();
-  vite?.kill();
-  if (vite) await vite.exited;
+  await vite?.stop();
   if (daemon) await stopDaemon(daemon, rpc, state);
   if (state) rmSync(state, { recursive: true, force: true });
 }, 30000);

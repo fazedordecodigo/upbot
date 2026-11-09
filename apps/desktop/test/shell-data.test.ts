@@ -5,17 +5,17 @@ import {
   DaemonClient,
   type DaemonHandle,
   FAKE_AGENT,
-  ROOT,
   removeDir,
   startDaemon,
   stopDaemon,
   tmp,
 } from "../../../packages/daemon/test/helpers";
+import { startVite } from "./vite";
 
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
 let browser: Browser;
-let vite: ReturnType<typeof Bun.spawn> | undefined;
+let vite: Awaited<ReturnType<typeof startVite>> | undefined;
 let stopped = false;
 const token = crypto.randomUUID();
 const dirs: string[] = [];
@@ -35,29 +35,12 @@ beforeAll(async () => {
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  const running = await fetch(base)
-    .then((r) => r.ok)
-    .catch(() => false);
-  if (!running)
-    vite = Bun.spawn(
-      [process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420", "--strictPort"],
-      {
-        cwd: ROOT,
-        stdout: "ignore",
-        stderr: "inherit",
-      },
-    );
-  await until(async () =>
-    fetch(base)
-      .then((r) => r.ok)
-      .catch(() => false),
-  );
+  vite = await startVite();
   browser = await chromium.launch({ channel: "chrome", headless: true });
 }, 60000);
 afterAll(async () => {
   await browser?.close();
-  vite?.kill();
-  await vite?.exited;
+  await vite?.stop();
   if (daemon && !stopped) await stopDaemon(daemon, rpc, dirs[2]);
   for (const dir of dirs) await removeDir(dir);
 }, 60000);
@@ -184,6 +167,9 @@ test("palette keeps keyboard selections visible and opens the selected real task
     const selected = await rpc.request("tasks.search", { query: "Resultado teclado", limit: 20 });
     await page.keyboard.press("Enter");
     await until(async () => (await page.locator("#main").getAttribute("data-view")) === "task");
+    await until(
+      async () => (await page.locator("#task-title").innerText()) === selected.tasks[19]?.title,
+    );
     expect(await page.locator("#task-title").innerText()).toBe(selected.tasks[19]?.title);
   } finally {
     await page.close();

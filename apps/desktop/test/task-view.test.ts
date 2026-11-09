@@ -10,6 +10,7 @@ import {
   readLog,
   startDaemon,
 } from "../../../packages/daemon/test/helpers";
+import { startVite } from "./vite";
 
 test("task timeline, real desktop stream, takeover, split, VM dialog and mobile tabs", async () => {
   const dir = mkdtempSync(join(tmpdir(), "boto-task-view-"));
@@ -30,30 +31,11 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     FAKE_DESKTOP_LOG: join(dir, "desktop.jsonl"),
     FAKE_DESKTOP_FRAME_FILE: join(dir, "frame.jpg"),
   });
-  const running = await fetch("http://localhost:1420")
-    .then((r) => r.ok)
-    .catch(() => false);
-  const vite = running
-    ? null
-    : Bun.spawn([process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420"], {
-        cwd: ROOT,
-        stdout: "ignore",
-        stderr: "ignore",
-      });
+  const vite = await startVite();
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   const client = await DaemonClient.connect(daemon.port, token);
   await client.request("onboarding.complete", {});
   try {
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
-      if (
-        await fetch("http://localhost:1420")
-          .then((r) => r.ok)
-          .catch(() => false)
-      )
-        break;
-      await Bun.sleep(50);
-    }
     const agent = await client.request("agents.create", {
       name: "Código",
       provider: "devin",
@@ -456,9 +438,9 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
   } finally {
     client.close();
     await browser.close();
-    vite?.kill();
+    await vite?.stop();
     daemon.proc.kill();
-    await Promise.all([vite?.exited, daemon.proc.exited]);
+    await Promise.all([daemon.proc.exited]);
     rmSync(dir, { recursive: true, force: true });
   }
 }, 90000);

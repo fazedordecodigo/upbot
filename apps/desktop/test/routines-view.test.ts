@@ -7,13 +7,13 @@ import {
   DaemonClient,
   type DaemonHandle,
   FAKE_AGENT,
-  ROOT,
   startDaemon,
   stopDaemon,
 } from "../../../packages/daemon/test/helpers";
+import { startVite } from "./vite";
 
 let browser: Browser;
-let vite: ReturnType<typeof Bun.spawn> | undefined;
+let vite: Awaited<ReturnType<typeof startVite>> | undefined;
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
 let directory: string;
@@ -29,36 +29,13 @@ beforeAll(async () => {
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  if (
-    !(await fetch(base)
-      .then((response) => response.ok)
-      .catch(() => false))
-  )
-    vite = Bun.spawn(
-      [process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420", "--strictPort"],
-      {
-        cwd: ROOT,
-        stdout: "ignore",
-        stderr: "inherit",
-      },
-    );
-  const deadline = Date.now() + 30000;
-  while (Date.now() < deadline) {
-    if (
-      await fetch(base)
-        .then((r) => r.ok)
-        .catch(() => false)
-    )
-      break;
-    await Bun.sleep(100);
-  }
+  vite = await startVite();
   browser = await chromium.launch({ channel: "chrome", headless: true });
 }, 60000);
 
 afterAll(async () => {
   await browser?.close();
-  vite?.kill();
-  await vite?.exited;
+  await vite?.stop();
   if (daemon) await stopDaemon(daemon, rpc, join(directory, "fake"));
   if (directory) rmSync(directory, { recursive: true, force: true });
 }, 30000);

@@ -6,17 +6,17 @@ import {
   DaemonClient,
   type DaemonHandle,
   FAKE_AGENT,
-  ROOT,
   removeDir,
   startDaemon,
   stopDaemon,
   tmp,
 } from "../../../packages/daemon/test/helpers";
+import { startVite } from "./vite";
 
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
 let browser: Browser;
-let vite: ReturnType<typeof Bun.spawn> | undefined;
+let vite: Awaited<ReturnType<typeof startVite>> | undefined;
 let base: string;
 let alpha: Agent;
 let beta: Agent;
@@ -47,30 +47,13 @@ beforeAll(async () => {
   alpha = await rpc.request("agents.create", { name: "Alpha", provider: "devin" });
   beta = await rpc.request("agents.create", { name: "Beta", provider: "devin" });
   base = "http://localhost:1420";
-  if (
-    !(await fetch(base)
-      .then((response) => response.ok)
-      .catch(() => false))
-  )
-    vite = Bun.spawn([process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420"], {
-      cwd: ROOT,
-      stdout: "ignore",
-      stderr: "pipe",
-    });
-  await until(
-    () =>
-      fetch(base)
-        .then((response) => response.ok)
-        .catch(() => false),
-    30_000,
-  );
+  vite = await startVite();
   browser = await chromium.launch({ channel: "chrome", headless: true });
 }, T);
 
 afterAll(async () => {
   await browser?.close();
-  vite?.kill();
-  await vite?.exited;
+  await vite?.stop();
   if (daemon) await stopDaemon(daemon, rpc, dirs[2]);
   for (const dir of dirs) await removeDir(dir);
 }, T);

@@ -1,35 +1,18 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { join } from "node:path";
 import type { Profile } from "@boto/protocol";
 import { type Browser, chromium, type Page } from "playwright-core";
+import { base, startVite } from "./vite";
 
-const root = join(import.meta.dir, "../../..");
 let browser: Browser;
-let vite: ReturnType<typeof Bun.spawn>;
-const base = "http://localhost:1421";
+let vite: Awaited<ReturnType<typeof startVite>> | undefined;
 
 beforeAll(async () => {
-  vite = Bun.spawn([process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1421"], {
-    cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const deadline = Date.now() + 15000;
-  while (Date.now() < deadline) {
-    if (
-      await fetch(base)
-        .then((response) => response.ok)
-        .catch(() => false)
-    )
-      break;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  vite = await startVite();
   browser = await chromium.launch({ channel: "chrome", headless: true });
 }, 30000);
 afterAll(async () => {
   await browser?.close();
-  vite?.kill();
-  await vite?.exited;
+  await vite?.stop();
 }, 30000);
 
 async function page(width = 1440) {
