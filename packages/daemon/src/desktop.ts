@@ -61,6 +61,7 @@ type MachineState = {
   lastSpawnAt: number;
   pending: Map<string, { resolve: (text: string) => void; reject: (e: Error) => void }>;
   thumbWaiters: ((t: DesktopThumbnail | null) => void)[];
+  agentActive: boolean;
 };
 
 export function machineSlug(name: string): string {
@@ -99,7 +100,9 @@ export class DesktopService {
     for (const st of this.states.values()) {
       const wasSubscribed = st.subscribers.delete(connId);
       if (st.owner === connId) this.setController(st, "agent", null);
-      if (wasSubscribed) this.applyStreamMode(st);
+      if (!wasSubscribed) continue;
+      if (!st.subscribers.size && !st.agentActive) this.closeChild(st);
+      else this.applyStreamMode(st);
     }
   }
 
@@ -169,6 +172,7 @@ export class DesktopService {
       lastSpawnAt: 0,
       pending: new Map(),
       thumbWaiters: [],
+      agentActive: false,
     };
     this.states.set(st.id, st);
     return st;
@@ -226,7 +230,8 @@ export class DesktopService {
   unsubscribe(machineId: string, connId: string): { ok: true } {
     const st = this.get(machineId);
     st.subscribers.delete(connId);
-    this.applyStreamMode(st);
+    if (!st.subscribers.size && !st.agentActive) this.closeChild(st);
+    else this.applyStreamMode(st);
     return { ok: true };
   }
 
@@ -363,9 +368,20 @@ export class DesktopService {
 
   /** Called on every `agent.status` broadcast so running microVMs get thumbnails. */
   onAgentStatus(data: { agentId: string; status: string }): void {
-    if (data.status !== "running" && data.status !== "starting") return;
-    const st = this.machineFor(data.agentId);
-    if (st) this.ensure(st);
+    const active =
+      data.status === "running" ||
+      data.status === "starting" ||
+      data.status === "awaiting_permission";
+    const st = active ? this.machineFor(data.agentId) : this.stateFor(data.agentId);
+    if (!st) return;
+    st.agentActive = active;
+    if (active) this.ensure(st);
+    else if (!st.subscribers.size) this.closeChild(st);
+  }
+
+  private stateFor(agentId: string): MachineState | null {
+    for (const st of this.states.values()) if (st.agentId === agentId) return st;
+    return null;
   }
 
   stop(): void {
@@ -470,15 +486,7 @@ export class DesktopService {
     child.on("close", (code) => {
       if (st.child !== child) return;
       st.child = null;
-      const wasReady = st.ready;
-      st.ready = false;
-      st.status = wasReady || code === 0 ? "stopped" : "error";
-      if (!wasReady && code !== 0) this.log("desktop stream ended", { code });
-      for (const p of st.pending.values()) p.reject(new Error("the machine desktop went away"));
-      st.pending.clear();
-      for (const w of st.thumbWaiters.splice(0)) w(null);
-      if (st.controller === "user") this.setController(st, "agent", null);
-      this.emitMachine(st);
+      this.ended(st, code);
     });
   }
 
@@ -486,10 +494,24 @@ export class DesktopService {
     const child = st.child;
     if (!child) return;
     st.child = null;
+    st.lastSpawnAt = 0;
     try {
       child.stdin?.end();
       child.kill("SIGTERM");
     } catch {}
+    this.ended(st, 0);
+  }
+
+  private ended(st: MachineState, code: number | null) {
+    const wasReady = st.ready;
+    st.ready = false;
+    st.status = wasReady || code === 0 ? "stopped" : "error";
+    if (!wasReady && code !== 0) this.log("desktop stream ended", { code });
+    for (const p of st.pending.values()) p.reject(new Error("the machine desktop went away"));
+    st.pending.clear();
+    for (const w of st.thumbWaiters.splice(0)) w(null);
+    if (st.controller === "user") this.setController(st, "agent", null);
+    this.emitMachine(st);
   }
 
   private onGuestMessage(st: MachineState, child: ChildProcess, m: GuestMessage) {

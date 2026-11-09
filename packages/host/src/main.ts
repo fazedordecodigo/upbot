@@ -1105,12 +1105,12 @@ function readPointer(display: string): { x: number; y: number } {
   return { x, y };
 }
 
-function performDesktopEvents(display: string, events: DesktopInputEvent[]): string {
+export function performDesktopEvents(display: string, events: DesktopInputEvent[]): string {
   let kind = "move";
   for (const e of events) {
     switch (e.type) {
       case "mouse_move":
-        xdo(display, ["mousemove", "--sync", String(e.x), String(e.y)]);
+        xdo(display, ["mousemove", String(e.x), String(e.y)]);
         break;
       case "mouse_down":
         xdo(display, ["mousedown", String(e.button)]);
@@ -1135,7 +1135,7 @@ function performDesktopEvents(display: string, events: DesktopInputEvent[]): str
         kind = "key";
         break;
       case "click":
-        xdo(display, ["mousemove", "--sync", String(e.x), String(e.y)]);
+        xdo(display, ["mousemove", String(e.x), String(e.y)]);
         xdo(
           display,
           e.double

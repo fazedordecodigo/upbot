@@ -18,6 +18,5 @@
 .home time { white-space: nowrap; }
 .home .pc-card { padding: var(--boto-space-5); }
 .home .pc-card .card-title { margin-bottom: var(--boto-space-4); }
-.home .machine-name { font-family: var(--boto-font-mono); }
 @media (pointer: coarse) { .home button { min-height: var(--boto-size-target); } }
 @media (prefers-reduced-motion: reduce) { .home * { animation: none; transition: none; } }
