@@ -37,10 +37,12 @@ export function seedDefaultBot(db: Database, store: AgentStore): void {
       DEFAULT_BOT_INSTRUCTIONS.replace("You are Boto", "You are UpBot"),
     );
     if (!hasSetting(db, "default_bot_id")) {
-      const seeded = db
-        .query("SELECT id FROM agents WHERE name = ? AND instructions = ? AND deleted_at IS NULL")
-        .all(DEFAULT_BOT_NAME, DEFAULT_BOT_INSTRUCTIONS) as { id: string }[];
-      if (seeded.length === 1) setSetting(db, "default_bot_id", seeded[0]!.id);
+      const oldest = db
+        .query(
+          "SELECT id FROM agents WHERE deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
+        )
+        .get() as { id: string } | null;
+      setSetting(db, "default_bot_id", oldest?.id ?? null);
     }
   }
   if (process.env.BOTO_DEFAULT_BOT === "off") return;
