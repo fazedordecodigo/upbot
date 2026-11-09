@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import type { Agent, Task } from "@boto/protocol";
-import { whenToRoutine } from "@boto/protocol";
+import { type Agent, Task, whenToRoutine } from "@boto/protocol";
 import { type Browser, chromium, type Page } from "playwright-core";
 import {
   DaemonClient,
@@ -58,8 +57,16 @@ afterAll(async () => {
   for (const dir of dirs) await removeDir(dir);
 }, T);
 
-async function app(templateId?: string, agentId?: string) {
+async function app(templateId?: string, agentId?: string, onTask?: (task: Task) => void) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  if (onTask)
+    page.on("websocket", (socket) =>
+      socket.on("framereceived", ({ payload }) => {
+        const message = JSON.parse(String(payload));
+        const result = Task.safeParse(message.result);
+        if (result.success) onTask(result.data);
+      }),
+    );
   page.setDefaultTimeout(10_000);
   const route =
     templateId || agentId
@@ -186,13 +193,17 @@ test(
   "private toggle is sent per task and agent deletion does not silently switch the recipient",
   async () => {
     await rpc.request("queue.pause", { agentId: alpha.id });
-    const page = await app();
+    let resolveTask!: (task: Task) => void;
+    const created = new Promise<Task>((resolve) => {
+      resolveTask = resolve;
+    });
+    const page = await app(undefined, undefined, resolveTask);
     try {
       await page.locator("#composer-input").fill("echo:tarefa privada");
       await page.locator("#private-switch").click();
       expect(await page.locator("#hero-private").isVisible()).toBe(true);
       await page.locator("#send").click();
-      const task = await taskByPrompt("echo:tarefa privada");
+      const task = await created;
       expect(task).toMatchObject({ private: true, agentId: alpha.id, requireApproval: true });
       expect((await rpc.request("tasks.list", {})).items.some((item) => item.id === task.id)).toBe(
         false,
