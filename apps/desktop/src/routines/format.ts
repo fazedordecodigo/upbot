@@ -9,8 +9,13 @@ export function formatDate(value: number): string {
   return `${date} às ${time}`;
 }
 
-export function formatSchedule(routine: Pick<Routine, "schedule" | "runAt" | "webhook">): string {
-  if (routine.runAt != null) return `Em ${formatDate(routine.runAt)}`;
+export function formatSchedule(
+  routine: Pick<Routine, "schedule" | "runAt" | "webhook"> & Partial<Pick<Routine, "lastRunAt">>,
+): string {
+  if (routine.runAt != null)
+    return routine.lastRunAt != null
+      ? `Executada em ${formatDate(routine.lastRunAt)}`
+      : `Em ${formatDate(routine.runAt)}`;
   const schedule = routine.schedule;
   if (!schedule) return routine.webhook ? "Por webhook" : "a definir";
   const interval = /^every ([1-9]\d*)(m|h|d)$/.exec(schedule);
@@ -48,8 +53,7 @@ export function formatSchedule(routine: Pick<Routine, "schedule" | "runAt" | "we
 export function formatNextRun(
   routine: Pick<Routine, "enabled" | "nextRunAt" | "runAt" | "lastRunAt">,
 ): string {
-  if (routine.runAt != null && !routine.enabled && routine.lastRunAt != null)
-    return `Executada em ${formatDate(routine.lastRunAt)}`;
+  if (routine.runAt != null) return "";
   if (routine.enabled && routine.nextRunAt != null)
     return `Próxima: ${formatDate(routine.nextRunAt)}`;
   return "a definir";

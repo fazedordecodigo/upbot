@@ -27,6 +27,9 @@ test("schedule copy follows daemon grammar without inventing unknown schedules",
     "Em 9 de nov. às 08:00",
   );
   expect(formatDate(Number.NaN)).toBe("a definir");
+  expect(
+    formatSchedule({ schedule: null, webhook: false, runAt: date, lastRunAt: date + 60000 }),
+  ).toBe("Executada em 9 de nov. às 08:01");
 });
 
 test("next run copy distinguishes executed one-shots, enabled schedules and unknown dates", () => {
@@ -35,7 +38,6 @@ test("next run copy distinguishes executed one-shots, enabled schedules and unkn
   expect(formatNextRun(routine)).toBe(`Próxima: ${formatDate(date)}`);
   expect(formatNextRun({ ...routine, enabled: false })).toBe("a definir");
   expect(formatNextRun({ ...routine, nextRunAt: null })).toBe("a definir");
-  expect(formatNextRun({ ...routine, enabled: false, runAt: date, lastRunAt: date })).toBe(
-    `Executada em ${formatDate(date)}`,
-  );
+  expect(formatNextRun({ ...routine, runAt: date })).toBe("");
+  expect(formatNextRun({ ...routine, enabled: false, runAt: date, lastRunAt: date })).toBe("");
 });

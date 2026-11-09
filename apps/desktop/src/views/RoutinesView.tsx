@@ -108,8 +108,12 @@ export function RoutinesView() {
                 <span className="rt-agent">
                   {agents.find((agent) => agent.id === routine.agentId)?.name ?? "a definir"}
                 </span>
-                <span aria-hidden="true"> · </span>
-                <span className="rt-time">{formatNextRun(routine)}</span>
+                {!once && (
+                  <>
+                    <span aria-hidden="true"> · </span>
+                    <span className="rt-time">{formatNextRun(routine)}</span>
+                  </>
+                )}
               </div>
               <div className="rt-status">
                 <span className="status" data-tone={routine.enabled ? "done" : "muted"}>

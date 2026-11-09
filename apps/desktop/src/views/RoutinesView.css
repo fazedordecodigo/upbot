@@ -1,4 +1,3 @@
-.routines .page-sub { color: var(--boto-color-muted-foreground); }
 .routines .page-inner > section + section { margin-top: var(--boto-space-8); }
 .routines .status { display: inline-flex; align-items: center; gap: var(--boto-space-1); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
 .routines .status .od-icon { width: var(--boto-size-icon-status); height: var(--boto-size-icon-status); }

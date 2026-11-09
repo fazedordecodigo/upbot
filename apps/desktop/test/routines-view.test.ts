@@ -108,6 +108,7 @@ test("real routines list, pause, resume, run, confirm deletion and events", asyn
     expect(await row.innerText()).toContain("Privada");
     await page.locator("#rt-once .rt-row").filter({ hasText: once.name }).waitFor();
     expect(await page.locator("#rt-once .rt-meta").innerText()).toContain("Em ");
+    expect(await page.locator("#rt-once .rt-meta").innerText()).not.toContain("Próxima:");
     await row.getByRole("button", { name: "Pausar rotina", exact: true }).click();
     await row.getByText("Pausada", { exact: true }).waitFor();
     expect(
