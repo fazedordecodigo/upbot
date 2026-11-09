@@ -103,7 +103,7 @@ function TaskSurface() {
   const session = useMachine(client, machine?.id);
   const takeoverLabel = session.owned ? "Devolver ao Boto" : "Assumir o controle";
   const takeoverReason = !machine
-    ? "Este bot não tem uma área de trabalho"
+    ? "Este agente não tem uma área de trabalho"
     : session.machine?.status !== "ready"
       ? "A máquina ainda não está pronta"
       : task?.situation === "done"

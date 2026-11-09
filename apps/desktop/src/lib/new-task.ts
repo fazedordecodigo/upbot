@@ -17,7 +17,11 @@ export const toolLabels: Record<ToolMode, string> = {
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 export function greeting(hour = new Date().getHours()) {
-  return hour < 12 ? "Bom dia." : hour < 18 ? "Boa tarde." : "Boa noite.";
+  return hour >= 5 && hour < 12
+    ? "Bom dia."
+    : hour >= 12 && hour < 18
+      ? "Boa tarde."
+      : "Boa noite.";
 }
 
 export function attachmentError(files: File[]): string | null {

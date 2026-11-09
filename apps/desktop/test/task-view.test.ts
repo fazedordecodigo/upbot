@@ -82,6 +82,12 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
       });
     await page.getByText("permission:allow_once", { exact: true }).waitFor();
     expect(await page.locator("#ctl-takeover").isDisabled()).toBe(true);
+    expect(await page.locator("#ctl-takeover").getAttribute("title")).toBe(
+      "Este agente não tem uma área de trabalho",
+    );
+    expect(await page.locator("#task-desk").innerText()).toContain(
+      "Este agente trabalha sem área de trabalho. Ela está disponível para agentes em uma microVM.",
+    );
     await page.locator("#instruct-input").fill("echo: oi");
     await page.locator("#instruct-input").press("Enter");
     await page
@@ -280,6 +286,9 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
       (await client.request("desktop.machines", {})).find((m) => m.id === machine.id)?.controller,
     ).toBe("agent");
     await page.locator("#ctl-stop").click();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const stopDialog = await page.locator("#confirm-stop").boundingBox();
+    expect(stopDialog?.width).toBeGreaterThan(520);
     await page.getByRole("button", { name: "Encerrar tarefa", exact: true }).click();
     await page.locator("#task-meta").getByText("Encerrada", { exact: true }).waitFor();
     expect(await page.locator("#instruct-input").isDisabled()).toBe(true);

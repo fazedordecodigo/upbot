@@ -82,7 +82,7 @@ export function LiveDesk({
   };
   const ready = machine?.status === "ready";
   const copy = !available
-    ? "Este bot trabalha sem área de trabalho. Ela está disponível para bots em uma microVM."
+    ? "Este agente trabalha sem área de trabalho. Ela está disponível para agentes em uma microVM."
     : (session.error ??
       (!machine
         ? "Conectando à máquina…"

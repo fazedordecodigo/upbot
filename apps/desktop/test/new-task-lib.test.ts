@@ -38,7 +38,9 @@ test("new-task enforces the daemon's attachment count, size and filename limits"
 });
 
 test("new-task greeting follows the local time", () => {
-  expect(greeting(0)).toBe("Bom dia.");
+  expect(greeting(0)).toBe("Boa noite.");
+  expect(greeting(4)).toBe("Boa noite.");
+  expect(greeting(5)).toBe("Bom dia.");
   expect(greeting(11)).toBe("Bom dia.");
   expect(greeting(12)).toBe("Boa tarde.");
   expect(greeting(17)).toBe("Boa tarde.");

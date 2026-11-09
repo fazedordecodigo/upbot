@@ -36,6 +36,7 @@
 .task .task-body[data-live="false"] .pc, .task .task-body[data-live="false"] .split { display: none; }
 .task .task-body[data-live="false"] .tl { width: 100%; }
 .task .task-tabs { display: none; }
+#confirm-stop { max-width: min(calc(100% - var(--boto-space-8)), var(--boto-size-chat-column)); }
 @media (max-width: 1023px) {
   .task .task-controls { width: 100%; }
   .task .task-tabs { display: block; padding: var(--boto-space-2) var(--boto-space-4); }
