@@ -1,0 +1,204 @@
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { type Browser, chromium, type Page } from "playwright-core";
+import {
+  DaemonClient,
+  type DaemonHandle,
+  FAKE_AGENT,
+  ROOT,
+  startDaemon,
+  stopDaemon,
+} from "../../../packages/daemon/test/helpers";
+
+let browser: Browser;
+let vite: ReturnType<typeof Bun.spawn>;
+let daemon: DaemonHandle;
+let rpc: DaemonClient;
+let directory: string;
+const token = crypto.randomUUID();
+const base = "http://localhost:1420";
+
+beforeAll(async () => {
+  directory = mkdtempSync(join(homedir(), "routines-test-"));
+  daemon = await startDaemon(join(directory, "data"), join(directory, "agents"), token, {
+    BOTO_PROVIDER_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
+    FAKE_ACP_STATE_DIR: join(directory, "fake"),
+    BOTO_ROUTINE_TICK_MS: "3600000",
+  });
+  rpc = await DaemonClient.connect(daemon.port, token);
+  vite = Bun.spawn([process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420"], {
+    cwd: ROOT,
+    stdout: "ignore",
+    stderr: "inherit",
+  });
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    if (
+      await fetch(base)
+        .then((r) => r.ok)
+        .catch(() => false)
+    )
+      break;
+    await Bun.sleep(100);
+  }
+  browser = await chromium.launch({ channel: "chrome", headless: true });
+}, 60000);
+
+afterAll(async () => {
+  await browser?.close();
+  vite?.kill();
+  await vite?.exited;
+  if (daemon) await stopDaemon(daemon, rpc, join(directory, "fake"));
+  if (directory) rmSync(directory, { recursive: true, force: true });
+}, 30000);
+
+async function openRoutines(page: Page) {
+  await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
+  await page.locator("#home-title").waitFor();
+  if (await page.getByRole("button", { name: "Abrir menu", exact: true }).isVisible())
+    await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
+  await page.locator('[data-nav="routines"]:visible').click();
+  await page.locator("#routines-title").waitFor();
+}
+
+test("fresh daemon shows both empty states and the composer action", async () => {
+  const page = await browser.newPage();
+  try {
+    await openRoutines(page);
+    await page
+      .getByText(
+        "Nenhuma rotina recorrente. Crie uma em Nova rotina ou escolha “Todo dia às 8h” ao delegar uma tarefa.",
+      )
+      .waitFor();
+    await page
+      .getByText("Nenhuma tarefa agendada. Ao delegar, escolha “Daqui a 1 hora” ou “Amanhã às 8h”.")
+      .waitFor();
+    await page.locator("#new-routine").click();
+    expect(await page.locator("#main").getAttribute("data-view")).toBe("new");
+  } finally {
+    await page.close();
+  }
+}, 30000);
+
+test("real routines list, pause, resume, run, confirm deletion and events", async () => {
+  const agent = await rpc.request("agents.create", { name: "Bot de operações", provider: "devin" });
+  const recurring = await rpc.request("routines.create", {
+    agentId: agent.id,
+    name: "Resumo diário",
+    prompt: "echo:resumo",
+    schedule: "daily 08:00",
+    private: true,
+  });
+  const once = await rpc.request("routines.create", {
+    agentId: agent.id,
+    name: "Entrega agendada",
+    prompt: "echo:entrega",
+    runAt: Date.now() + 3600000,
+  });
+  const page = await browser.newPage();
+  try {
+    await openRoutines(page);
+    const row = page.locator("#rt-recurring .rt-row").filter({ hasText: recurring.name });
+    await row.waitFor();
+    expect(await row.innerText()).toContain("Todo dia às 08:00");
+    expect(await row.innerText()).toContain(agent.name);
+    expect(await row.innerText()).toContain("Próxima:");
+    expect(await row.innerText()).toContain("Privada");
+    await page.locator("#rt-once .rt-row").filter({ hasText: once.name }).waitFor();
+    expect(await page.locator("#rt-once .rt-meta").innerText()).toContain("Em ");
+    expect(await page.locator("#rt-once .rt-meta").innerText()).not.toContain("Próxima:");
+    await row.getByRole("button", { name: "Pausar rotina", exact: true }).click();
+    await row.getByText("Pausada", { exact: true }).waitFor();
+    expect(
+      (await rpc.request("routines.list", {})).find((r) => r.id === recurring.id)?.enabled,
+    ).toBe(false);
+    await row.getByRole("button", { name: "Retomar rotina", exact: true }).click();
+    await row.getByText("Ativa", { exact: true }).waitFor();
+    await row.getByRole("button", { name: "Executar agora", exact: true }).click();
+    await page.getByText("Rotina iniciada", { exact: true }).waitFor();
+    expect(await rpc.request("routines.runs", { id: recurring.id })).toHaveLength(1);
+    await row.getByRole("button", { name: "Excluir rotina", exact: true }).click();
+    await page.locator("#confirm[open]").waitFor();
+    expect(
+      await page.locator("#confirm-cancel").evaluate((el) => el === document.activeElement),
+    ).toBe(true);
+    await page.keyboard.press("Escape");
+    await page.locator("#confirm").waitFor({ state: "hidden" });
+    await row.getByRole("button", { name: "Excluir rotina", exact: true }).click();
+    await page.locator("#confirm-ok").click();
+    await row.waitFor({ state: "hidden" });
+    expect(await rpc.request("routines.list", {})).toHaveLength(1);
+    await page.getByText("Rotina excluída", { exact: true }).waitFor();
+    await rpc.request("routines.create", {
+      agentId: agent.id,
+      name: "Resumo diário",
+      prompt: "echo:resumo",
+      schedule: "daily 08:00",
+    });
+    await rpc.request("routines.create", {
+      agentId: agent.id,
+      name: "Revisão semanal",
+      prompt: "echo:revisão",
+      schedule: "weekly mon 09:00",
+      private: true,
+    });
+    await page.locator("#rt-recurring .rt-row").nth(1).waitFor();
+    if (process.env.BOTO_ROUTINES_SHOTS) {
+      const shots = process.env.BOTO_ROUTINES_SHOTS;
+      mkdirSync(shots, { recursive: true });
+      while (await page.locator(".toaster button").count())
+        await page.locator(".toaster button").first().click();
+      for (const theme of ["dark", "light"])
+        for (const [width, height] of [
+          [1440, 900],
+          [1024, 768],
+          [390, 844],
+        ] as const) {
+          await page.setViewportSize({ width, height });
+          await page.evaluate(
+            (theme) => document.documentElement.setAttribute("data-theme", theme),
+            theme,
+          );
+          await page.evaluate(() => document.fonts.ready);
+          await page.screenshot({
+            path: join(shots, `app-${theme}-${width}x${height}.png`),
+            fullPage: true,
+          });
+        }
+    }
+  } finally {
+    await page.close();
+  }
+}, 60000);
+
+test("failed manual run reports the daemon error and restores action buttons", async () => {
+  const agent = await rpc.request("agents.create", { name: "Bot removido", provider: "devin" });
+  const routine = await rpc.request("routines.create", {
+    agentId: agent.id,
+    name: "Rotina sem bot",
+    prompt: "echo:teste",
+    schedule: "daily 08:00",
+  });
+  await rpc.request("agents.delete", { id: agent.id });
+  let message = "";
+  try {
+    await rpc.request("routines.run", { id: routine.id });
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  expect(message.length).toBeGreaterThan(0);
+  const page = await browser.newPage();
+  try {
+    await openRoutines(page);
+    const row = page.locator(".rt-row").filter({ hasText: routine.name });
+    const button = row.getByRole("button", { name: "Executar agora", exact: true });
+    await button.click();
+    await page.locator(".toast").filter({ hasText: message }).waitFor();
+    expect(await button.isEnabled()).toBe(true);
+    expect(await rpc.request("routines.runs", { id: routine.id })).toHaveLength(0);
+  } finally {
+    await page.close();
+  }
+}, 30000);
