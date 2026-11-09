@@ -315,6 +315,122 @@ describe.skipIf(!enabled)("real Firecracker host", () => {
     await waitForPidExit(pid);
   }, 120000);
 
+  test("streams desktop frames, applies agent input and refuses it while the user controls", async () => {
+    const agentId = "desk-agent";
+    const run = hostRun(
+      root,
+      spec(agentId, ["sh", "-c", 'echo "$DISPLAY $(hostname)"; exec sleep 120'], {
+        machineName: "codigo-01",
+      }),
+      "",
+      false,
+    );
+    expect((await run.firstLine)?.line).toBe(":0 codigo-01");
+
+    const desktop = Bun.spawn(["bun", HOST_MAIN, "desktop"], {
+      cwd: REPO_ROOT,
+      env: { ...process.env, BOTO_HOST_ROOT: root, BOTO_DESKTOP_CONNECT_TIMEOUT_MS: "20000" },
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    hostProcesses.push(desktop);
+    const messages: Record<string, unknown>[] = [];
+    const waiters: ((m: Record<string, unknown>) => void)[] = [];
+    void (async () => {
+      const reader = desktop.stdout.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl = buffer.indexOf("\n");
+        while (nl >= 0) {
+          const line = buffer.slice(0, nl);
+          buffer = buffer.slice(nl + 1);
+          if (line) {
+            const m = JSON.parse(line) as Record<string, unknown>;
+            messages.push(m);
+            for (const w of waiters.splice(0)) w(m);
+          }
+          nl = buffer.indexOf("\n");
+        }
+      }
+    })();
+    const next = (pred: (m: Record<string, unknown>) => boolean, timeoutMs = 20000) =>
+      new Promise<Record<string, unknown>>((resolve, reject) => {
+        const found = messages.find(pred);
+        if (found) return resolve(found);
+        const timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `desktop message not received: ${JSON.stringify(messages.map((m) => m.type))}`,
+              ),
+            ),
+          timeoutMs,
+        );
+        const check = (m: Record<string, unknown>) => {
+          if (pred(m)) {
+            clearTimeout(timer);
+            resolve(m);
+          } else waiters.push(check);
+        };
+        waiters.push(check);
+      });
+    const send = (m: object) => desktop.stdin.write(`${JSON.stringify(m)}\n`);
+
+    send({ agentId });
+    const ready = await next((m) => m.type === "ready");
+    expect(ready).toMatchObject({ width: 1280, height: 800, name: "codigo-01" });
+
+    send({ type: "stream", fps: 5, thumbEveryMs: 1000 });
+    const frame = await next((m) => m.type === "frame");
+    expect(frame).toMatchObject({ seq: 1, mime: "image/jpeg", width: 1280, height: 800 });
+    expect(String(frame.data).startsWith("/9j/")).toBe(true);
+    const thumb = await next((m) => m.type === "thumb");
+    expect(thumb).toMatchObject({ mime: "image/jpeg", width: 256, height: 160 });
+    send({ type: "stream", fps: 0, thumbEveryMs: 60000 });
+
+    send({ type: "agent", id: "a1", events: [{ type: "mouse_move", x: 100, y: 200 }] });
+    expect(await next((m) => m.type === "cursor")).toMatchObject({ x: 100, y: 200, kind: "move" });
+    expect(await next((m) => m.type === "done" && m.id === "a1")).toMatchObject({
+      text: "pointer at (100, 200)",
+    });
+
+    send({ type: "controller", controller: "user" });
+    send({ type: "agent", id: "a2", events: [{ type: "mouse_move", x: 10, y: 10 }] });
+    expect(await next((m) => m.type === "error" && m.id === "a2")).toMatchObject({
+      code: "not_controller",
+    });
+    send({ type: "input", events: [{ type: "mouse_move", x: 300, y: 400 }] });
+    send({ type: "input", events: [{ type: "click", x: 1, y: 1 }] });
+    expect(await next((m) => m.type === "error" && m.code === "bad_events")).toBeTruthy();
+    send({ type: "controller", controller: "agent" });
+    send({ type: "input", events: [{ type: "mouse_move", x: 5, y: 5 }] });
+    expect(
+      await next((m) => m.type === "error" && m.code === "not_controller" && m.id === undefined),
+    ).toBeTruthy();
+    send({ type: "agent", id: "a3", events: [{ type: "key", keysym: "shift" }] });
+    expect(await next((m) => m.type === "done" && m.id === "a3")).toMatchObject({
+      text: "pointer at (300, 400)",
+    });
+
+    send({ type: "screenshot", id: "s1" });
+    const shot = await next((m) => m.type === "done" && m.id === "s1");
+    expect(String(shot.text).startsWith("/workspace/computer/screen-")).toBe(true);
+
+    run.proc.kill("SIGTERM");
+    await waitForExit(run, 30000);
+    await Promise.race([
+      desktop.exited,
+      Bun.sleep(10000).then(() => {
+        throw new Error("desktop stream did not end with the microVM");
+      }),
+    ]);
+  }, 120000);
+
   test("cleans per-run disks, preserves workspace, handles signals, and removes stale runs", async () => {
     const agentId = "lifecycle";
     const firstRun = hostRun(

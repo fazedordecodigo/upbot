@@ -22,6 +22,9 @@ export * from "./templates";
 import { MemoryUsage, type Profile, profileMethods } from "./profile";
 
 export * from "./profile";
+import { type DesktopEventMap, desktopMethodMap } from "./vm-desktop";
+
+export * from "./vm-desktop";
 
 export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   devin: "~/.config/devin/config.json",
@@ -1325,6 +1328,7 @@ export const methodMap = {
     result: z.object({ tasks: z.array(Task), routines: z.array(Routine) }),
   },
   "tasks.deliveries": { params: TasksDeliveriesParams, result: z.array(TaskDelivery) },
+  ...desktopMethodMap,
 } as const;
 
 export type MethodName = keyof typeof methodMap;
@@ -1376,4 +1380,4 @@ export type DaemonEventMap = {
   "task.created": Task;
   "task.updated": Task;
   "task.delivery": TaskDelivery;
-};
+} & DesktopEventMap;
