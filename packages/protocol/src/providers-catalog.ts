@@ -32,6 +32,26 @@ export const ProviderInfo = z.object({
 });
 export type ProviderInfo = z.infer<typeof ProviderInfo>;
 const empty = z.object({}).strict();
+const PermissionLevel = z.enum(["ask", "allow", "off"]);
+export const ToolPermission = z.object({
+  toolId: z.string(),
+  label: z.string(),
+  group: z.enum(["computer", "app", "mcp"]),
+  level: PermissionLevel,
+  levels: z.array(PermissionLevel),
+  sensitive: z.boolean(),
+  agentId: z.string().nullable(),
+  appId: z.string().nullable(),
+  permission: z.enum(["read", "write", "send", "pay", "book", "del"]).nullable(),
+});
+export type ToolPermission = z.infer<typeof ToolPermission>;
+export const toolPermissionMethods = {
+  "tools.permissions.list": { params: empty, result: z.array(ToolPermission) },
+  "tools.permissions.set": {
+    params: z.object({ toolId: z.string(), level: PermissionLevel }).strict(),
+    result: z.array(ToolPermission),
+  },
+};
 const provider = z.object({ provider: CatalogProvider }).strict();
 export const providersCatalogMethods = {
   "providers.list": { params: empty, result: z.array(ProviderInfo) },

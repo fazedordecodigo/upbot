@@ -33,6 +33,7 @@ import { RuntimeManager } from "./runtime/runtime-manager";
 import { SkillLibrary } from "./skills";
 import { SubagentService } from "./subagents";
 import { TeamClient } from "./team";
+import { ToolPermissions } from "./tool-permissions";
 import { Vault } from "./vault";
 import { VERSION } from "./version";
 import { Voice } from "./voice";
@@ -255,6 +256,7 @@ async function main() {
       vault,
       vmCredentials,
       providers: new ProvidersService(db, vmCredentials, broadcast),
+      toolPermissions: new ToolPermissions(approvals, apps),
       computer,
       voice,
       gateways,

@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { providersCatalogMethods, providersCreateParams } from "./providers-catalog";
+import {
+  providersCatalogMethods,
+  providersCreateParams,
+  toolPermissionMethods,
+} from "./providers-catalog";
 
 export * from "./providers-catalog";
 
@@ -884,6 +888,7 @@ export const ChannelsReassignParams = z
 
 export const methodMap = {
   ...providersCatalogMethods,
+  ...toolPermissionMethods,
   "agents.list": { params: AgentsListParams, result: AgentsListResult },
   "agents.create": {
     params: providersCreateParams(AgentsCreateParams),

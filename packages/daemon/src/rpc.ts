@@ -25,6 +25,7 @@ import type { RuntimeManager } from "./runtime/runtime-manager";
 import type { SkillLibrary } from "./skills";
 import type { SubagentService } from "./subagents";
 import type { TeamClient } from "./team";
+import type { ToolPermissions } from "./tool-permissions";
 import type { Vault } from "./vault";
 import type { Voice } from "./voice";
 
@@ -77,6 +78,7 @@ export class Rpc {
       vault: Vault;
       vmCredentials: VmCredentials;
       providers: ProvidersService;
+      toolPermissions: ToolPermissions;
       computer: ComputerUse;
       voice: Voice;
       gateways: GatewayService;
@@ -158,6 +160,12 @@ export class Rpc {
 
   private async dispatch(method: MethodName, params: unknown): Promise<unknown> {
     switch (method) {
+      case "tools.permissions.list":
+        return this.extras.toolPermissions.list();
+      case "tools.permissions.set": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.toolPermissions.set(p.toolId, p.level);
+      }
       case "providers.list":
         return this.extras.providers.list();
       case "providers.scan":
