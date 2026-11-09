@@ -700,9 +700,14 @@ export class AgentRuntime {
     if (this.turn || this.compacting || this.sessionStarting || this.disposing) {
       throw new RpcError("busy", "the agent is busy");
     }
+    const scope = this.sessionScope;
     await this.dispose();
-    this.store.clearAgentSession(this.agent.id);
-    this.broadcast("item.created", this.store.createItem(this.agent.id, null, "session_reset", {}));
+    if (scope) this.tasks()?.setSession(scope, null);
+    else this.store.clearAgentSession(this.agent.id);
+    this.broadcast(
+      "item.created",
+      this.store.createItem(this.agent.id, null, "session_reset", {}, scope),
+    );
     this.broadcast("agent.usage", this.store.clearContextUsage(this.agent.id));
     this.drain();
   }

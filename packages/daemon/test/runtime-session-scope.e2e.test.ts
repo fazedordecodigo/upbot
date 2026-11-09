@@ -62,3 +62,43 @@ test("chat retains its native provider session across tasks and a daemon restart
     for (const dir of dirs) removeDir(dir);
   }
 }, 60_000);
+
+test("newSession clears a task's persisted session and history boundary across restart", async () => {
+  const dirs = [tmp("reset-data-"), tmp("reset-agents-"), tmp("reset-provider-")];
+  const token = crypto.randomUUID();
+  const env = {
+    BOTO_ACP_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
+    FAKE_ACP_STATE_DIR: dirs[2]!,
+  };
+  let daemon = await startDaemon(dirs[0]!, dirs[1]!, token, env);
+  let client = await DaemonClient.connect(daemon.port, token);
+  try {
+    const agent = await client.request("agents.create", { name: "Reset", provider: "devin" });
+    const task = await client.request("tasks.create", {
+      agentId: agent.id,
+      text: "echo:discarded-context-canary",
+    });
+    await client.waitForEventWhere("turn.ended", (turn) => turn.taskId === task.id, 15_000);
+    const old = (await client.request("tasks.get", { id: task.id })).sessionId;
+    expect(old).toBeTruthy();
+    await client.request("agents.newSession", { agentId: agent.id });
+    expect((await client.request("tasks.get", { id: task.id })).sessionId).toBeNull();
+    expect((await client.request("tasks.history", { id: task.id })).items.at(-1)).toMatchObject({
+      kind: "session_reset",
+      taskId: task.id,
+    });
+    await stopDaemon(daemon, client, dirs[2]!);
+    daemon = await startDaemon(dirs[0]!, dirs[1]!, token, env);
+    client = await DaemonClient.connect(daemon.port, token);
+    await client.request("tasks.instruct", { id: task.id, text: "echo:fresh context" });
+    await client.waitForEventWhere("turn.ended", (turn) => turn.taskId === task.id, 15_000);
+    expect((await client.request("tasks.get", { id: task.id })).sessionId).not.toBe(old);
+    const log = readLog(dirs[2]!);
+    expect(log.filter((row) => row.method === "session/load")).toHaveLength(0);
+    const prompts = log.filter((row) => row.method === "session/prompt");
+    expect(JSON.stringify(prompts.at(-1))).not.toContain("discarded-context-canary");
+  } finally {
+    await stopDaemon(daemon, client, dirs[2]!);
+    for (const dir of dirs) removeDir(dir);
+  }
+}, 60_000);
