@@ -22,6 +22,44 @@ O `apps/desktop/src/index.css` importa `tokens.css`, `layout.css`, `ui.css` e `s
 
 O shell usa CSS e tokens diretamente, sem Tailwind.
 
+## Frontend reconstruído e referência visual
+
+`docs/design/index.html`, `docs/design/assets/boto-ui.css` e
+`docs/design/assets/icons.svg` são a referência visual das telas, dos diálogos, da
+cópia em pt-BR, dos temas e dos breakpoints. `DESIGN.md` rege os componentes e os
+estados de regiões dinâmicas vazias no protótipo. O export local também tem controles
+inativos e estilos incompletos; não comprova paridade pixel a pixel nessas regiões.
+O app não preenche essas lacunas com dados de demonstração. Números desconhecidos
+usam “a definir”, não zero inventado.
+
+O shell reúne Início, Nova tarefa, Tarefa/Área de trabalho, Agentes (painel e criação),
+Rotinas, Modelos, Marketplace e Configurações (Provedor de IA, Você e a memória,
+Aparência e Privacidade). Onboarding tem quatro passos; busca, atalhos, menu da conta,
+tema, redimensionamento e painel móvel pertencem ao shell. O chip de situação é
+compartilhado em `src/styles/ui.css`, sempre com tom, ícone e texto.
+
+O [README do desktop](../apps/desktop/README.md#views-and-daemon-wiring) lista os
+métodos por tela: `tasks.*` e `desktop.*` para tarefas e área de trabalho;
+`agents.*` e `queue.*` para agentes; `routines.*`, `templates.*` e `marketplace.*`
+para os respectivos catálogos; `providers.*`, `profile.*`, `memories.*` e
+`permissions.*` para Configurações. Aprovações e permissões continuam reais no fluxo
+da tarefa (`approvals.respond` e `permissions.respond`), sem bypass.
+
+E-mail, Canais/chat em grupo, Páginas, Hosts, Biblioteca, a tela Aprovações, Apps
+conectados, Cofre, Gateways, Mobile, Times, a tela Ferramentas e usage bars foram
+removidos **somente da UI**. O daemon e o contrato do protocolo mantêm essas
+capacidades. Controles de ferramentas do composer e cartões de aprovação não são
+telas removidas.
+
+Para comparar, siga a [receita isolada](../apps/desktop/README.md#isolated-development-and-visual-checks):
+daemon com diretórios próprios e token na primeira linha de stdin, provedor ACP de
+teste, Vite em `:1420` e protótipo em `:8765`. Use
+`BOTO_MARKETPLACE_URL=file://<repo>/marketplace/index.json`, dados semeados por RPC e
+Chrome em 1440×900, 1024×768 e 390×844, nos dois temas. Complete onboarding salvo
+quando estiver testando seus quatro passos com um daemon novo. Rode
+`bun test apps/desktop/test`, `bun run lint`, `bun run typecheck` e
+`bun run --cwd apps/desktop build` após mudanças no frontend.
+
 ## Paleta Rio Negro
 
 | Nome | Hex | Papel |
