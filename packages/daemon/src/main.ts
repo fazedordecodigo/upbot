@@ -28,9 +28,11 @@ import { VmCredentials } from "./remote/credentials";
 import { HostStore } from "./remote/hosts";
 import { RoutineService } from "./routines";
 import { Rpc } from "./rpc";
+import { errorFields } from "./runtime/agent-runtime";
 import { RuntimeManager } from "./runtime/runtime-manager";
 import { SkillLibrary } from "./skills";
 import { SubagentService } from "./subagents";
+import { readTaskDefaults, TaskService } from "./tasks";
 import { TeamClient } from "./team";
 import { Vault } from "./vault";
 import { VERSION } from "./version";
@@ -155,6 +157,7 @@ async function main() {
   }
 
   let approvalsRef: ApprovalService | null = null;
+  let tasks: TaskService | null = null;
   const db = openDatabase(dataDir);
   dbRef = db;
   const chat = new ChatStore(db);
@@ -176,6 +179,13 @@ async function main() {
       } catch {}
     }
     mobile.onEvent(event, data);
+    if (!event.startsWith("task.")) {
+      try {
+        tasks?.onEvent(event, data);
+      } catch (e) {
+        log(`task event hook failed: event=${event} ${errorFields(e)}`);
+      }
+    }
     if (event === "turn.ended") {
       const turn = data as import("@boto/protocol").Turn;
       queueMicrotask(() => {
@@ -234,6 +244,18 @@ async function main() {
   bridge.pages = pages;
   approvalsRef = approvals;
   bridge.connectors = new Connectors(vault);
+  tasks = new TaskService(db, store, chat, queue, () => runtimes, broadcast, {
+    pendingApprovals: () => approvals.list().filter((a) => a.status === "pending"),
+    routines: () => routines.list(),
+    defaults: () => readTaskDefaults(db),
+  });
+  tasks.recover();
+  runtimes.tasks = tasks.hooks();
+  const taskService = tasks;
+  bridge.taskFor = (agentId) => {
+    const taskId = runtimes.currentTaskId(agentId);
+    return taskId ? taskService.runtimeInfo(taskId) : null;
+  };
   bridge.computer = computer;
   const mobile = new MobileServer(db);
   const team = new TeamClient(db, store, chat, () => runtimes, vault, broadcast);
@@ -265,6 +287,7 @@ async function main() {
       team,
       hosts,
       subagents,
+      tasks: taskService,
     },
   );
 

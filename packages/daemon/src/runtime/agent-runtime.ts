@@ -21,6 +21,7 @@ import {
   type ProviderSession,
   type RemoteLaunch,
 } from "../providers/types";
+import { type TaskRuntimeHooks, toolKindAllowed } from "../task-policy";
 import { buildHandoff } from "./handoff";
 
 const COMPACT_PROMPT = `<compaction_request>
@@ -162,6 +163,9 @@ export class AgentRuntime {
   status: AgentStatus = "idle";
   statusError: string | null = null;
   private turn: { id: string; cancelled: boolean; byUser: boolean } | null = null;
+  /** Task owning the live (or next) provider session; null = the agent's plain chat. */
+  private sessionScope: string | null = null;
+  private turnTaskId: string | null = null;
   private session: ProviderSession | null = null;
   private sessionTag: object | null = null;
   private sessionStarting: Promise<ProviderSession> | null = null;
@@ -201,7 +205,13 @@ export class AgentRuntime {
     private sessionContext: (agentId: string) => string = () => "",
     private remoteFor: (agentId: string) => RemoteLaunch | null = () => null,
     private sharedDirs: () => string[] = () => [],
+    private tasks: () => TaskRuntimeHooks | null = () => null,
   ) {}
+
+  /** Task owning the current provider session (null for the plain chat). */
+  currentTaskId(): string | null {
+    return this.sessionScope;
+  }
 
   /** Agent-to-agent hop count of the running turn (0 when idle or user-initiated). */
   currentHops(): number {
@@ -209,8 +219,10 @@ export class AgentRuntime {
   }
 
   /** The running turn and whether it was started by background work (not the user). */
-  currentTurn(): { id: string; background: boolean } | null {
-    return this.turn ? { id: this.turn.id, background: this.turnBackground } : null;
+  currentTurn(): { id: string; background: boolean; taskId: string | null } | null {
+    return this.turn
+      ? { id: this.turn.id, background: this.turnBackground, taskId: this.turnTaskId }
+      : null;
   }
 
   currentChannelId(): string | null {
@@ -306,14 +318,21 @@ export class AgentRuntime {
     if (this.draining || this.turn || this.sessionStarting || this.disposing || this.compacting)
       return;
     if (this.agents.queuePaused(this.agent.id)) return;
-    const next = this.queue.peek(this.agent.id);
+    const next = this.queue.peek(this.agent.id, this.sessionScope);
     if (!next) return;
+    const scope = next.task_id ?? null;
+    if (scope !== this.sessionScope) {
+      // each task runs in its own provider session; the plain chat keeps its own too
+      if (this.session) this.dropSession();
+      this.sessionScope = scope;
+    }
     const { meta, rejected } = readQueueMeta(next);
     if (rejected.length)
       console.error(`[botod] queue item ${next.id}: ignored invalid meta ${rejected.join(", ")}`);
     this.draining = true;
     try {
-      const turnRow = this.store.createTurn(this.agent.id, next.id);
+      const turnRow = this.store.createTurn(this.agent.id, next.id, scope);
+      this.turnTaskId = scope;
       this.queue.markStarted(next.id, turnRow.id);
       this.turn = { id: turnRow.id, cancelled: false, byUser: false };
       this.closeTextItem();
@@ -359,9 +378,14 @@ export class AgentRuntime {
   private async ensureSession(): Promise<ProviderSession> {
     if (this.session) return this.session;
     this.sessionStarting ??= (async () => {
+      const scope = this.sessionScope;
       const stored = this.store.getAgentSession(this.agent.id);
       const resumeSessionId =
-        stored && stored.provider === this.agent.provider ? stored.sessionId : null;
+        stored && stored.provider === this.agent.provider && stored.taskId === scope
+          ? stored.sessionId
+          : scope
+            ? (this.tasks()?.get(scope)?.sessionId ?? null)
+            : null;
       const driver = getDriver(this.agent.provider);
       const tag = {};
       const remote = this.remoteFor(this.agent.id);
@@ -374,7 +398,8 @@ export class AgentRuntime {
         ...(remote ? { remote } : { extraDirs: this.sharedDirs() }),
       });
       this.sessionTag = tag;
-      this.store.upsertAgentSession(this.agent.id, this.agent.provider, session.sessionId);
+      this.store.upsertAgentSession(this.agent.id, this.agent.provider, session.sessionId, scope);
+      if (scope) this.tasks()?.setSession(scope, session.sessionId);
       return session;
     })();
     const started = this.sessionStarting;
@@ -458,8 +483,10 @@ export class AgentRuntime {
         if (instructions) {
           promptText = `<agent_instructions>\n${instructions}\n</agent_instructions>\n\n${promptText}`;
         }
+        if (this.sessionScope)
+          promptText = (this.tasks()?.preamble(this.sessionScope) ?? "") + promptText;
         promptText = this.sessionContext(this.agent.id) + promptText;
-        const all = this.store.history(this.agent.id, undefined, 500).items;
+        const all = this.store.scopedHistory(this.agent.id, this.sessionScope, 500);
         let start = 0;
         let summary: string | null = null;
         for (let k = all.length - 1; k >= 0; k--) {
@@ -587,11 +614,14 @@ export class AgentRuntime {
       throw new RpcError("bad_request", "nothing to compact yet");
     }
     this.compacting = true;
-    const item = this.store.createItem(this.agent.id, null, "compaction", {
-      reason,
-      status: "running",
-      summary: "",
-    });
+    const scope = this.sessionScope;
+    const item = this.store.createItem(
+      this.agent.id,
+      null,
+      "compaction",
+      { reason, status: "running", summary: "" },
+      scope,
+    );
     this.broadcast("item.created", item);
     try {
       const session = await this.ensureSession();
@@ -604,6 +634,7 @@ export class AgentRuntime {
       if (!summary) throw new Error("the agent returned an empty summary");
       this.dropSession();
       this.store.clearAgentSession(this.agent.id);
+      if (scope) this.tasks()?.setSession(scope, null);
       this.broadcast(
         "item.updated",
         this.store.updateItemData(item.id, { reason, status: "completed", summary }),
@@ -636,11 +667,12 @@ export class AgentRuntime {
     this.drain();
   }
 
-  cancel(): void {
+  /** `pauseQueue: false` (task pause/stop) leaves the agent's queue running. */
+  cancel(opts: { pauseQueue?: boolean } = {}): void {
     const turn = this.turn;
     if (!turn) return;
     turn.cancelled = true;
-    turn.byUser = true;
+    turn.byUser = opts.pauseQueue ?? true;
     this.cancelAllPending();
     this.session
       ?.cancel()
@@ -764,6 +796,18 @@ export class AgentRuntime {
   }): Promise<{ optionId: string | null }> {
     if (this.compacting) return Promise.resolve({ optionId: null });
     const turn = this.turn;
+    const task = this.turnTaskId && turn ? this.tasks()?.get(this.turnTaskId) : null;
+    if (task && !toolKindAllowed(task.toolMode, req.toolKind)) {
+      // the task's "Onde" forbids this kind of tool: reject, never allow silently
+      this.logRuntime(
+        "permission rejected by task tool mode",
+        `turn=${turn?.id} task=${task.id} mode=${task.toolMode}`,
+      );
+      const reject =
+        req.options.find((o) => o.kind === "reject_once") ??
+        req.options.find((o) => o.kind === "reject_always");
+      return Promise.resolve({ optionId: reject?.optionId ?? null });
+    }
     const requestId = crypto.randomUUID();
     return new Promise((resolve) => {
       const entry: PendingEntry = {

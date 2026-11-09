@@ -23,6 +23,7 @@ import { asBadRequest, RpcError } from "./runtime/agent-runtime";
 import type { RuntimeManager } from "./runtime/runtime-manager";
 import type { SkillLibrary } from "./skills";
 import type { SubagentService } from "./subagents";
+import type { TaskService } from "./tasks";
 import type { TeamClient } from "./team";
 import type { Vault } from "./vault";
 import type { Voice } from "./voice";
@@ -87,6 +88,7 @@ export class Rpc {
       team: TeamClient;
       hosts: HostStore;
       subagents: SubagentService;
+      tasks: TaskService;
     },
   ) {}
 
@@ -553,6 +555,34 @@ export class Rpc {
         const p = params as MethodParsedParams<typeof method>;
         return this.channels.reassign(p.channelId, p.ownerId);
       }
+      case "tasks.create":
+        return this.extras.tasks.create(params as MethodParsedParams<typeof method>);
+      case "tasks.list":
+        return this.extras.tasks.list(params as MethodParsedParams<typeof method>);
+      case "tasks.get":
+        return this.extras.tasks.get((params as MethodParsedParams<typeof method>).id);
+      case "tasks.history":
+        return this.extras.tasks.history(params as MethodParsedParams<typeof method>);
+      case "tasks.instruct": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.tasks.instruct(p.id, p.text);
+      }
+      case "tasks.pause":
+        return this.extras.tasks.pause((params as MethodParsedParams<typeof method>).id);
+      case "tasks.resume":
+        return this.extras.tasks.resume((params as MethodParsedParams<typeof method>).id);
+      case "tasks.stop":
+        return this.extras.tasks.stop((params as MethodParsedParams<typeof method>).id);
+      case "tasks.rename": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.tasks.rename(p.id, p.title);
+      }
+      case "tasks.search": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.tasks.search(p.query, p.limit);
+      }
+      case "tasks.deliveries":
+        return this.extras.tasks.deliveries(params as MethodParsedParams<typeof method>);
       default: {
         const _method: never = method;
         throw new RpcError("internal", `unhandled method: ${_method}`);
