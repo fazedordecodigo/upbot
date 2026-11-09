@@ -718,6 +718,8 @@ export const Approval = z.object({
   expiresAt: z.number(),
   /** Set when a daemon restart ended the approval before any decision. */
   interruptedAt: z.number().optional(),
+  /** When the approval was decided, expired or closed (survives daemon restarts). */
+  resolvedAt: z.number().optional(),
 });
 export type Approval = z.infer<typeof Approval>;
 

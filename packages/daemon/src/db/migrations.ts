@@ -374,4 +374,7 @@ export const migrations: string[] = [
   ALTER TABLE agents ADD COLUMN max_instances INTEGER`,
   // 29: saved routine attachments reused by every run
   `ALTER TABLE routines ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]'`,
+  // 30: decided approvals stay in approval_records with their decision time, so task
+  // timelines show approval cards and decision times after a daemon restart.
+  `ALTER TABLE approval_records ADD COLUMN resolved_at INTEGER`,
 ];

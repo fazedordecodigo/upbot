@@ -4,6 +4,11 @@ import { VmDialog } from "../dialogs/VmDialog";
 import { useMachine } from "../hooks/useMachine";
 import { useTask } from "../hooks/useTask";
 import { useTaskMachine } from "../hooks/useTaskMachine";
+import {
+  describeApproval,
+  fullApprovalArguments,
+  requiresFullReview,
+} from "../lib/approval-description";
 import { errorFields, logError } from "../lib/log";
 import { readStorage, writeStorage } from "../lib/storage";
 import { useDaemon } from "../shell/daemon";
@@ -22,6 +27,13 @@ const labels = {
   reject_once: "Não permitir",
   reject_always: "Não permitir",
 };
+const decisions = {
+  allow_once: "Permitido nesta sessão",
+  allow_always: "Permitido em todas as sessões",
+  reject_once: "Não permitido",
+  reject_always: "Não permitido",
+};
+const clampSplit = (value: number) => Math.round(Math.max(30, Math.min(70, value)));
 
 function Memory({ item }: { item: Extract<ChatItem, { kind: "agent_message" }> }) {
   const { client } = useDaemon();
@@ -59,7 +71,7 @@ function Memory({ item }: { item: Extract<ChatItem, { kind: "agent_message" }> }
           }
         }}
       >
-        Usou {item.memoryUsage.count} itens da memória · {kinds}
+        {`Usou ${item.memoryUsage.count} ${item.memoryUsage.count === 1 ? "item" : "itens"} da memória · ${kinds}`}
       </button>
       {open && (
         <div>
@@ -72,7 +84,11 @@ function Memory({ item }: { item: Extract<ChatItem, { kind: "agent_message" }> }
           ) : (
             <p>Carregando memória…</p>
           )}
-          <button type="button" className="btn btn-link" onClick={() => navigate("settings")}>
+          <button
+            type="button"
+            className="btn btn-link"
+            onClick={() => navigate("settings", { tab: "memory" })}
+          >
             Editar memória
           </button>
         </div>
@@ -106,8 +122,8 @@ function TaskSurface() {
     ? "Este agente não tem uma área de trabalho"
     : session.machine?.status !== "ready"
       ? "A máquina ainda não está pronta"
-      : task?.situation === "done"
-        ? "Esta tarefa já terminou"
+      : task?.outcome === "stopped"
+        ? "Esta tarefa foi encerrada"
         : undefined;
   useEffect(() => {
     writeStorage("boto.task-split", String(split));
@@ -377,7 +393,9 @@ function TaskSurface() {
                   {rows.map((row) => {
                     if ("approval" in row) {
                       const a = row.approval;
-                      const decidedAt = a.interruptedAt ?? data.approvalTimes[a.id];
+                      const decidedAt = a.resolvedAt ?? a.interruptedAt;
+                      const described =
+                        a.kind === "tool" ? describeApproval(a, data.agentName) : null;
                       return (
                         <article
                           className="task-card"
@@ -386,9 +404,22 @@ function TaskSurface() {
                         >
                           <h3>
                             <Icon name="shield-check" />
-                            {a.title}
+                            {described?.description ?? a.title}
                           </h3>
-                          <p>{a.detail}</p>
+                          {described ? (
+                            <>
+                              {described.context && <p>{described.context}</p>}
+                              {a.status === "pending" && requiresFullReview(a) ? (
+                                <pre className="task-args">{fullApprovalArguments(a.detail)}</pre>
+                              ) : (
+                                described.arguments && (
+                                  <p className="task-note">{described.arguments}</p>
+                                )
+                              )}
+                            </>
+                          ) : (
+                            a.detail && <p>{a.detail}</p>
+                          )}
                           {a.status === "pending" ? (
                             <div className="task-actions">
                               <button
@@ -507,11 +538,12 @@ function TaskSurface() {
                             )}
                             {i.resolution ? (
                               <p className="task-note">
-                                {i.options
-                                  .find((o) => o.optionId === i.resolution?.optionId)
-                                  ?.kind.startsWith("allow")
-                                  ? "Permitido"
-                                  : "Não permitido"}{" "}
+                                {
+                                  decisions[
+                                    i.options.find((o) => o.optionId === i.resolution?.optionId)
+                                      ?.kind ?? "reject_once"
+                                  ]
+                                }{" "}
                                 · {time(i.updatedAt)}
                               </p>
                             ) : !pending ? (
@@ -648,9 +680,7 @@ function TaskSurface() {
           onKeyDown={(event) => {
             if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
               event.preventDefault();
-              setSplit((value) =>
-                Math.max(30, Math.min(70, value + (event.key === "ArrowLeft" ? -2 : 2))),
-              );
+              setSplit((value) => clampSplit(value + (event.key === "ArrowLeft" ? -2 : 2)));
             }
             if (event.key === "Enter") setSplit(42);
             if (event.key === "Home" || event.key === "End") {
@@ -662,10 +692,7 @@ function TaskSurface() {
           onPointerMove={(event) => {
             if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
             const rect = body.current?.getBoundingClientRect();
-            if (rect)
-              setSplit(
-                Math.max(30, Math.min(70, ((event.clientX - rect.left) / rect.width) * 100)),
-              );
+            if (rect) setSplit(clampSplit(((event.clientX - rect.left) / rect.width) * 100));
           }}
         />
         {/* biome-ignore lint/a11y/useSemanticElements: preserve the desktop pane prototype contract. */}
