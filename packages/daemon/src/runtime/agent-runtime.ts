@@ -439,6 +439,7 @@ export class AgentRuntime {
     const started = this.sessionStarting;
     try {
       const session = await started;
+      if (this.session === session) return session;
       // if a dispose() replaced us while we were starting, drop this session
       if (this.sessionStarting !== started) {
         this.sessionTag = null;

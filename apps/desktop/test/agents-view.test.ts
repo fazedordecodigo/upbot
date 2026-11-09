@@ -35,6 +35,7 @@ beforeAll(async () => {
   state = mkdtempSync(join(homedir(), "boto-agents-test-"));
   daemon = await startDaemon(join(state, "data"), join(state, "agents"), token, {
     BOTO_PROVIDER_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
+    BOTO_PROVIDER_COMMAND_CLAUDE: JSON.stringify(["definitely-missing-boto-config-provider"]),
     FAKE_ACP_NEW_DELAY_MS: "1500",
   });
   rpc = await DaemonClient.connect(daemon.port, token);
@@ -113,6 +114,8 @@ test("real agents can be created, delegated to, configured, filtered and deleted
   const agent = (await rpc.request("agents.list", {}))[0];
   if (!agent) throw new Error("Agent not created");
   expect(agent.requireApproval).toBe(false);
+  await page.locator("#ap-config-model").waitFor();
+  expect(await page.locator('#agent-panel [role="alert"]').count()).toBe(0);
   expect(await page.locator(".ag-card-title").textContent()).toBe("Financeiro");
   expect(await page.locator(".ag-card .ag-card-role").textContent()).toBe("Confere notas fiscais");
   await waitUntil(
@@ -242,6 +245,49 @@ test("unknown overview numbers are honest during loading and RPC failure, then r
     await pendingPage.close();
   }
 }, 60000);
+
+test("agent config startup errors show the real message and retry the RPC", async () => {
+  const agent = await rpc.request("agents.create", { name: "Unavailable", provider: "claude" });
+  const requests = new Set<string>();
+  const errors: string[] = [];
+  const errorPage = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  errorPage.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      const message = JSON.parse(String(payload));
+      if (message.method === "agents.configOptions") requests.add(message.id);
+    });
+    socket.on("framereceived", ({ payload }) => {
+      const message = JSON.parse(String(payload));
+      if (requests.has(message.id) && message.error) errors.push(message.error.message);
+    });
+  });
+  try {
+    let expectedMessage = "";
+    try {
+      await rpc.request("agents.configOptions", { agentId: agent.id });
+      throw new Error("Expected missing provider to fail");
+    } catch (error) {
+      expect(error).toMatchObject({ code: "provider_unavailable" });
+      expectedMessage = (error as Error).message;
+    }
+    await errorPage.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await errorPage.getByRole("button", { name: /^Agentes/ }).click();
+    await errorPage.getByRole("button", { name: "Abrir painel" }).click();
+    const alert = errorPage.locator('#agent-panel [role="alert"]');
+    await alert.waitFor();
+    expect(await alert.textContent()).toBe(expectedMessage);
+    expect(expectedMessage).toContain("definitely-missing-boto-config-provider");
+    await waitUntil(async () => errors.length === requests.size && errors.length > 0);
+    const before = errors.length;
+    await errorPage.getByRole("button", { name: "Tentar de novo", exact: true }).click();
+    await waitUntil(async () => errors.length > before);
+    expect(errors.at(-1)).toBe(expectedMessage);
+    expect(await alert.textContent()).toBe(expectedMessage);
+  } finally {
+    await errorPage.close();
+    await rpc.request("agents.delete", { id: agent.id });
+  }
+}, 30000);
 
 test("status helpers distinguish paused and failed agents", async () => {
   const agent = await rpc.request("agents.create", { name: "Ajuda" });

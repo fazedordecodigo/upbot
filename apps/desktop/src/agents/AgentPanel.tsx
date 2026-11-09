@@ -299,6 +299,16 @@ export function AgentPanel({
                   ))}
                 </select>
               </div>
+              {config.error && (
+                <div className="field">
+                  <p className="field-error" role="alert">
+                    {config.error}
+                  </p>
+                  <button type="button" className="btn btn-outline" onClick={config.reload}>
+                    Tentar de novo
+                  </button>
+                </div>
+              )}
               {config.data?.configOptions.map((option) => (
                 <div className="ap-row" key={option.id}>
                   <label htmlFor={`ap-config-${option.id}`}>{option.name}</label>
