@@ -9,11 +9,9 @@
 .routines .rt-time { white-space: nowrap; }
 .routines .rt-status, .routines .rt-actions { display: flex; align-items: center; gap: var(--boto-space-2); }
 .routines .rt-empty { margin: 0; padding-block: var(--boto-space-3); }
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .routines .rt-row { flex-wrap: wrap; align-items: flex-start; }
   .routines .rt-main { flex-basis: 0; }
   .routines .rt-actions { flex-basis: 100%; justify-content: flex-end; }
   .routines .rt-actions .btn { min-width: var(--boto-size-target); min-height: var(--boto-size-target); }
-  .routines .page-head { flex-wrap: wrap; }
-  .routines .page-head > .od-fill { flex-basis: 100%; }
 }

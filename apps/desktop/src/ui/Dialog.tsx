@@ -33,6 +33,22 @@ export function Dialog({
       {...props}
       ref={ref}
       className={`dialog ${className}`}
+      onKeyDown={(event) => {
+        props.onKeyDown?.(event);
+        if (event.key !== "Tab" || event.defaultPrevented) return;
+        const items = [
+          ...event.currentTarget.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), a[href], input:not(:disabled):not([type="hidden"]), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          ),
+        ].filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0);
+        const first = items[0];
+        const last = items.at(-1);
+        if (!first || !last) return;
+        if (event.shiftKey ? document.activeElement === first : document.activeElement === last) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        }
+      }}
       onCancel={(event) => {
         event.preventDefault();
         close.current();

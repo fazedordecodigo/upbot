@@ -33,7 +33,7 @@
   .topbar-menu, .sb-close { display: inline-flex; }
 }
 @media (max-width: 1023px) {
-  .sheet { margin: 0; height: 100%; width: calc(var(--boto-space-20) * 3); max-width: min(100%, calc(var(--boto-space-20) * 4)); border-radius: 0; }
+  .sheet { margin: 0; height: 100dvh; max-height: none; width: calc(var(--boto-space-20) * 3); max-width: min(100%, calc(var(--boto-space-20) * 4)); border-radius: 0; }
   .sheet .sb-actions .btn { padding-inline: var(--boto-space-2); gap: var(--boto-space-1); }
   .sheet .kbd { flex-shrink: 0; }
 }

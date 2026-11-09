@@ -42,6 +42,6 @@
 .agent-panel .field-error, .agent-new .field-error, .ap-delete { color: var(--boto-color-destructive); font-size: var(--boto-font-size-sm); }
 @keyframes agent-panel-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
 @media (max-width: 1023px) { .ag-toolbar { align-items: flex-start; } }
-@media (max-width: 767px) { .agents-view .page-head { flex-direction: column; align-items: flex-start; } .ag-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .agents-view .ag-filter { flex-wrap: nowrap; overflow-x: auto; } .ag-filter .tabs-trigger { flex: none; } }
+@media (max-width: 767px) { .ag-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .agents-view .ag-filter { flex-wrap: nowrap; overflow-x: auto; } .ag-filter .tabs-trigger { flex: none; } }
 @media (max-width: 479px) { .view.agents-view { padding: var(--boto-space-5) var(--boto-space-4); } .ag-stat { padding: var(--boto-space-3); } .ag-card { padding: var(--boto-space-4); } }
 @media (prefers-reduced-motion: reduce) { .agent-panel.sheet { animation: none; } }
