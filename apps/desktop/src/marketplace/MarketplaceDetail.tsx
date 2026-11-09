@@ -61,19 +61,7 @@ export function MarketplaceDetail({
           throw new Error("App instalado não encontrado. Atualize a lista e tente de novo.");
         await client.request("apps.delete", { id: app.id });
       } else {
-        const installedSkills = await client.request("skills.list", {});
-        const names =
-          item.kind === "plugin"
-            ? (skills.data?.items ?? [])
-                .filter((skill) => skill.source === item.source && item.includes.includes(skill.id))
-                .map((skill) => skill.name)
-            : [item.name];
-        if (item.kind === "plugin" && !skills.data)
-          throw new Error("Não foi possível carregar as skills. Tente de novo.");
-        for (const name of names) {
-          if (installedSkills.some((skill) => skill.name === name))
-            await client.request("skills.delete", { name });
-        }
+        await client.request("marketplace.uninstall", { source: item.source, id: item.id });
       }
       setInstalled(false);
       onChanged();
@@ -84,6 +72,7 @@ export function MarketplaceDetail({
           ? e.message
           : marketplaceError(e, `Não foi possível remover ${item.name}. Tente de novo.`),
       );
+      throw e;
     } finally {
       setPending(false);
     }
@@ -182,7 +171,7 @@ export function MarketplaceDetail({
                   <button
                     type="button"
                     className="btn btn-destructive"
-                    disabled={pending || (item.kind === "plugin" && !skills.data)}
+                    disabled={pending}
                     onClick={() =>
                       void confirm({
                         title: `Remover ${item.name}?`,
