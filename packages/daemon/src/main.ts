@@ -220,6 +220,7 @@ async function main() {
   bridge.browser = browser;
   const vault = new Vault(db, dataDir);
   const vmCredentials = new VmCredentials(vault);
+  const providers = new ProvidersService(db, vmCredentials, broadcast);
   hosts.credentialEnv = (provider) => vmCredentials.env(provider);
   const computer = new ComputerUse(db);
   const voice = new Voice(join(dataDir, "voice"), mergedPath);
@@ -255,7 +256,7 @@ async function main() {
     {
       vault,
       vmCredentials,
-      providers: new ProvidersService(db, vmCredentials, broadcast),
+      providers,
       toolPermissions: new ToolPermissions(approvals, apps),
       computer,
       voice,
@@ -264,7 +265,7 @@ async function main() {
       apps,
       approvals,
       pages,
-      marketplace: new Marketplace(db, skills, store, apps),
+      marketplace: new Marketplace(db, skills, store, apps, providers),
       mobile,
       team,
       hosts,

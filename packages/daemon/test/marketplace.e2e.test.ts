@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { chmodSync, cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -71,6 +72,7 @@ describe("marketplace e2e", () => {
       BOTO_SHARED_ROOT: sharedRoot,
       BOTO_MARKETPLACE_URL: fileIndex,
       BOTO_VAULT_KEY: "56".repeat(32),
+      BOTO_PROVIDER_COMMAND_CODEX: JSON.stringify([process.execPath]),
       PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
     });
     c = await DaemonClient.connect(daemon.port, TOKEN);
@@ -331,5 +333,52 @@ describe("marketplace e2e", () => {
     await expect(
       c.request("marketplace.install", { source: BUILTIN_APPS_SOURCE, id: "missing" }),
     ).rejects.toMatchObject({ code: "not_found" });
+  });
+  test("agent provider precedence is explicit, template, saved default, then Claude", async () => {
+    const items = [undefined, "gemini"].map((provider, index) => {
+      const text = JSON.stringify({
+        name: `Provider precedence ${index}`,
+        instructions: "Test provider selection",
+        provider,
+      });
+      const url = `provider-${index}.json`;
+      writeFileSync(join(market, url), text);
+      return {
+        id: `provider-${index}`,
+        kind: "agent",
+        url,
+        sha256: createHash("sha256").update(text).digest("hex"),
+      };
+    });
+    const index = pathToFileURL(join(market, "providers-index.json")).href;
+    writeFileSync(join(market, "providers-index.json"), JSON.stringify({ items }));
+    await c.request("marketplace.setSources", { urls: [index] });
+    try {
+      expect(
+        (await c.request("marketplace.install", { source: index, id: "provider-0" })).agent
+          ?.provider,
+      ).toBe("claude");
+      await c.request("providers.setApiKey", { provider: "codex", value: "fake-default-key" });
+      await c.request("providers.setDefault", { provider: "codex" });
+      expect(
+        (await c.request("marketplace.install", { source: index, id: "provider-0" })).agent
+          ?.provider,
+      ).toBe("codex");
+      expect(
+        (await c.request("marketplace.install", { source: index, id: "provider-1" })).agent
+          ?.provider,
+      ).toBe("gemini");
+      expect(
+        (
+          await c.request("marketplace.install", {
+            source: index,
+            id: "provider-1",
+            provider: "claude",
+          })
+        ).agent?.provider,
+      ).toBe("claude");
+    } finally {
+      await c.request("marketplace.setSources", { urls: [fileIndex] });
+    }
   });
 });

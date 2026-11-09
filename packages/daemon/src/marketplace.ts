@@ -15,6 +15,7 @@ import { z } from "zod";
 import type { AgentStore } from "./agents";
 import { APP_CATALOG, APP_MARKETPLACE, type AppsService } from "./apps";
 import { getSetting, setSetting } from "./db/settings";
+import type { ProvidersService } from "./providers-service";
 import { RpcError } from "./runtime/agent-runtime";
 import type { SkillLibrary } from "./skills";
 
@@ -72,6 +73,7 @@ export class Marketplace {
     private skills: SkillLibrary,
     private agents: AgentStore,
     private apps: AppsService,
+    private providers?: Pick<ProvidersService, "getDefault">,
   ) {}
 
   sources(): string[] {
@@ -289,7 +291,9 @@ export class Marketplace {
     if (typeof t.name !== "string" || typeof t.instructions !== "string") {
       throw new RpcError("bad_request", "invalid agent template");
     }
-    const prov = ProviderId.safeParse(provider ?? t.provider ?? "claude");
+    const prov = ProviderId.safeParse(
+      provider ?? t.provider ?? this.providers?.getDefault().provider ?? "claude",
+    );
     if (!prov.success) throw new RpcError("bad_request", "unknown provider");
     const skills: string[] = [];
     for (const sid of t.skills ?? []) {
