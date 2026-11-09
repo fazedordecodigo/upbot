@@ -40,9 +40,7 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     expect(await page.locator("#ob-about-count").textContent()).toBe("25/600");
     expect(await page.locator("#ob-mini-greeting").textContent()).toBe("Boa noite, Iara.");
     await page.locator("#ob-next").click();
-    expect(await page.locator('[data-ob-mode="aprovacao"]').getAttribute("aria-checked")).toBe(
-      "true",
-    );
+    expect(await page.locator('[data-ob-mode="agora"]').getAttribute("aria-checked")).toBe("true");
     await page.locator('[data-ob-mode="agendar"]').click();
     await page.keyboard.press("ArrowDown");
     expect(await page.locator('[data-ob-mode="aprovacao"]').getAttribute("aria-checked")).toBe(
