@@ -86,7 +86,10 @@ afterAll(async () => {
 }, 30000);
 
 test("home reflects real profile, running and waiting tasks, deliveries and navigation", async () => {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const page = await browser.newPage({
+    viewport: { width: 1440, height: 900 },
+    ...(process.env.HOME_SCREEN_DIR ? { recordVideo: { dir: process.env.HOME_SCREEN_DIR } } : {}),
+  });
   page.setDefaultTimeout(30000);
   try {
     await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
@@ -115,10 +118,8 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
       .filter({ hasText: "Permissão pendente: Fake tool" })
       .waitFor();
     expect(await page.locator("#lane-waiting-count").innerText()).toBe("1");
-    await rpc.request("tasks.create", { agentId: writer.id, text: "echo:Resumo entregue" });
-    await page.locator("#deliveries .delivery-item").waitFor();
-    expect(await page.locator("#deliveries").innerText()).toContain("Resumo");
     const db = new Database(join(state, "data", "boto.db"));
+    db.exec("PRAGMA busy_timeout = 5000");
     try {
       const row = db.query("SELECT * FROM tasks WHERE id = ?").get(running.id) as Record<
         string,
@@ -130,20 +131,61 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
       );
       db.transaction(() => {
         for (let i = 0; i < 201; i++) {
-          const completed = {
+          const paused = {
             ...row,
-            id: `home-completed-${i}`,
-            situation: "done",
+            id: `home-paused-${i}`,
+            situation: "muted",
             private: 0,
             created_at: Date.now() + i,
           };
-          insert.run(
-            ...columns.map((column) => completed[column as keyof typeof completed] ?? null),
-          );
+          insert.run(...columns.map((column) => paused[column as keyof typeof paused] ?? null));
         }
-      })();
+      }).immediate();
+      await page.reload();
+      await page.waitForFunction(
+        () => document.querySelector("#lane-running-count")?.textContent === "202",
+      );
+      if (process.env.HOME_SCREEN_DIR)
+        await page.screenshot({
+          path: join(process.env.HOME_SCREEN_DIR, "home-after-pagination.png"),
+        });
     } finally {
+      db.query("DELETE FROM tasks WHERE id LIKE 'home-paused-%'").run();
       db.close();
+    }
+    await page.reload();
+    await rpc.request("tasks.create", { agentId: writer.id, text: "echo:Resumo entregue" });
+    await page.locator("#deliveries .delivery-item").waitFor();
+    expect(await page.locator("#deliveries").innerText()).toContain("Resumo");
+    const completedDb = new Database(join(state, "data", "boto.db"));
+    completedDb.exec("PRAGMA busy_timeout = 5000");
+    try {
+      const row = completedDb.query("SELECT * FROM tasks WHERE id = ?").get(running.id) as Record<
+        string,
+        string | number | null
+      >;
+      const columns = Object.keys(row);
+      const insert = completedDb.query(
+        `INSERT INTO tasks (${columns.join(",")}) VALUES (${columns.map(() => "?").join(",")})`,
+      );
+      completedDb
+        .transaction(() => {
+          for (let i = 0; i < 201; i++) {
+            const completed = {
+              ...row,
+              id: `home-completed-${i}`,
+              situation: "done",
+              private: 0,
+              created_at: Date.now() + i,
+            };
+            insert.run(
+              ...columns.map((column) => completed[column as keyof typeof completed] ?? null),
+            );
+          }
+        })
+        .immediate();
+    } finally {
+      completedDb.close();
     }
     await page.reload();
     await page.locator("#lane-running .lane-item").waitFor();
@@ -158,6 +200,7 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
       for (const [width, height] of [
         [1440, 900],
         [1024, 768],
+        [768, 1024],
         [390, 844],
       ]) {
         await page.setViewportSize({ width, height });
@@ -166,14 +209,52 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
             await page.getByRole("button", { name: "Tema escuro" }).click();
           await page.evaluate(() => document.fonts.ready);
           await page.screenshot({
-            path: join(process.env.HOME_SCREEN_DIR, `home-app-${width}-${theme}.png`),
+            path: join(
+              process.env.HOME_SCREEN_DIR,
+              `home-${process.env.HOME_PHASE ?? "after"}-app-${width}-${theme}.png`,
+            ),
           });
         }
       }
     }
     await page.locator("#deliveries .delivery-item").first().click();
     expect(await page.locator("#main").getAttribute("data-view")).toBe("task");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.locator('[data-nav="home"]').click();
+    await page.locator("#lane-running .lane-item").first().click();
+    expect(await page.locator("#main").getAttribute("data-view")).toBe("task");
+    await page.locator('[data-nav="home"]').click();
+    await page.locator("#lane-waiting .lane-item").first().click();
+    await page.getByRole("button", { name: "Permitir nesta sessão", exact: true }).waitFor();
+    expect((await rpc.request("permissions.list", {})).length).toBe(1);
+    await page.getByRole("button", { name: "Permitir nesta sessão", exact: true }).click();
+    await page.locator('[data-nav="home"]').click();
+    await page.getByText("Nada aguardando você.", { exact: true }).waitFor();
+    await page
+      .locator("#view-home")
+      .getByRole("button", { name: "Nova tarefa", exact: true })
+      .click();
+    expect(await page.locator("#main").getAttribute("data-view")).toBe("new");
+    await stopDaemon(daemon, rpc, state, "SIGTERM");
+    daemon = await startDaemon(join(state, "data"), join(state, "agents"), token, {
+      BOTO_ACP_COMMAND_GROK: JSON.stringify([process.execPath, FAKE_AGENT]),
+      FAKE_ACP_STATE_DIR: join(state, "fake"),
+    });
+    rpc = await DaemonClient.connect(daemon.port, token);
+    await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
+    await page.reload();
+    await page.locator("#greeting").filter({ hasText: ", Emerson." }).waitFor();
+    await page.locator("#deliveries .delivery-item").first().waitFor();
   } finally {
     await page.close();
+    if (process.env.HOME_SCREEN_DIR)
+      await page
+        .video()
+        ?.saveAs(
+          join(
+            process.env.HOME_SCREEN_DIR,
+            `home-${process.env.HOME_PHASE ?? "after"}-mainflow.webm`,
+          ),
+        );
   }
 }, 60000);
