@@ -132,9 +132,39 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
         }
       }).immediate();
       await page.reload();
-      await page.waitForFunction(
-        () => document.querySelector("#lane-running-count")?.textContent === "202",
-      );
+      await page
+        .waitForFunction(() => document.querySelector("#lane-running-count")?.textContent === "202")
+        .catch(async (error) => {
+          console.log(
+            "home pagination diagnostics",
+            JSON.stringify(
+              await Promise.allSettled([
+                rpc.request("tasks.get", { id: running.id }),
+                rpc
+                  .request("tasks.history", { id: running.id, limit: 5 })
+                  .then((value) => value.turns),
+                rpc.request("tasks.list", { situation: "run", limit: 5 }),
+                rpc
+                  .request("tasks.list", { situation: "muted", limit: 200 })
+                  .then(async (first) => ({
+                    count: first.items.length,
+                    nextCount: first.nextCursor
+                      ? (
+                          await rpc.request("tasks.list", {
+                            situation: "muted",
+                            limit: 200,
+                            cursor: first.nextCursor,
+                          })
+                        ).items.length
+                      : 0,
+                  })),
+                page.locator("#lane-running-count").innerText(),
+                page.locator("#lane-running").innerText(),
+              ]),
+            ),
+          );
+          throw error;
+        });
       if (process.env.HOME_SCREEN_DIR)
         await page.screenshot({
           path: join(process.env.HOME_SCREEN_DIR, "home-after-pagination.png"),
