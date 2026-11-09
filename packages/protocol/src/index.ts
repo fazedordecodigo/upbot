@@ -16,6 +16,9 @@ import {
 } from "./tasks";
 
 export * from "./tasks";
+import { ToolMode, templateMethods } from "./templates";
+
+export * from "./templates";
 
 export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   devin: "~/.config/devin/config.json",
@@ -787,6 +790,11 @@ export type BrowserState = z.infer<typeof BrowserState>;
 // ---- Routines ----
 
 export const Routine = z.object({
+  runAt: z.number().nullable(),
+  toolMode: ToolMode,
+  requireApproval: z.boolean(),
+  private: z.boolean(),
+  templateId: z.string().nullable(),
   id: z.string(),
   agentId: z.string(),
   name: z.string(),
@@ -803,6 +811,7 @@ export const Routine = z.object({
 });
 export type Routine = z.infer<typeof Routine>;
 export const RoutineRun = z.object({
+  taskId: z.string().nullable(),
   id: z.string(),
   routineId: z.string(),
   trigger: RoutineTrigger,
@@ -900,6 +909,7 @@ export const ChannelsReassignParams = z
 // ---- Typed method map ----
 
 export const methodMap = {
+  ...templateMethods,
   "agents.list": { params: AgentsListParams, result: AgentsListResult },
   "agents.create": { params: AgentsCreateParams, result: AgentsCreateResult },
   "agents.update": { params: AgentsUpdateParams, result: AgentsUpdateResult },
@@ -1212,6 +1222,11 @@ export const methodMap = {
       .object({
         agentId: z.string(),
         name: RoutineFields.name,
+        runAt: z.number().nullable().optional(),
+        toolMode: ToolMode.optional(),
+        requireApproval: z.boolean().optional(),
+        private: z.boolean().optional(),
+        templateId: z.string().nullable().optional(),
         prompt: RoutineFields.prompt,
         schedule: RoutineFields.schedule.optional(),
         webhook: RoutineFields.webhook.optional(),
@@ -1225,6 +1240,10 @@ export const methodMap = {
       .object({
         id: z.string(),
         name: RoutineFields.name.optional(),
+        runAt: z.number().nullable().optional(),
+        toolMode: ToolMode.optional(),
+        requireApproval: z.boolean().optional(),
+        private: z.boolean().optional(),
         prompt: RoutineFields.prompt.optional(),
         schedule: RoutineFields.schedule.optional(),
         webhook: RoutineFields.webhook.optional(),
@@ -1307,6 +1326,7 @@ export type MethodParsedParams<M extends MethodName> = z.infer<(typeof methodMap
 export type MethodResult<M extends MethodName> = z.infer<(typeof methodMap)[M]["result"]>;
 
 export type DaemonEventMap = {
+  "templates.changed": { id: string };
   "agent.created": Agent;
   "agent.updated": Agent;
   "agent.deleted": { id: string };
