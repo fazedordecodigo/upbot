@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { cpSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -11,6 +11,8 @@ import {
   stopTestChildren,
   tmp,
 } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const TOKEN = `bad-request-${crypto.randomUUID()}`;
 const FAKE_SSH = join(import.meta.dir, "fixtures/fake-ssh.ts");

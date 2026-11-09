@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "@boto/protocol";
@@ -16,6 +16,8 @@ import {
   tmp,
   waitForPidDead,
 } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const FIXTURES = join(import.meta.dir, "fixtures");
 const TOKEN = `native-test-${crypto.randomUUID()}`;

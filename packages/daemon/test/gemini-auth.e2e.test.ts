@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { rmSync } from "node:fs";
 import type { Agent } from "@boto/protocol";
 import {
@@ -9,6 +9,8 @@ import {
   stopDaemon,
   tmp,
 } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const TOKEN = `gemini-auth-${crypto.randomUUID()}`;
 
