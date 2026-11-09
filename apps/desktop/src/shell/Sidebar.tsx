@@ -1,6 +1,8 @@
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
+import { useShellProfile } from "../hooks/useShellProfile";
 import { isMac } from "../lib/platform";
 import { useThemePref } from "../lib/theme";
+import { TaskHistory } from "../shell-data/TaskHistory";
 import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from "../ui/Dropdown";
 import { Icon, type IconName } from "../ui/icons";
 import { useDaemon } from "./daemon";
@@ -30,6 +32,12 @@ export function Sidebar({
 }) {
   const { view, navigate } = useRouter();
   const { client, ready, agents } = useDaemon();
+  const profile = useShellProfile();
+  const name = profile.data?.name?.trim() || "Você";
+  const words = name.split(/\s+/);
+  const initials = (
+    (words[0]?.[0] ?? "V") + (words.length > 1 ? (words.at(-1)?.[0] ?? "") : "")
+  ).toLocaleUpperCase("pt-BR");
   const routines = useDaemonQuery(
     client,
     "routines.list",
@@ -38,6 +46,11 @@ export function Sidebar({
   );
   const [, setTheme] = useThemePref();
   const dark = document.documentElement.dataset.theme === "dark";
+  const toggleTheme = () => {
+    const theme = dark ? "light" : "dark";
+    setTheme(theme);
+    void client.request("profile.update", { theme }).catch(() => {});
+  };
   const go = (next: ViewName) => {
     close();
     navigate(next);
@@ -135,7 +148,7 @@ export function Sidebar({
           )}
         </button>
       </div>
-      <nav className="sb-history od-scroll" aria-label="Tarefas" data-history="" />
+      <TaskHistory close={close} />
       <div className="sb-foot">
         <hr className="separator" />
         <div className="sb-foot-row od-row">
@@ -151,26 +164,31 @@ export function Sidebar({
                 data-tip="Menu da conta"
               >
                 <span className="avatar" aria-hidden="true" data-user-avatar="">
-                  V
+                  {initials}
                 </span>
                 <span className="sb-user-name od-truncate od-fill" data-user-name="">
-                  Você
+                  {name}
                 </span>
                 <Icon name="chevron-up-down" />
               </button>
             }
           >
-            <DropdownLabel>Você</DropdownLabel>
+            <DropdownLabel>{name}</DropdownLabel>
             <DropdownItem onClick={() => go("settings")}>
               <Icon name="settings" />
               <span className="od-fill">Configurações</span>
             </DropdownItem>
-            <DropdownItem onClick={() => go("settings")}>
+            <DropdownItem
+              onClick={() => {
+                close();
+                navigate("settings", { section: "memory" });
+              }}
+            >
               <Icon name="user-check" />
               <span className="od-fill">Você e a memória</span>
             </DropdownItem>
             <DropdownSeparator />
-            <DropdownItem onClick={() => setTheme(dark ? "light" : "dark")}>
+            <DropdownItem onClick={toggleTheme}>
               <Icon name="sun" />
               <span className="od-fill">Alternar tema</span>
             </DropdownItem>
@@ -182,6 +200,18 @@ export function Sidebar({
             <DropdownItem onClick={openOnboarding}>
               <Icon name="info" />
               <span className="od-fill">Conhecer o Boto</span>
+            </DropdownItem>
+            <DropdownItem
+              onClick={() =>
+                window.open(
+                  "https://github.com/fazedordecodigo/boto/blob/develop/docs/design/identidade.html",
+                  "_blank",
+                  "noopener,noreferrer",
+                )
+              }
+            >
+              <Icon name="book-open" />
+              <span className="od-fill">Guia da marca</span>
             </DropdownItem>
           </Dropdown>
           <button
