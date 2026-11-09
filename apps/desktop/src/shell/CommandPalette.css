@@ -3,3 +3,5 @@
 .command-list { max-height: calc(var(--boto-space-20) * 4); }
 .command-item[aria-selected="true"] { background: var(--boto-color-accent-surface); }
 .command-empty { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
+.command-list .dropdown-label { padding: var(--boto-space-2) var(--boto-space-3); }
+.command-item { width: 100%; display: flex; align-items: center; gap: var(--boto-space-2); }

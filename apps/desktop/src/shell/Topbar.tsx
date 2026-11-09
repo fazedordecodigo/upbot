@@ -1,8 +1,10 @@
-import { createContext, type ReactNode, useContext, useState } from "react";
-import { readStorage, writeStorage } from "../lib/storage";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { useShellProfile } from "../hooks/useShellProfile";
 import { useThemePref } from "../lib/theme";
 import { Icon } from "../ui/icons";
 import { Switch } from "../ui/Switch";
+import { useToast } from "../ui/Toast";
+import { useDaemon } from "./daemon";
 
 const PrivateContext = createContext({
   privateMode: false,
@@ -10,10 +12,22 @@ const PrivateContext = createContext({
 });
 export const usePrivateMode = () => useContext(PrivateContext);
 export function PrivateModeProvider({ children }: { children: ReactNode }) {
-  const [privateMode, setValue] = useState(() => readStorage("boto.private-task") === "true");
+  const { client } = useDaemon();
+  const profile = useShellProfile();
+  const toast = useToast();
+  const [privateMode, setValue] = useState(false);
+  const revision = useRef(0);
+  useEffect(() => {
+    if (profile.data?.defaults) setValue(profile.data.defaults.private);
+  }, [profile.data]);
   const setPrivateMode = (value: boolean) => {
+    const previous = privateMode;
+    const current = ++revision.current;
     setValue(value);
-    writeStorage("boto.private-task", String(value));
+    void client.request("profile.update", { defaults: { private: value } }).catch(() => {
+      if (current === revision.current) setValue(previous);
+      toast("Não foi possível atualizar o modo privado.");
+    });
   };
   return (
     <PrivateContext.Provider value={{ privateMode, setPrivateMode }}>
@@ -31,6 +45,7 @@ export function Topbar({
   openMenu: () => void;
 }) {
   const [, setTheme] = useThemePref();
+  const { client } = useDaemon();
   const dark = document.documentElement.dataset.theme === "dark";
   const { privateMode, setPrivateMode } = usePrivateMode();
   return (
@@ -75,7 +90,11 @@ export function Topbar({
         aria-label="Tema escuro"
         aria-pressed={dark}
         data-tip="Alternar tema"
-        onClick={() => setTheme(dark ? "light" : "dark")}
+        onClick={() => {
+          const theme = dark ? "light" : "dark";
+          setTheme(theme);
+          void client.request("profile.update", { theme }).catch(() => {});
+        }}
       >
         <Icon name={dark ? "moon" : "sun"} />
       </button>
