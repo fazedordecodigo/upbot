@@ -5,24 +5,47 @@ export function TooltipLayer() {
   const [target, setTarget] = useState<HTMLElement | null>(null);
   const id = useId();
   useEffect(() => {
+    let keyboardFocus = false;
+    const keydown = (event: KeyboardEvent) => {
+      keyboardFocus = [
+        "Tab",
+        "ArrowUp",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowRight",
+        "Home",
+        "End",
+      ].includes(event.key);
+    };
     const show = (event: Event) => {
       const element =
         event.target instanceof Element ? event.target.closest<HTMLElement>("[data-tip]") : null;
-      setTarget(element);
+      setTarget(
+        event.type === "focusin" && (!keyboardFocus || !element?.matches(":focus-visible"))
+          ? null
+          : element,
+      );
+      if (event.type === "focusin") keyboardFocus = false;
     };
     const hide = () => setTarget(null);
-    document.addEventListener("pointerover", show);
+    const pointerdown = () => {
+      keyboardFocus = false;
+      hide();
+    };
+    document.addEventListener("keydown", keydown);
+    document.addEventListener("pointermove", show);
     document.addEventListener("focusin", show);
     document.addEventListener("pointerout", hide);
     document.addEventListener("focusout", hide);
-    document.addEventListener("pointerdown", hide);
+    document.addEventListener("pointerdown", pointerdown);
     window.addEventListener("scroll", hide, true);
     return () => {
-      document.removeEventListener("pointerover", show);
+      document.removeEventListener("keydown", keydown);
+      document.removeEventListener("pointermove", show);
       document.removeEventListener("focusin", show);
       document.removeEventListener("pointerout", hide);
       document.removeEventListener("focusout", hide);
-      document.removeEventListener("pointerdown", hide);
+      document.removeEventListener("pointerdown", pointerdown);
       window.removeEventListener("scroll", hide, true);
     };
   }, []);

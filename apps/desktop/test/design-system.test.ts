@@ -29,7 +29,7 @@ afterAll(async () => {
   await browser?.close();
   vite?.kill();
   await vite?.exited;
-});
+}, 30000);
 
 async function page(width = 1440) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
@@ -59,6 +59,23 @@ test("shell works without daemon: navigation, focus, theme, private mode and pal
     await p.getByRole("button", { name: "Tema escuro" }).click();
     expect(await p.locator("html").getAttribute("data-theme")).toBe("light");
     expect(await p.locator(".sb-logo").getAttribute("src")).toBe("/assets/boto-logo-claro.svg");
+    await until(
+      async () =>
+        (await p
+          .locator("body")
+          .evaluate((element) => getComputedStyle(element).backgroundColor)) ===
+        "rgb(246, 248, 247)",
+    );
+    await p.getByRole("button", { name: "Tema escuro" }).click();
+    expect(await p.locator("html").getAttribute("data-theme")).toBe("dark");
+    expect(await p.locator(".sb-logo").getAttribute("src")).toBe("/assets/boto-logo.svg");
+    await until(
+      async () =>
+        (await p
+          .locator("body")
+          .evaluate((element) => getComputedStyle(element).backgroundColor)) === "rgb(12, 20, 22)",
+    );
+    await p.getByRole("button", { name: "Tema escuro" }).click();
     await p.getByRole("switch", { name: "Privada" }).click();
     expect(await p.getByRole("switch").getAttribute("aria-checked")).toBe("true");
     await p.locator('[data-nav="agents"]').click();
@@ -90,6 +107,8 @@ test("sidebar resize clamps, persists, resets and supports keyboard; collapse pe
     expect(await handle.getAttribute("aria-valuenow")).toBe("220");
     await p.keyboard.press("ArrowRight");
     expect(await handle.getAttribute("aria-valuenow")).toBe("228");
+    await p.keyboard.press("ArrowLeft");
+    expect(await handle.getAttribute("aria-valuenow")).toBe("220");
     await p.keyboard.press("End");
     expect(await handle.getAttribute("aria-valuenow")).toBe("400");
     const rect = await handle.boundingBox();
@@ -111,8 +130,10 @@ test("sidebar resize clamps, persists, resets and supports keyboard; collapse pe
     await p.getByRole("button", { name: "Recolher barra lateral" }).click();
     await p.reload();
     expect(await p.locator("#sidebar").isVisible()).toBe(false);
+    expect(await p.getByRole("button", { name: "Mostrar barra lateral" }).isVisible()).toBe(true);
     await p.getByRole("button", { name: "Mostrar barra lateral" }).click();
     expect(await p.locator("#sidebar").isVisible()).toBe(true);
+    expect(await p.getByRole("button", { name: "Mostrar barra lateral" }).isVisible()).toBe(false);
   } finally {
     await p.close();
   }
@@ -124,8 +145,23 @@ test("mobile Sheet closes on navigation, Escape, backdrop and desktop breakpoint
     expect(await p.locator("#sidebar").isVisible()).toBe(false);
     await p.getByRole("button", { name: "Abrir menu" }).click();
     expect(await p.locator("#sheet").evaluate((el) => (el as HTMLDialogElement).open)).toBe(true);
+    expect(await p.locator("dialog.sheet").isVisible()).toBe(true);
+    expect(await p.getByRole("tooltip").count()).toBe(0);
+    for (const width of [390, 768]) {
+      await p.setViewportSize({ width, height: 844 });
+      expect(
+        await p.locator("#sheet").evaluate((element) => element.getBoundingClientRect().width),
+      ).toBe(240);
+      expect(
+        await p
+          .locator("#sheet .kbd")
+          .evaluate((element) => element.scrollWidth <= element.clientWidth),
+      ).toBe(true);
+    }
     await p.locator('#sheet [data-nav="templates"]').click();
     await until(async () => !(await p.locator("#sheet").isVisible()));
+    await current(p, "templates");
+    expect(await p.locator("#main h1").innerText()).toBe("Modelos");
     await p.getByRole("button", { name: "Abrir menu" }).click();
     await p.keyboard.press("Escape");
     await until(async () => !(await p.locator("#sheet").isVisible()));
@@ -158,7 +194,11 @@ test("user menu supports keyboard, dialogs restore focus, tooltip is labelled, t
         .getByRole("button", { name: "Menu da conta" })
         .evaluate((element) => element === document.activeElement),
     ).toBe(true);
-    await p.getByRole("button", { name: "Tema escuro" }).focus();
+    await p.getByRole("button", { name: "Tema escuro" }).hover();
+    await p.getByRole("tooltip").waitFor();
+    await p.mouse.move(700, 500);
+    await p.getByRole("switch", { name: "Privada" }).click();
+    await p.keyboard.press("Tab");
     await p.getByRole("tooltip").waitFor();
     expect(await p.getByRole("tooltip").innerText()).toBe("Alternar tema");
     await p.goto(`${base}/#/menubar`);
