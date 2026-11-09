@@ -1,12 +1,12 @@
 import type { MarketplaceItem } from "@boto/protocol";
 import { useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
-import { errorMessage } from "../lib/errors";
+import { openExternalLink } from "../lib/external-link";
+import { marketplaceError } from "../lib/marketplace";
 import { useDaemon } from "../shell/daemon";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/icons";
 import { Sheet } from "../ui/Sheet";
-import { useToast } from "../ui/Toast";
 import { InstalledBadge, MarketplaceLogo } from "./MarketplaceCard";
 
 export function MarketplaceDetail({
@@ -19,10 +19,10 @@ export function MarketplaceDetail({
   onChanged: () => void;
 }) {
   const { client } = useDaemon();
-  const toast = useToast();
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState("");
   const [installed, setInstalled] = useState(item.installed);
   const [confirm, setConfirm] = useState(false);
   const skills = useDaemonQuery(
@@ -35,14 +35,15 @@ export function MarketplaceDetail({
   async function install() {
     setPending(true);
     setError(null);
+    setStatus("");
     try {
       await client.request("marketplace.install", { source: item.source, id: item.id, secrets });
       setInstalled(true);
       setSecrets({});
       onChanged();
-      toast(`${item.name} instalado.`);
+      setStatus(`${item.name} instalado.`);
     } catch (e) {
-      setError(errorMessage(e));
+      setError(marketplaceError(e, `Não foi possível instalar ${item.name}. Tente de novo.`));
     } finally {
       setPending(false);
     }
@@ -51,6 +52,7 @@ export function MarketplaceDetail({
   async function remove() {
     setPending(true);
     setError(null);
+    setStatus("");
     try {
       if (item.kind === "app" || item.kind === "mcp") {
         const apps = await client.request("apps.list", {});
@@ -75,9 +77,13 @@ export function MarketplaceDetail({
       }
       setInstalled(false);
       onChanged();
-      toast(`${item.name} removido.`);
+      setStatus(`${item.name} removido.`);
     } catch (e) {
-      setError(errorMessage(e));
+      setError(
+        e instanceof Error && e.message.startsWith("App instalado não encontrado")
+          ? e.message
+          : marketplaceError(e, `Não foi possível remover ${item.name}. Tente de novo.`),
+      );
     } finally {
       setPending(false);
       setConfirm(false);
@@ -144,7 +150,15 @@ export function MarketplaceDetail({
               </section>
             )}
             {item.homepage && (
-              <a href={item.homepage} target="_blank" rel="noreferrer">
+              <a
+                href={item.homepage}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (item.homepage) void openExternalLink(item.homepage);
+                }}
+              >
                 Ver documentação
                 <Icon name="arrow-up-right" />
               </a>
@@ -152,13 +166,16 @@ export function MarketplaceDetail({
             <p className="mk-permission">
               Na primeira vez que um agente usa uma ferramenta numa sessão, ele pede sua permissão.
             </p>
+            <p className="mk-status" role="status">
+              {status}
+            </p>
             {error && (
               <p className="field-error" role="alert">
                 {error}
               </p>
             )}
             {installed ? (
-              <div className="od-stack">
+              <div className="od-stack mk-installed">
                 <InstalledBadge />
                 {item.kind === "agent" ? (
                   <p>Gerencie este item em Agentes.</p>

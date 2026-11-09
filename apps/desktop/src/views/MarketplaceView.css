@@ -31,6 +31,8 @@
 .mk-panel h2 { font-size: var(--boto-font-size-xl); overflow-wrap: anywhere; }
 .mk-panel h3 { font-size: var(--boto-font-size-lg); }
 .mk-panel .ap-body { display: grid; align-content: start; gap: var(--boto-space-5); padding: var(--boto-space-5); overflow-wrap: anywhere; }
+.mk-installed > .badge { justify-self: start; align-self: flex-start; }
+.mk-status:empty { display: none; }
 .mk-panel .field-error { color: var(--boto-color-destructive); }
 .mk-panel .ap-body a { display: inline-flex; align-items: center; gap: var(--boto-space-2); }
 @media (min-width: 1024px) { .mk-featured-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

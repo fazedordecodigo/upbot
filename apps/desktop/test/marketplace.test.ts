@@ -88,6 +88,42 @@ test("builtin apps, keyboard tabs, search, category and empty filters use real r
   await until(async () => (await page.locator("#mk-grid .mk-card").count()) === 3);
 }, 30000);
 
+test("tabs follow the prototype types and visible copy is pt-BR", async () => {
+  await page.locator("#mk-tab-apps").click();
+  await until(async () => (await page.locator("#mk-grid").innerText()).includes("Notion"));
+  expect(await page.locator("#mk-tabs [role=tab]").allInnerTexts()).toEqual([
+    "Apps",
+    "Plugins",
+    "Skills",
+    "Servidores MCP",
+  ]);
+  expect(await page.locator("#mk-grid").innerText()).toContain(
+    "Busca, lê e edita páginas e bancos de dados.",
+  );
+  await page.locator("#mk-grid .mk-card").filter({ hasText: "Notion" }).click();
+  expect(await page.locator('#mk-panel label[for="mk-secret-NOTION_TOKEN"]').innerText()).toBe(
+    "Token de integração",
+  );
+  await page.evaluate(() => {
+    (window as unknown as { opened: string[] }).opened = [];
+    window.open = (url) => {
+      (window as unknown as { opened: string[] }).opened.push(String(url));
+      return null;
+    };
+  });
+  await page
+    .locator("#mk-panel")
+    .getByRole("link", { name: /Ver documentação/ })
+    .click();
+  expect(await page.evaluate(() => (window as unknown as { opened: string[] }).opened)).toEqual([
+    "https://github.com/makenotion/notion-mcp-server",
+  ]);
+  await page.keyboard.press("Escape");
+  await page.locator("#mk-tab-skills").click();
+  await until(async () => (await page.locator("#mk-grid .mk-card").count()) === 3);
+  expect(await page.locator("#mk-grid").innerText()).not.toMatch(/Review a diff|Draft user-facing/);
+}, 30000);
+
 test("skill installs and removes with confirmation, daemon state and focus restoration", async () => {
   const card = page.locator("#mk-grid .mk-card").filter({ hasText: "code-review" });
   await card.click();
@@ -98,6 +134,10 @@ test("skill installs and removes with confirmation, daemon state and focus resto
   expect((await rpc.request("skills.list", {})).some((skill) => skill.name === "code-review")).toBe(
     true,
   );
+  expect(await page.locator("#mk-panel [role=status]").innerText()).toBe("code-review instalado.");
+  const badge = await page.locator("#mk-panel .badge-success").boundingBox();
+  const remove = await page.locator("#mk-panel .btn-destructive").boundingBox();
+  expect(badge && remove && badge.width < remove.width / 2).toBe(true);
   await page.keyboard.press("Escape");
   await until(async () => card.evaluate((element) => element === document.activeElement));
   expect(await card.innerText()).toContain("Instalado");
@@ -189,7 +229,9 @@ test("empty types stay honest and checksum install failures stay inline", async 
   await page.locator("#mk-grid .mk-card").filter({ hasText: "code-review" }).click();
   await page.getByRole("button", { name: "Instalar", exact: true }).click();
   await page.locator("#mk-panel [role=alert]").waitFor();
-  expect(await page.locator("#mk-panel [role=alert]").innerText()).toContain("checksum mismatch");
+  expect(await page.locator("#mk-panel [role=alert]").innerText()).toBe(
+    "O arquivo baixado não confere com o registro do marketplace. Nada foi instalado.",
+  );
   expect((await rpc.request("skills.list", {})).length).toBe(0);
   expect(await page.getByRole("button", { name: "Instalar", exact: true }).isEnabled()).toBe(true);
   await page.keyboard.press("Escape");
