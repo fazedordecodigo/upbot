@@ -153,10 +153,19 @@ test("mobile Sheet closes on navigation, Escape, backdrop and desktop breakpoint
         await p.locator("#sheet").evaluate((element) => element.getBoundingClientRect().width),
       ).toBe(240);
       expect(
-        await p
-          .locator("#sheet .kbd")
-          .evaluate((element) => element.scrollWidth <= element.clientWidth),
+        await p.locator('#sheet [data-action="open-command"] .od-fill').evaluate((element) => {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          return (
+            range.getClientRects().length === 1 &&
+            element.scrollWidth <= element.clientWidth &&
+            getComputedStyle(element).whiteSpace === "nowrap"
+          );
+        }),
       ).toBe(true);
+      const compactShortcut =
+        (await p.locator("#sidebar [data-shortcut-label]").innerText()) === "⌘K";
+      expect(await p.locator("#sheet .kbd").count()).toBe(compactShortcut ? 1 : 0);
     }
     await p.locator('#sheet [data-nav="templates"]').click();
     await until(async () => !(await p.locator("#sheet").isVisible()));

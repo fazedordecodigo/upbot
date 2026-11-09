@@ -128,9 +128,11 @@ export function Sidebar({
         >
           <Icon name="search" />
           <span className="od-fill">Buscar tarefas</span>
-          <span className="kbd" data-shortcut-label="">
-            {isMac ? "⌘K" : "Ctrl K"}
-          </span>
+          {(variant === "rail" || isMac) && (
+            <span className="kbd" data-shortcut-label="">
+              {isMac ? "⌘K" : "Ctrl K"}
+            </span>
+          )}
         </button>
       </div>
       <nav className="sb-history od-scroll" aria-label="Tarefas" data-history="" />
