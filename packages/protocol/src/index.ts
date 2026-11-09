@@ -342,7 +342,7 @@ export const ChatCancelResult = z.object({ ok: z.literal(true) });
 export const AgentsStatusesParams = z.object({}).strict();
 export const AgentsStatusesResult = z.record(z.string(), AgentStatusInfo);
 
-export const PermissionsListParams = z.object({}).strict();
+export const PermissionsListParams = z.object({ taskId: z.string().optional() }).strict();
 export const PermissionsListResult = z.array(PendingPermission);
 
 export const PermissionsRespondParams = z
@@ -1064,7 +1064,7 @@ export const methodMap = {
     result: z.object({ ok: z.literal(true) }),
   },
   "approvals.list": {
-    params: z.object({ agentId: z.string().optional() }).strict(),
+    params: z.object({ agentId: z.string().optional(), taskId: z.string().optional() }).strict(),
     result: z.array(Approval),
   },
   "approvals.respond": {
@@ -1303,6 +1303,10 @@ export const methodMap = {
   "channels.reassign": { params: ChannelsReassignParams, result: Channel },
   "tasks.create": { params: TasksCreateParams, result: Task },
   "tasks.list": { params: TasksListParams, result: TasksListResult },
+  "tasks.subscribe": {
+    params: z.object({ id: z.string(), watch: z.boolean() }).strict(),
+    result: z.object({ ok: z.literal(true) }),
+  },
   "tasks.get": { params: TasksGetParams, result: Task },
   "tasks.history": { params: TasksHistoryParams, result: ChatHistoryResult },
   "tasks.instruct": { params: TasksInstructParams, result: TasksInstructResult },
@@ -1368,4 +1372,5 @@ export type DaemonEventMap = AgentsCockpitEventMap & {
   "task.created": Task;
   "task.updated": Task;
   "task.delivery": TaskDelivery;
+  "task.event": { taskId: string; event: string; data: unknown };
 };

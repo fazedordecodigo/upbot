@@ -66,6 +66,74 @@ function rowToItem(r: ItemRow): ChatItem {
 export class ChatStore {
   constructor(private db: Database) {}
 
+  isPrivateTask(taskId: string | null | undefined): boolean {
+    return (
+      !!taskId && !!this.db.query("SELECT 1 FROM tasks WHERE id = ? AND private = 1").get(taskId)
+    );
+  }
+
+  taskForTurn(turnId: string | null | undefined): string | null {
+    if (!turnId) return null;
+    return this.getTurn(turnId)?.taskId ?? null;
+  }
+
+  privateApprovalTasks(agentId: string, createdAt: number): string[] {
+    const rows = this.db
+      .query(
+        "SELECT id FROM tasks WHERE agent_id = ? AND private = 1 AND created_at <= ? AND (ended_at IS NULL OR ended_at >= ?)",
+      )
+      .all(agentId, createdAt, createdAt) as { id: string }[];
+    return rows.map((row) => row.id);
+  }
+
+  visibleTurn(
+    turnId: string | null | undefined,
+    taskId?: string,
+    agentId?: string,
+    createdAt?: number,
+  ): boolean {
+    const task = this.taskForTurn(turnId);
+    if (!turnId && agentId && createdAt !== undefined) {
+      if (taskId)
+        return !!this.db
+          .query("SELECT 1 FROM tasks WHERE id = ? AND agent_id = ?")
+          .get(taskId, agentId);
+      return this.privateApprovalTasks(agentId, createdAt).length === 0;
+    }
+    return taskId ? task === taskId : !this.isPrivateTask(task);
+  }
+
+  privateEventTasks(event: string, data: unknown): string[] {
+    if (!data || typeof data !== "object") return [];
+    const value = data as Record<string, unknown>;
+    let taskId = typeof value.taskId === "string" ? value.taskId : null;
+    if (event === "task.created" || event === "task.updated") taskId = String(value.id);
+    if (!taskId && typeof value.turnId === "string") taskId = this.taskForTurn(value.turnId);
+    if (!taskId && (event === "turn.started" || event === "turn.ended"))
+      taskId = this.taskForTurn(String(value.id));
+    if (!taskId && event.startsWith("item.")) {
+      const id = event === "item.delta" ? value.itemId : value.id;
+      if (typeof id === "string") taskId = this.getItem(id)?.taskId ?? null;
+    }
+    if (!taskId && event === "permission.resolved" && typeof value.requestId === "string") {
+      const item = this.db
+        .query(
+          "SELECT task_id FROM items WHERE kind = 'permission' AND json_extract(data_json, '$.requestId') = ?",
+        )
+        .get(value.requestId) as { task_id: string | null } | null;
+      taskId = item?.task_id ?? null;
+    }
+    if (this.isPrivateTask(taskId)) return [taskId!];
+    if (
+      event === "approval.updated" &&
+      !value.turnId &&
+      typeof value.agentId === "string" &&
+      typeof value.createdAt === "number"
+    )
+      return this.privateApprovalTasks(value.agentId, value.createdAt);
+    return [];
+  }
+
   interruptRunningTurns(): void {
     this.db
       .query("UPDATE turns SET status = 'interrupted', ended_at = ? WHERE status = 'running'")
@@ -491,6 +559,14 @@ function rowToQueueItem(r: QueueRow): QueueItemLite {
 export class QueueStore {
   constructor(private db: Database) {}
 
+  isPrivateTurn(turnId: string): boolean {
+    return !!this.db
+      .query(
+        "SELECT 1 FROM turns JOIN tasks ON tasks.id = turns.task_id WHERE turns.id = ? AND tasks.private = 1",
+      )
+      .get(turnId);
+  }
+
   enqueue(agentId: string, text: string, from: QueueSource | null = null): QueueItemLite {
     const id = crypto.randomUUID();
     const now = Date.now();
@@ -520,9 +596,11 @@ export class QueueStore {
     };
   }
 
-  queued(agentId: string): QueueItemLite[] {
+  queued(agentId: string, includePrivate = false): QueueItemLite[] {
     const rows = this.db
-      .query("SELECT * FROM queue WHERE agent_id = ? AND status = 'queued' ORDER BY created_at ASC")
+      .query(`SELECT * FROM queue WHERE agent_id = ? AND status = 'queued'
+        ${includePrivate ? "" : "AND (task_id IS NULL OR task_id NOT IN (SELECT id FROM tasks WHERE private = 1))"}
+        ORDER BY created_at ASC`)
       .all(agentId) as QueueRow[];
     return rows.map(rowToQueueItem);
   }

@@ -67,6 +67,8 @@ function errorDiagnostics(e: unknown, depth = 0): ErrorDiagnostics {
   return diagnostics;
 }
 
+export type RpcConnection = { id: string; watchTask?: (id: string, watch: boolean) => void };
+
 export class Rpc {
   constructor(
     private agents: AgentStore,
@@ -104,7 +106,7 @@ export class Rpc {
   ) {}
 
   /** Returns the response payload string for one raw incoming message. */
-  async handle(raw: string): Promise<string> {
+  async handle(raw: string, conn?: RpcConnection): Promise<string> {
     let parsed: { id?: unknown; method?: unknown; params?: unknown };
     try {
       parsed = JSON.parse(raw);
@@ -132,7 +134,7 @@ export class Rpc {
     }
     const startedAt = performance.now();
     try {
-      const result = await this.dispatch(method as MethodName, paramsRes.data);
+      const result = await this.dispatch(method as MethodName, paramsRes.data, conn);
       return JSON.stringify({ id, result });
     } catch (e) {
       const durationMs = Math.round(performance.now() - startedAt);
@@ -167,7 +169,11 @@ export class Rpc {
     }
   }
 
-  private async dispatch(method: MethodName, params: unknown): Promise<unknown> {
+  private async dispatch(
+    method: MethodName,
+    params: unknown,
+    conn?: RpcConnection,
+  ): Promise<unknown> {
     switch (method) {
       case "profile.get":
         return this.extras.profile.get();
@@ -310,8 +316,12 @@ export class Rpc {
       }
       case "agents.statuses":
         return this.runtimes.statuses();
-      case "permissions.list":
-        return this.runtimes.pendingPermissions();
+      case "permissions.list": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.runtimes
+          .pendingPermissions()
+          .filter((permission) => this.chat.visibleTurn(permission.turnId, p.taskId));
+      }
       case "permissions.respond": {
         const p = params as MethodParsedParams<typeof method>;
         this.runtimes.respondPermission(p.requestId, p.optionId);
@@ -439,8 +449,14 @@ export class Rpc {
       case "pages.delete":
         this.extras.pages.delete((params as MethodParsedParams<typeof method>).id);
         return { ok: true };
-      case "approvals.list":
-        return this.extras.approvals.list((params as MethodParsedParams<typeof method>).agentId);
+      case "approvals.list": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.approvals
+          .list(p.agentId)
+          .filter((approval) =>
+            this.chat.visibleTurn(approval.turnId, p.taskId, approval.agentId, approval.createdAt),
+          );
+      }
       case "approvals.respond":
         return this.extras.approvals.respond(params as MethodParsedParams<typeof method>);
       case "approvals.rules":
@@ -649,6 +665,13 @@ export class Rpc {
         return this.extras.tasks.create(params as MethodParsedParams<typeof method>);
       case "tasks.list":
         return this.extras.tasks.list(params as MethodParsedParams<typeof method>);
+      case "tasks.subscribe": {
+        const p = params as MethodParsedParams<typeof method>;
+        if (!conn?.watchTask) throw new RpcError("bad_request", "WebSocket connection required");
+        if (p.watch) this.extras.tasks.get(p.id);
+        conn.watchTask(p.id, p.watch);
+        return { ok: true };
+      }
       case "tasks.get":
         return this.extras.tasks.get((params as MethodParsedParams<typeof method>).id);
       case "tasks.history":

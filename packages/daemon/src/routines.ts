@@ -316,7 +316,8 @@ export class RoutineService {
           t.started_at AS turn_started_at, t.ended_at AS turn_ended_at
          FROM routine_runs r LEFT JOIN queue q ON q.id = r.queue_id
          LEFT JOIN turns t ON t.id = (SELECT id FROM turns WHERE queue_id = r.queue_id ORDER BY started_at DESC, rowid DESC LIMIT 1)
-         WHERE r.routine_id = ? ORDER BY r.created_at DESC, r.rowid DESC LIMIT 50`,
+         WHERE r.routine_id = ? AND (r.task_id IS NULL OR r.task_id NOT IN (SELECT id FROM tasks WHERE private = 1))
+         ORDER BY r.created_at DESC, r.rowid DESC LIMIT 50`,
       )
       .all(id) as RunRow[];
     return rows.map(toRun);

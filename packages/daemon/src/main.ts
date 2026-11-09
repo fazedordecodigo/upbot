@@ -176,16 +176,24 @@ async function main() {
   mkdirSync(workspaceRoot, { recursive: true });
   const queue = new QueueStore(db);
   const hosts = new HostStore(db);
-  const sockets = new Set<import("bun").ServerWebSocket<unknown>>();
+  const sockets = new Set<
+    import("bun").ServerWebSocket<{ connId: string; taskIds: Set<string> }>
+  >();
 
   function broadcast(event: string, data: unknown) {
+    const privateTasks = chat.privateEventTasks(event, data);
     const msg = JSON.stringify({ event, data });
     for (const ws of sockets) {
       try {
-        ws.send(msg);
+        if (privateTasks.length) {
+          for (const taskId of privateTasks) {
+            if (ws.data.taskIds.has(taskId))
+              ws.send(JSON.stringify({ event: "task.event", data: { taskId, event, data } }));
+          }
+        } else ws.send(msg);
       } catch {}
     }
-    mobile.onEvent(event, data);
+    if (!privateTasks.length) mobile.onEvent(event, data);
     if (!event.startsWith("task.")) {
       try {
         tasks?.onEvent(event, data);
@@ -199,6 +207,7 @@ async function main() {
       queueMicrotask(() => {
         void (async () => {
           approvalsRef?.onTurnEnded(turn.agentId, turn.id);
+          if (chat.isPrivateTask(turn.taskId)) return;
           const row = turn.queueId ? queue.row(turn.queueId) : null;
           channels.onTurnEnded(turn, row);
           gateways.onTurnEnded(turn, row);
@@ -373,7 +382,7 @@ async function main() {
     return null;
   }
 
-  const server = Bun.serve({
+  const server = Bun.serve<{ connId: string; taskIds: Set<string> }>({
     hostname: "127.0.0.1",
     port: 0,
     fetch(req, srv) {
@@ -386,7 +395,8 @@ async function main() {
           logLimited("auth.rejected", "/ws:401", { route: "/ws", status: 401 });
           return new Response("unauthorized", { status: 401 });
         }
-        if (srv.upgrade(req)) return undefined;
+        if (srv.upgrade(req, { data: { connId: crypto.randomUUID(), taskIds: new Set<string>() } }))
+          return undefined;
         return new Response("upgrade failed", { status: 400 });
       }
       if (url.pathname === "/bridge") {
@@ -493,7 +503,15 @@ async function main() {
       async message(ws, msg) {
         const text = typeof msg === "string" ? msg : Buffer.from(msg).toString("utf8");
         try {
-          ws.send(await rpc.handle(text));
+          ws.send(
+            await rpc.handle(text, {
+              id: ws.data.connId,
+              watchTask: (id, watch) => {
+                if (watch) ws.data.taskIds.add(id);
+                else ws.data.taskIds.delete(id);
+              },
+            }),
+          );
         } catch (e) {
           log("rpc error", e);
         }

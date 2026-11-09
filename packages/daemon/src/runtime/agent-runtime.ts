@@ -610,7 +610,7 @@ export class AgentRuntime {
     if (this.status !== "error") this.setStatus("idle");
     // queue policy: user stop pauses the queue; failed turn auto-pauses it
     if ((status === "cancelled" && turn.byUser) || status === "failed") {
-      const queued = this.queue.queued(this.agent.id).length;
+      const queued = this.queue.queued(this.agent.id, true).length;
       if (queued > 0) {
         this.agents.setQueuePaused(this.agent.id, true);
         this.logRuntime(
