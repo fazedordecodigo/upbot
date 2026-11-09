@@ -127,7 +127,11 @@ test.skipIf(process.platform === "win32")(
       expect(
         (await client.request("providers.scan", {})).find((p) => p.id === "codex")?.version,
       ).toBeNull();
+      const listed = await client.request("providers.list", {});
+      expect(listed.find((p) => p.id === "codex")?.canLogin).toBe(true);
+      expect(listed.find((p) => p.id === "claude")?.canLogin).toBe(false);
       expect(await client.request("providers.login", { provider: "codex" })).toMatchObject({
+        canLogin: true,
         loginRunning: true,
       });
       const deadline = Date.now() + 5000;

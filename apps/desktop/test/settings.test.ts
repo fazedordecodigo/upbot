@@ -38,6 +38,11 @@ beforeAll(async () => {
     {
       BOTO_PROVIDER_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
       BOTO_VAULT_KEY: "14".repeat(32),
+      BOTO_PROVIDER_LOGIN_COMMAND_DEVIN: JSON.stringify([
+        process.execPath,
+        "-e",
+        "await Bun.sleep(1500)",
+      ]),
     },
     true,
   );
@@ -228,6 +233,44 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
     await p.close();
   }
 }, 60000);
+
+test("installed CLIs with a login command can sign in and show the waiting state", async () => {
+  const p = await settings();
+  try {
+    const row = p.locator("#st-accounts .st-row").filter({ hasText: "Devin" });
+    await row.waitFor();
+    expect(await row.locator(".badge").count()).toBe(0);
+    const button = row.getByRole("button");
+    expect(await button.innerText()).toBe("Entrar");
+    await button.click();
+    await until(async () => (await button.innerText()) === "Aguardando o navegador…");
+    expect(await button.isDisabled()).toBe(true);
+    await until(
+      async () => (await button.innerText()) === "Entrar" && !(await button.isDisabled()),
+    );
+  } finally {
+    await p.close();
+  }
+}, 30000);
+
+test("theme and sidebar width saved in the profile survive a fresh webview without being overwritten", async () => {
+  await rpc.request("profile.update", { sidebarWidth: 320, theme: "light" });
+  const p = await settings();
+  try {
+    await tab(p, "appearance");
+    await until(async () => (await p.locator("#st-width").inputValue()) === "320");
+    expect(await p.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
+    expect(await p.locator('[data-st-theme="light"]').getAttribute("aria-checked")).toBe("true");
+    await p.waitForTimeout(700);
+    expect(await rpc.request("profile.get", {})).toMatchObject({
+      sidebarWidth: 320,
+      theme: "light",
+    });
+  } finally {
+    await p.close();
+    await rpc.request("profile.update", { sidebarWidth: 272, theme: "dark" });
+  }
+}, 30000);
 
 test("settings is safe without daemon and keeps keyboard navigation", async () => {
   const p = await browser.newPage();

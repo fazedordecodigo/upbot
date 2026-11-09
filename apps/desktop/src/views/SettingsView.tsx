@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { errorFields, logWarn } from "../lib/log";
 import { readSidebarWidth, setSidebarWidth } from "../lib/sidebar-width";
+import { readStorage } from "../lib/storage";
 import { setThemePreference, useThemePref } from "../lib/theme";
 import { Memories } from "../settings/Memories";
 import { Permissions } from "../settings/Permissions";
@@ -52,8 +53,21 @@ export function SettingsView() {
     window.addEventListener("boto:sidebar-width", update);
     return () => window.removeEventListener("boto:sidebar-width", update);
   }, []);
+  const widthEdited = useRef(false);
+  const changeWidth = (next: number) => {
+    widthEdited.current = true;
+    setSidebarWidth(next);
+  };
+  const stored = profile.data;
   useEffect(() => {
-    if (!ready) return;
+    if (!stored) return;
+    if (stored.sidebarWidth !== null && readStorage("boto.sidebar-width") === null)
+      setSidebarWidth(stored.sidebarWidth);
+    if (stored.theme !== null && readStorage("boto.theme") === null)
+      setThemePreference(stored.theme);
+  }, [stored]);
+  useEffect(() => {
+    if (!ready || !widthEdited.current) return;
     const timer = setTimeout(() => {
       if (profile.data?.sidebarWidth === width) return;
       void client
@@ -396,7 +410,7 @@ export function SettingsView() {
                     max="400"
                     step="4"
                     value={width}
-                    onChange={(event) => setSidebarWidth(Number(event.target.value))}
+                    onChange={(event) => changeWidth(Number(event.target.value))}
                     aria-describedby="st-width-help"
                   />
                   <output className="st-range-value od-nowrap" id="st-width-out" htmlFor="st-width">
@@ -406,7 +420,7 @@ export function SettingsView() {
                     type="button"
                     className="btn btn-outline btn-sm"
                     id="st-width-reset"
-                    onClick={() => setSidebarWidth(272)}
+                    onClick={() => changeWidth(272)}
                   >
                     Restaurar
                   </button>

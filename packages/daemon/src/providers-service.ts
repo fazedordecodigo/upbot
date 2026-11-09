@@ -80,6 +80,7 @@ export class ProvidersService {
         const key = id.toUpperCase();
         const overridden =
           envOverride(`BOTO_PROVIDER_COMMAND_${key}`) ?? envOverride(`BOTO_ACP_COMMAND_${key}`);
+        const loginOverride = this.loginOverride(provider);
         return {
           id: provider,
           name,
@@ -88,6 +89,7 @@ export class ProvidersService {
           installHint,
           version: path && !overridden ? await this.version(path) : null,
           loggedIn: null,
+          canLogin: loginOverride !== null || (path !== null && !!LOGIN_COMMANDS[provider]),
           hasApiKey: false,
           apiKeyMasked: null,
           loginRunning: false,
@@ -133,6 +135,10 @@ export class ProvidersService {
     return result;
   }
 
+  private loginOverride(provider: ProviderId): string[] | null {
+    return envOverride(`BOTO_PROVIDER_LOGIN_COMMAND_${provider.toUpperCase().replace(/-/g, "_")}`);
+  }
+
   private async info(provider: ProviderId): Promise<ProviderInfo> {
     const info = (await this.list()).find((p) => p.id === provider);
     if (!info) throw new RpcError("bad_request", "unsupported provider");
@@ -142,9 +148,7 @@ export class ProvidersService {
   async login(provider: ProviderId): Promise<ProviderInfo> {
     const info = await this.info(provider);
     if (this.running.has(provider)) return info;
-    const override = envOverride(
-      `BOTO_PROVIDER_LOGIN_COMMAND_${provider.toUpperCase().replace(/-/g, "_")}`,
-    );
+    const override = this.loginOverride(provider);
     const command = override ?? LOGIN_COMMANDS[provider]?.split(" ");
     if (!command?.[0] || (!info.installed && !override))
       throw new RpcError("bad_request", "provider login unavailable");

@@ -102,7 +102,7 @@ export function Providers() {
   const [login, setLogin] = useState<string | null>(null);
   const toast = useToast();
   const providers = query.data ?? [];
-  const accounts = providers.filter((p) => p.installed && p.loggedIn !== null);
+  const accounts = providers.filter((p) => p.canLogin);
   const available = providers.filter((p) => p.ready);
   const fail = () => {
     const message = "Não foi possível atualizar o provedor.";
@@ -188,9 +188,11 @@ export function Providers() {
               accounts.map((p) => (
                 <div className="st-row od-row" key={p.id}>
                   <span className="st-row-name od-fill">{p.name}</span>
-                  <span className={p.loggedIn ? "badge badge-success" : "badge badge-outline"}>
-                    {p.loggedIn ? "Conectado" : "Não conectado"}
-                  </span>
+                  {p.loggedIn !== null && (
+                    <span className={p.loggedIn ? "badge badge-success" : "badge badge-outline"}>
+                      {p.loggedIn ? "Conectado" : "Não conectado"}
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="btn btn-outline btn-sm"
