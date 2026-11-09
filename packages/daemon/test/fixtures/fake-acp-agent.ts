@@ -201,7 +201,9 @@ async function handlePrompt(ctx: Ctx): Promise<{ stopReason: string }> {
     /^(?:<(boto_context|user_profile|agent_instructions|agent_memories|skills_library|conversation_summary|conversation_history|attachments|task_context)>[\s\S]*?<\/\1>\s*)+/,
     "",
   );
-  const external = /^<(external_message|team_message)[^>]*>\n([\s\S]*?)\n<\/\1>/.exec(stripped);
+  const external = /^<(external_message|team_message|routine)[^>]*>\n([\s\S]*?)\n<\/\1>/.exec(
+    stripped,
+  );
   const text = external ? external[2]! : stripped;
   const sessions = loadSessions();
   sessions[sessionId] ??= { prompts: [] };

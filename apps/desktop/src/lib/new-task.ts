@@ -89,6 +89,9 @@ export async function delegateTask(client: DaemonClient, draft: NewTaskDraft) {
       ...timing,
       webhook: false,
       enabled: true,
+      ...(draft.files.length
+        ? { attachments: await Promise.all(draft.files.map(attachment)) }
+        : {}),
     });
     return { view: "routines", id: routine.id } as const;
   }

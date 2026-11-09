@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, ChatItem, Task } from "@boto/protocol";
 import {
@@ -74,6 +74,74 @@ describe("tasks e2e", () => {
     await stopDaemon(daemon, c, stateDir);
     for (const dir of [dataDir, agentsRoot, stateDir]) await removeDir(dir);
   }, T);
+
+  test(
+    "routine attachments survive restart and reach every run with routine metadata",
+    async () => {
+      const files = [
+        {
+          name: "report.txt",
+          mime: "text/plain",
+          dataBase64: Buffer.from("saved report").toString("base64"),
+        },
+      ];
+      await expect(
+        c.request("routines.create", {
+          agentId: b.id,
+          name: "Too many",
+          prompt: "echo:x",
+          schedule: "daily 08:00",
+          attachments: Array.from({ length: 11 }, () => files[0]!),
+        }),
+      ).rejects.toMatchObject({ code: "bad_request" });
+      await expect(
+        c.request("routines.create", {
+          agentId: b.id,
+          name: "Too large",
+          prompt: "echo:x",
+          schedule: "daily 08:00",
+          attachments: [
+            { ...files[0]!, dataBase64: Buffer.alloc(25 * 1024 * 1024 + 1).toString("base64") },
+          ],
+        }),
+      ).rejects.toMatchObject({ code: "bad_request" });
+      const routine = await c.request("routines.create", {
+        agentId: b.id,
+        name: "Saved report",
+        prompt: "echo:report",
+        schedule: "daily 08:00",
+        attachments: files,
+        requireApproval: true,
+      });
+      await stopDaemon(daemon, c, stateDir);
+      daemon = await startDaemon(dataDir, agentsRoot, TOKEN, {
+        BOTO_ACP_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
+        FAKE_ACP_STATE_DIR: stateDir,
+      });
+      c = await DaemonClient.connect(daemon.port, TOKEN);
+      for (let i = 0; i < 2; i++) {
+        const run = await c.request("routines.run", { id: routine.id });
+        expect(run.error).toBeNull();
+        await waitTask(run.taskId!, (task) => task.situation === "done");
+        const item = (await taskItems(run.taskId!)).find((item) => item.kind === "user_message");
+        if (!item || item.kind !== "user_message") throw new Error("missing user message");
+        expect(item.routine).toEqual({ id: routine.id, name: routine.name, trigger: "manual" });
+        expect(item.attachments).toHaveLength(1);
+        expect(item.attachments![0]!.path.startsWith(join(b.workspacePath, "attachments"))).toBe(
+          true,
+        );
+        expect(readFileSync(item.attachments![0]!.path, "utf8")).toBe("saved report");
+        expect((await c.request("tasks.get", { id: run.taskId! })).requireApproval).toBe(true);
+      }
+      const prompt = readLog(stateDir)
+        .filter((entry) => entry.method === "session/prompt")
+        .at(-1);
+      expect(JSON.stringify(prompt?.params)).toContain("<attachments>");
+      expect(JSON.stringify(prompt?.params)).toContain('name=\\"Saved report\\"');
+      await c.request("routines.delete", { id: routine.id });
+    },
+    T,
+  );
 
   test(
     "routine runs create tasks with saved policy and routine prompt metadata",

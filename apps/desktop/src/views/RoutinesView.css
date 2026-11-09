@@ -14,6 +14,4 @@
   .routines .rt-main { flex-basis: 0; }
   .routines .rt-actions { flex-basis: 100%; justify-content: flex-end; }
   .routines .rt-actions .btn { min-width: var(--boto-size-target); min-height: var(--boto-size-target); }
-  .routines .page-head { flex-wrap: wrap; }
-  .routines .page-head > .od-fill { flex-basis: 100%; }
 }

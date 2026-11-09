@@ -13,7 +13,7 @@ import {
 } from "../../../packages/daemon/test/helpers";
 
 let browser: Browser;
-let vite: ReturnType<typeof Bun.spawn>;
+let vite: ReturnType<typeof Bun.spawn> | undefined;
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
 let directory: string;
@@ -29,11 +29,19 @@ beforeAll(async () => {
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  vite = Bun.spawn([process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420"], {
-    cwd: ROOT,
-    stdout: "ignore",
-    stderr: "inherit",
-  });
+  if (
+    !(await fetch(base)
+      .then((response) => response.ok)
+      .catch(() => false))
+  )
+    vite = Bun.spawn(
+      [process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420", "--strictPort"],
+      {
+        cwd: ROOT,
+        stdout: "ignore",
+        stderr: "inherit",
+      },
+    );
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
     if (
@@ -76,8 +84,15 @@ test("fresh daemon shows both empty states and the composer action", async () =>
     await page
       .getByText("Nenhuma tarefa agendada. Ao delegar, escolha “Daqui a 1 hora” ou “Amanhã às 8h”.")
       .waitFor();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const action = await page.locator("#new-routine").boundingBox();
+    const subtitle = await page.locator("#view-routines .page-sub").boundingBox();
+    if (!action || !subtitle) throw new Error("missing routine header");
+    expect(action.x).toBeGreaterThan(subtitle.x + subtitle.width);
+    expect(action.y).toBeLessThan(subtitle.y + subtitle.height);
     await page.locator("#new-routine").click();
     expect(await page.locator("#main").getAttribute("data-view")).toBe("new");
+    expect(await page.locator("#when-label").innerText()).toBe("Todo dia às 8h");
   } finally {
     await page.close();
   }
@@ -199,6 +214,45 @@ test("failed manual run reports the daemon error and restores action buttons", a
     await page.locator(".toast").filter({ hasText: message }).waitFor();
     expect(await button.isEnabled()).toBe(true);
     expect(await rpc.request("routines.runs", { id: routine.id })).toHaveLength(0);
+  } finally {
+    await page.close();
+  }
+}, 30000);
+
+test("manual routines create sidebar tasks whose tools wait for permission", async () => {
+  const agent = await rpc.request("agents.create", {
+    name: "Bot com permissão",
+    provider: "devin",
+  });
+  const routine = await rpc.request("routines.create", {
+    agentId: agent.id,
+    name: "Rotina com permissão",
+    prompt: "tool",
+    schedule: "daily 08:00",
+    requireApproval: true,
+  });
+  const page = await browser.newPage();
+  try {
+    await openRoutines(page);
+    const row = page.locator(".rt-row").filter({ hasText: routine.name });
+    await row.getByRole("button", { name: "Executar agora", exact: true }).click();
+    const permission = await rpc.waitForEventWhere(
+      "permission.requested",
+      (event) => event.agentId === agent.id,
+    );
+    const [run] = await rpc.request("routines.runs", { id: routine.id });
+    if (!run?.taskId) throw new Error("routine did not create a task");
+    expect((await rpc.request("tasks.get", { id: run.taskId })).situation).toBe("wait");
+    await page.locator(`[data-task-id="${run.taskId}"]:visible`).click();
+    await page.getByRole("button", { name: "Permitir nesta sessão", exact: true }).waitFor();
+    expect(
+      (await rpc.request("permissions.list", {})).some(
+        (item) => item.requestId === permission.requestId,
+      ),
+    ).toBe(true);
+    await page.getByRole("button", { name: "Permitir nesta sessão", exact: true }).click();
+    await rpc.waitForEventWhere("turn.ended", (turn) => turn.queueId === run.queueId);
+    expect((await rpc.request("tasks.get", { id: run.taskId })).situation).toBe("done");
   } finally {
     await page.close();
   }
