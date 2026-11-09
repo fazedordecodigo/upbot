@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { Icon } from "./icons";
-import "../dialogs/onboarding-dialogs/Toast.css";
+import "./Toast.css";
 
 const ToastContext = createContext<(text: string) => void>(() => {});
 export const useToast = () => useContext(ToastContext);

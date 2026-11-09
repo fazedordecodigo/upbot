@@ -50,7 +50,7 @@
 .onboarding .ob-foot { display: flex; justify-content: flex-end; gap: var(--boto-space-2); padding: var(--boto-space-5) var(--boto-space-8); border-top: 1px solid var(--boto-color-border); background: var(--boto-color-popover); }
 .onboarding .field { display: grid; gap: var(--boto-space-2); }
 .onboarding .textarea { min-height: var(--boto-size-textarea); }
-.onboarding .label-opt, .onboarding .field-help { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); }
+.onboarding .label-opt, .onboarding .field-help { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
 .onboarding .field-help { align-items: flex-start; gap: var(--boto-space-4); }
 :is(.onboarding, .st-view) .ob-options { display: grid; gap: var(--boto-space-3); }
 :is(.onboarding, .st-view) .ob-option { display: flex; align-items: center; gap: var(--boto-space-3); padding: var(--boto-space-4); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-lg); background: var(--boto-color-card); text-align: left; transition: border-color var(--boto-duration-fast) var(--boto-easing-out), background-color var(--boto-duration-fast) var(--boto-easing-out); }
@@ -59,11 +59,11 @@
 :is(.onboarding, .st-view) .ob-option > .od-icon { flex: none; color: var(--boto-color-muted-foreground); }
 :is(.onboarding, .st-view) .ob-option[aria-checked="true"] > .od-icon { color: var(--boto-color-primary); }
 :is(.onboarding, .st-view) .ob-option-name { display: block; font-size: var(--boto-font-size-sm); font-weight: 600; }
-:is(.onboarding, .st-view) .ob-option-desc { display: block; font-size: var(--boto-font-size-sm); line-height: 1.5; color: var(--boto-color-muted-foreground); }
+:is(.onboarding, .st-view) .ob-option-desc { display: block; font-size: var(--boto-font-size-base); line-height: 1.5; color: var(--boto-color-muted-foreground); }
 :is(.onboarding, .st-view) .ob-radio { display: grid; place-items: center; flex: none; width: var(--boto-space-4); height: var(--boto-space-4); border: 1px solid var(--boto-color-input); border-radius: var(--boto-radius-full); }
 :is(.onboarding, .st-view) .ob-option[aria-checked="true"] .ob-radio { border-color: var(--boto-color-primary); }
 :is(.onboarding, .st-view) .ob-option[aria-checked="true"] .ob-radio::after { content: ""; width: var(--boto-space-2); height: var(--boto-space-2); border-radius: var(--boto-radius-full); background: var(--boto-color-primary); }
-.onboarding .ob-note { font-size: var(--boto-font-size-sm); color: var(--boto-color-muted-foreground); }
+.onboarding .ob-note { font-size: var(--boto-font-size-base); color: var(--boto-color-muted-foreground); }
 .onboarding .ob-field-group { display: grid; gap: var(--boto-space-3); }
 :is(.onboarding, .st-view) .ob-theme-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--boto-space-3); }
 :is(.onboarding, .st-view) .ob-theme-option { display: grid; gap: var(--boto-space-3); padding: var(--boto-space-3); }
@@ -75,8 +75,8 @@
 :is(.onboarding, .st-view) .ob-swatch[data-swatch="light"] { color-scheme: light; --boto-color-background: var(--boto-color-preview-light-bg); --boto-color-muted-surface: var(--boto-color-preview-light-border); --boto-color-card: var(--boto-color-logo-tile); --boto-color-border: var(--boto-color-preview-light-border); }
 .onboarding .ob-setting { gap: var(--boto-space-5); padding-block: var(--boto-space-5); border-top: 1px solid var(--boto-color-border); border-bottom: 1px solid var(--boto-color-border); }
 .onboarding .ob-setting-name { font-size: var(--boto-font-size-sm); font-weight: 600; }
-.onboarding .ob-setting-help { font-size: var(--boto-font-size-sm); color: var(--boto-color-muted-foreground); }
-.onboarding .ob-tip { gap: var(--boto-space-3); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
+.onboarding .ob-setting-help { font-size: var(--boto-font-size-base); color: var(--boto-color-muted-foreground); }
+.onboarding .ob-tip { gap: var(--boto-space-3); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-base); }
 .onboarding .ob-mock, .onboarding .ob-mini-composer { border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-lg); background: var(--boto-color-card); overflow: hidden; }
 .onboarding .ob-mock { padding: var(--boto-space-5); }
 .onboarding .ob-mock:empty { display: none; }
@@ -84,7 +84,7 @@
 .onboarding .ob-mock-head { gap: var(--boto-space-3); padding-bottom: var(--boto-space-4); border-bottom: 1px solid var(--boto-color-border); }
 .onboarding .ob-mock-avatar { display: grid; place-items: center; width: var(--boto-space-8); height: var(--boto-space-8); border-radius: var(--boto-radius-md); background: var(--boto-color-secondary); flex: none; }
 .onboarding .ob-mock-title { font-size: var(--boto-font-size-sm); font-weight: 600; }
-.onboarding .ob-mock-meta { font-size: var(--boto-font-size-xs); color: var(--boto-color-muted-foreground); }
+.onboarding .ob-mock-meta { font-size: var(--boto-font-size-sm); color: var(--boto-color-muted-foreground); }
 .onboarding .ob-memory-list { display: grid; gap: var(--boto-space-4); margin: var(--boto-space-5) 0; }
 .onboarding .ob-memory-list dt { font: var(--boto-font-size-xs)/1.5 var(--boto-font-mono); color: var(--boto-color-muted-foreground); }
 .onboarding .ob-memory-list dd { margin: var(--boto-space-1) 0 0; overflow-wrap: anywhere; font-size: var(--boto-font-size-sm); }
@@ -95,7 +95,7 @@
 .onboarding .ob-mini { display: grid; gap: var(--boto-space-3); }
 .onboarding .ob-mini-mark { margin-bottom: var(--boto-space-3); }
 .onboarding .ob-mini-composer { margin-top: var(--boto-space-3); padding: var(--boto-space-4); }
-.onboarding .ob-mini-placeholder { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); line-height: 1.5; margin-bottom: var(--boto-space-6); }
+.onboarding .ob-mini-placeholder { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-base); line-height: 1.5; margin-bottom: var(--boto-space-6); }
 .onboarding .ob-mini-bar { flex-wrap: wrap; gap: var(--boto-space-2); }
 .onboarding .ob-mini-mode { font-size: var(--boto-font-size-xs); }
 .onboarding .ob-mini-send { display: grid; place-items: center; width: var(--boto-space-6); height: var(--boto-space-6); border-radius: var(--boto-radius-full); background: var(--boto-color-primary); color: var(--boto-color-primary-foreground); }

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { chromium } from "playwright-core";
 import {
   DaemonClient,
@@ -28,6 +29,11 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     await page.clock.install({ time: new Date(2026, 10, 9, 3, 0) });
     await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
     await page.locator("#onboarding[open]").waitFor();
+    for (const key of ["Control+k", "Meta+k", "Control+Shift+o", "Meta+Shift+o"]) {
+      await page.keyboard.press(key);
+      expect(await page.locator("dialog[open]").count()).toBe(1);
+      expect(await page.locator("#main").getAttribute("data-view")).toBe("home");
+    }
     await page.locator("#ob-next:not([disabled])").click();
     await page.locator("#ob-name").fill("Iara");
     await page.locator("#ob-about").fill("Prefiro respostas curtas.");
@@ -55,12 +61,54 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     expect(profile.defaults.private).toBe(true);
     expect(profile.theme).toBe("light");
     expect(profile.onboardingCompletedAt).not.toBeNull();
+    await page.waitForFunction(
+      () => document.querySelector("#private-switch")?.getAttribute("aria-checked") === "true",
+    );
+    await page.locator("#private-switch").click();
+    await page.waitForFunction(
+      () => document.querySelector("#private-switch")?.getAttribute("aria-checked") === "false",
+    );
+    await page.locator(".sb-user").first().click();
+    await page.getByRole("menuitem", { name: "Conhecer o Boto" }).click();
+    await page.locator("#ob-next:not([disabled])").waitFor();
+    expect(await page.locator("#ob-private").getAttribute("aria-checked")).toBe("false");
+    expect((await client.request("profile.get", {})).defaults.private).toBe(false);
+    await page.locator("#ob-skip").click();
+    await page.locator("#onboarding[open]").waitFor({ state: "hidden" });
+    for (const cache of [null, "dark"]) {
+      const context = await browser.newContext();
+      if (cache)
+        await context.addInitScript((value) => localStorage.setItem("boto.theme", value), cache);
+      const fresh = await context.newPage();
+      await fresh.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+      await fresh.waitForFunction(() => document.documentElement.dataset.theme === "light");
+      expect(await fresh.evaluate(() => localStorage.getItem("boto.theme"))).toBe("light");
+      expect(await fresh.locator("#onboarding[open]").count()).toBe(0);
+      await context.close();
+    }
     await page.reload();
     await page.locator(".sb-user").first().waitFor();
+    await page.evaluate(() => {
+      const dialog = document.createElement("dialog");
+      dialog.id = "unrelated-modal";
+      document.body.append(dialog);
+      dialog.showModal();
+    });
+    for (const key of ["Control+k", "Meta+k", "Control+Shift+o", "Meta+Shift+o"]) {
+      await page.keyboard.press(key);
+      expect(await page.locator("dialog[open]").count()).toBe(1);
+      expect(await page.locator("#main").getAttribute("data-view")).toBe("home");
+    }
+    await page.evaluate(() => document.getElementById("unrelated-modal")?.remove());
     await page.keyboard.press("Control+k");
     await page.locator("#command-input").fill("Atalhos");
     await page.keyboard.press("Enter");
     await page.locator("#shortcuts[open]").waitFor();
+    for (const key of ["Control+k", "Control+Shift+o"]) {
+      await page.keyboard.press(key);
+      expect(await page.locator("dialog[open]").count()).toBe(1);
+      expect(await page.locator("#main").getAttribute("data-view")).toBe("home");
+    }
     expect(await page.locator("#onboarding").getAttribute("open")).toBeNull();
     await page.keyboard.press("Escape");
     await page.locator("#shortcuts[open]").waitFor({ state: "hidden" });
@@ -96,6 +144,9 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     });
     await page.locator("#ob-skip").click();
     await page.locator('#onboarding [role="alert"]').waitFor();
+    expect(await page.locator('#onboarding [role="alert"]').textContent()).toBe(
+      "Confira os dados: o nome pode ter até 40 caracteres e o texto sobre você, até 600.",
+    );
     expect((await client.request("profile.get", {})).onboardingCompletedAt).toBeNull();
     await page.locator("#ob-name").fill("");
     await page.locator("#ob-about").fill("");
@@ -163,6 +214,9 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     });
     await page.locator("#ask-confirm").click();
     await page.locator("#confirm[open]").waitFor();
+    await page.keyboard.press("Control+k");
+    await page.keyboard.press("Control+Shift+o");
+    expect(await page.locator("dialog[open]").count()).toBe(1);
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("confirm-cancel");
     await page.keyboard.press("Escape");
     expect(await page.locator("#confirm-result").textContent()).toBe("false");
@@ -171,6 +225,12 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     expect(await page.locator("#confirm-result").textContent()).toBe("true");
     await page.locator(".toast").waitFor();
     expect(await page.locator(".toast").textContent()).toContain("Agente excluído.");
+    expect(
+      await page.locator(".toaster").evaluate((element) => getComputedStyle(element).maxWidth),
+    ).toBe("360px");
+    expect(
+      await page.locator(".toast").evaluate((element) => element.getBoundingClientRect().width),
+    ).toBeLessThanOrEqual(360);
     await page.locator('.toast button[aria-label="Fechar"]').click();
     expect(await page.locator(".toast").count()).toBe(0);
     type Settle = { settleConfirm: { resolve: () => void; reject: (e: Error) => void } };
@@ -199,3 +259,42 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     await removeDirAfterExit(daemon.proc, dir);
   }
 }, 60000);
+
+test("onboarding errors never expose daemon messages", async () => {
+  const { onboardingErrorMessage } = await import("../src/lib/errors");
+  expect(onboardingErrorMessage(new Error("private internal details"))).toBe(
+    "Não foi possível salvar suas preferências. Tente de novo.",
+  );
+  expect(onboardingErrorMessage(new Error("daemon not connected"))).toBe(
+    "Sem conexão com o Boto. Tente de novo quando a conexão voltar.",
+  );
+});
+
+test("prototype styles cover onboarding and shortcuts markup", () => {
+  const css = readFileSync(
+    new URL("../../../docs/design/assets/boto-ui.css", import.meta.url),
+    "utf8",
+  );
+  const html = readFileSync(new URL("../../../docs/design/index.html", import.meta.url), "utf8");
+  for (const name of [
+    "onboarding",
+    "ob-visual",
+    "ob-panel",
+    "ob-progress",
+    "ob-dot",
+    "ob-options",
+    "ob-option",
+    "ob-radio",
+    "ob-swatch",
+    "ob-setting",
+    "ob-tip",
+    "ob-foot",
+    "shortcut-list",
+    "shortcut-row",
+  ]) {
+    expect(html).toContain(name);
+    expect(css).toContain(`.${name}`);
+  }
+  expect(css).toContain("@media (max-width: 767px)");
+  expect(css).toContain(".onboarding .ob-visual { display: none; }");
+});

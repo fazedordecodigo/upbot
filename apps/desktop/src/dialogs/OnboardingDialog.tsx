@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useState } from "react";
-import { errorMessage } from "../lib/errors";
+import { onboardingErrorMessage } from "../lib/errors";
 import { dayGreeting } from "../lib/greeting";
+import { errorFields, logWarn } from "../lib/log";
 import { isMac } from "../lib/platform";
 import { setThemePreference } from "../lib/theme";
 import { useDaemon } from "../shell/daemon";
@@ -56,7 +57,8 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
         setLoaded(true);
       })
       .catch((cause: unknown) => {
-        if (active) setError(errorMessage(cause));
+        logWarn("onboarding.load_failed", errorFields(cause));
+        if (active) setError("Não foi possível carregar suas preferências. Tente de novo.");
       });
     return () => {
       active = false;
@@ -85,7 +87,8 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
       await client.request("onboarding.complete", {});
       onClose();
     } catch (cause: unknown) {
-      setError(errorMessage(cause));
+      logWarn("onboarding.save_failed", errorFields(cause));
+      setError(onboardingErrorMessage(cause));
     } finally {
       setBusy(false);
     }

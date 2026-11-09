@@ -4,8 +4,10 @@ import { OnboardingDialog } from "../dialogs/OnboardingDialog";
 import { ShortcutsDialog } from "../dialogs/ShortcutsDialog";
 import { useFirstRunOnboarding } from "../hooks/useFirstRunOnboarding";
 import { useMediaQuery } from "../hooks/useLayerFocus";
+import { useShellProfile } from "../hooks/useShellProfile";
 import { readSidebarWidth, setSidebarWidth } from "../lib/sidebar-width";
 import { readStorage, writeStorage } from "../lib/storage";
+import { setThemePreference } from "../lib/theme";
 import { Sheet } from "../ui/Sheet";
 import { ToastProvider } from "../ui/Toast";
 import { TooltipLayer } from "../ui/Tooltip";
@@ -23,6 +25,10 @@ function Shell() {
   const [command, setCommand] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
+  const profile = useShellProfile();
+  useEffect(() => {
+    if (profile.data?.theme) setThemePreference(profile.data.theme);
+  }, [profile.data]);
   useFirstRunOnboarding(() => setOnboarding(true));
   const [collapsed, setCollapsed] = useState(
     () => readStorage("boto.sidebar-collapsed") === "true",
@@ -45,6 +51,7 @@ function Shell() {
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || !(event.ctrlKey || event.metaKey)) return;
+      if (document.querySelector("dialog:modal")) return;
       if (event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSheet(false);

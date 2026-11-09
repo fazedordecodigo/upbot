@@ -63,8 +63,6 @@ export function SettingsView() {
     if (!stored) return;
     if (stored.sidebarWidth !== null && readStorage("boto.sidebar-width") === null)
       setSidebarWidth(stored.sidebarWidth);
-    if (stored.theme !== null && readStorage("boto.theme") === null)
-      setThemePreference(stored.theme);
   }, [stored]);
   useEffect(() => {
     if (!ready || !widthEdited.current) return;
