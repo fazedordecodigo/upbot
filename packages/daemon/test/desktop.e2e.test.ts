@@ -224,6 +224,57 @@ describe("desktop.* (daemon e2e with a fake host desktop stream)", () => {
     });
   });
 
+  test("placement RPC reconnects an existing subscriber on the same host without another subscribe", async () => {
+    const agent = await c.request("agents.create", { name: "Same host", provider: "devin" });
+    const placement = { agentId: agent.id, hostId: host.id, isolation: "firecracker" as const };
+    await c.request("placements.set", placement);
+    const viewer = await DaemonClient.connect(daemon.port, TOKEN);
+    try {
+      const machine = (await viewer.request("desktop.machines", {})).find(
+        (m) => m.agentId === agent.id,
+      )!;
+      await viewer.request("desktop.subscribe", { machineId: machine.id });
+      await viewer.waitForEventWhere(
+        "desktop.machine",
+        (m) => m.id === machine.id && m.status === "ready",
+        10000,
+      );
+      await viewer.waitForEventWhere(
+        "desktop.frame",
+        (frame) => frame.machineId === machine.id,
+        10000,
+      );
+      await c.request("placements.set", { ...placement, isolation: "none" });
+      expect(
+        await viewer.waitForEventWhere(
+          "desktop.machine",
+          (m) => m.id === machine.id && m.status === "stopped",
+          10000,
+        ),
+      ).toMatchObject({ hostId: host.id, width: 0, height: 0, thumbnailAt: null });
+      await c.request("placements.set", placement);
+      expect(
+        await viewer.waitForEventWhere(
+          "desktop.machine",
+          (m) => m.id === machine.id && m.status === "ready",
+          10000,
+        ),
+      ).toMatchObject({ hostId: host.id, width: 1280, height: 800 });
+      expect(
+        await viewer.waitForEventWhere(
+          "desktop.frame",
+          (frame) => frame.machineId === machine.id,
+          10000,
+        ),
+      ).toMatchObject({ width: 1280, height: 800 });
+      expect(
+        logEntries().filter((entry) => entry.agentId === agent.id && entry.event === "connected"),
+      ).toHaveLength(2);
+    } finally {
+      viewer.close();
+    }
+  });
+
   test("a stream that ends under a viewer comes back once the guest is reachable again", async () => {
     // a new turn replaces the agent's microVM: the host desktop stream ends while the task
     // view is still subscribed, so the daemon must attach to the new guest on its own
