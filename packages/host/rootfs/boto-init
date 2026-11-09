@@ -4,6 +4,8 @@
 #   vsock 1024 (listen)  -> provider stdio via `boto-host guest-exec`
 #   /run/boto/bridge.sock -> host vsock 5000 (boto MCP bridge)
 #   127.0.0.1:3128      -> host vsock 3128 (HTTPS CONNECT proxy, public destinations only)
+#   vsock 5900 (listen)  -> live desktop stream via `boto-host guest-desktop` (Xvfb :0 + Openbox)
+# The hostname is the machine name passed on the kernel command line (boto.name=<slug>).
 set -eu
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 mount -t proc proc /proc
@@ -20,11 +22,26 @@ if [ -e /dev/vdb ]; then
   mount --bind /persist/workspace /workspace
   mount --bind /persist/root /root
 fi
-hostname boto-vm
+NAME=boto-vm
+for arg in $(cat /proc/cmdline); do
+  case "$arg" in boto.name=*) NAME="${arg#boto.name=}" ;; esac
+done
+hostname "$NAME"
+echo "$NAME" > /etc/hostname
 ip link set lo up 2>/dev/null || true
 export HOME=/root BOTO_GUEST_PROXY=http://127.0.0.1:3128
 export BOTO_GUEST_BRIDGE_SOCKET=/run/boto/bridge.sock
 socat UNIX-LISTEN:/run/boto/bridge.sock,fork,mode=600 VSOCK-CONNECT:2:5000 &
 socat TCP-LISTEN:3128,bind=127.0.0.1,fork,reuseaddr VSOCK-CONNECT:2:3128 &
+if command -v Xvfb >/dev/null 2>&1; then
+  mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
+  export DISPLAY=:0
+  Xvfb :0 -screen 0 "${BOTO_DESKTOP_GEOMETRY:-1280x800}x24" -nolisten tcp -ac -noreset >/dev/null 2>&1 &
+  i=0
+  while [ ! -S /tmp/.X11-unix/X0 ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+  xsetroot -solid '#0f1a1f' >/dev/null 2>&1 || true
+  openbox >/dev/null 2>&1 &
+  socat VSOCK-LISTEN:5900,fork,reuseaddr EXEC:"bun /opt/boto/boto-host.ts guest-desktop" &
+fi
 cd /workspace
 exec socat -t 10 VSOCK-LISTEN:1024,fork,reuseaddr EXEC:"bun /opt/boto/boto-host.ts guest-exec"

@@ -6,14 +6,17 @@
 # Requires: docker, curl, mkfs.ext4, sudo (for loop mounts). No credentials go into the
 # image; sign in to provider CLIs inside a microVM or pass API keys via the Boto vault.
 #
-# usage: build-rootfs.sh [--size-mib 4096] [--providers "claude codex gemini opencode cursor devin grok"] [--base image]
+# usage: build-rootfs.sh [--size-mib 6144] [--providers "claude codex gemini opencode cursor devin grok"] [--base image] [--no-desktop]
+# The guest desktop (Xvfb + Openbox + xdotool + scrot + Chromium, streamed to the app as
+# "Área de trabalho ao vivo") adds about 700 MiB; --no-desktop skips it and defaults to 4096 MiB.
 # Use --size-mib 8192 when installing all seven providers.
 set -euo pipefail
 FC_VERSION="${FC_VERSION:-v1.12.1}"
 DEVIN_CLI_VERSION="${DEVIN_CLI_VERSION:-3000.12.17}"
 GROK_CLI_VERSION="${GROK_CLI_VERSION:-1.0.77}"
 KERNEL_URL="${KERNEL_URL:-https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.12/$(uname -m)/vmlinux-6.1.128}"
-SIZE_MIB=4096
+SIZE_MIB=""
+DESKTOP=1
 PROVIDERS="claude codex"
 BASE="${BOTO_ROOTFS_BASE:-}"
 BASE_EXPLICIT=0
@@ -22,6 +25,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --size-mib) SIZE_MIB="$2"; shift 2 ;;
     --providers) PROVIDERS="$2"; shift 2 ;;
+    --no-desktop) DESKTOP=0; shift ;;
     --base)
       [ $# -ge 2 ] && [ -n "$2" ] || { echo "--base requires an image reference" >&2; exit 2; }
       BASE="$2"
@@ -31,6 +35,15 @@ while [ $# -gt 0 ]; do
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
+if [ -z "$SIZE_MIB" ]; then
+  [ "$DESKTOP" -eq 1 ] && SIZE_MIB=6144 || SIZE_MIB=4096
+fi
+DESKTOP_PACKAGES=""
+if [ "$DESKTOP" -eq 1 ]; then
+  # pinned to the Debian bookworm versions (apt fails loudly when the archive moves on;
+  # override with BOTO_DESKTOP_PACKAGES="pkg=ver ..." instead of unpinning)
+  DESKTOP_PACKAGES="${BOTO_DESKTOP_PACKAGES:-xvfb=2:21.1.7-3+deb12u13 openbox=3.6.1-10 xdotool=1:3.20160805.1-5 scrot=1.8.1-1 x11-utils=7.7+5 x11-xserver-utils=7.7+9+b1 fonts-dejavu-core=2.37-6 chromium=156.0.8078.79-1~deb12u1}"
+fi
 ROOT="${BOTO_HOST_ROOT:-$HOME/.boto}"
 if [ -z "${BOTO_HOST_ROOT:-}" ] && [ ! -e "$ROOT" ] && [ -d "$HOME/.upbot" ]; then
   mv "$HOME/.upbot" "$ROOT"
@@ -94,7 +107,7 @@ cp "$HELPER" "$work/boto-host.ts"
 cp "$HERE/boto-init" "$work/boto-init" 2>/dev/null || cp "$ROOT/bin/boto-init" "$work/boto-init"
 cat > "$work/Dockerfile" <<DOCKER
 FROM ${BASE}
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git socat iproute2 unzip xz-utils \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git socat iproute2 unzip xz-utils procps=2:4.0.2-3 ${DESKTOP_PACKAGES} \
  && rm -rf /var/lib/apt/lists/*
 RUN set -eu; \
  mkdir -p /tmp/node-dist; \

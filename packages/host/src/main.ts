@@ -6,11 +6,15 @@
 //   boto-host run            first stdin line = RunSpec JSON; then stdio is the provider's
 //   boto-host bridge         stdio MCP server forwarding to the daemon over a unix socket
 //   boto-host guest-exec     (inside a microVM) first stdin line = exec spec JSON
+//   boto-host desktop        first stdin line = {agentId}; then NDJSON desktop stream of the
+//                            agent's running microVM (frames/cursor out, input/agent in)
+//   boto-host guest-desktop  (inside a microVM) NDJSON desktop agent on DISPLAY :0
 //
 // Isolation "firecracker" boots one microVM per agent session (`firecracker --no-api
 // --config-file`), talks to the guest over vsock (CONNECT 1024 = provider stdio), and serves
 // guest-initiated vsock ports: 5000 = boto bridge, 3128 = HTTPS CONNECT proxy (the guest
-// has no network device; outbound traffic goes through this proxy).
+// has no network device; outbound traffic goes through this proxy). CONNECT 5900 is the
+// desktop stream served by `boto-host guest-desktop` (Xvfb + Openbox started by boto-init).
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
@@ -44,14 +48,18 @@ export type RunSpec = {
   bridgeSocket?: string;
   vcpus?: number;
   memMib?: number;
+  /** Guest hostname / machine name shown in the UI (`codigo-01`); lowercase slug. */
+  machineName?: string;
 };
 
 const ROOT = resolve(process.env.BOTO_HOST_ROOT || join(homedir(), ".boto"));
 const VSOCK_EXEC_PORT = 1024;
 const VSOCK_BRIDGE_PORT = 5000;
 const VSOCK_PROXY_PORT = 3128;
+const VSOCK_DESKTOP_PORT = 5900;
 const PROVIDER_CLIS = ["claude", "codex", "devin", "agent", "grok", "opencode", "gemini"];
-const HOST_VERSION = "0.5.0";
+const HOST_VERSION = "0.6.0";
+const MACHINE_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 const die = (msg: string, code = 1): never => {
   process.stderr.write(`boto-host: ${msg}\n`);
@@ -496,7 +504,11 @@ export function vmConfig(spec: RunSpec, rootDisk: string, uds: string, workspace
   return {
     "boot-source": {
       kernel_image_path: join(ROOT, "firecracker", "vmlinux"),
-      boot_args: "console=ttyS0 reboot=k panic=1 pci=off init=/sbin/boto-init",
+      boot_args: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/boto-init${
+        spec.machineName && MACHINE_NAME_RE.test(spec.machineName)
+          ? ` boto.name=${spec.machineName}`
+          : ""
+      }`,
     },
     drives: [
       { drive_id: "rootfs", path_on_host: rootDisk, is_root_device: true, is_read_only: false },
@@ -851,12 +863,446 @@ async function bridge() {
   await new Promise<void>((r) => rl.on("close", () => r()));
 }
 
+// ---------------------------------------------------------------------------------------
+// Desktop stream. Newline-delimited JSON in both directions, one message per line:
+//   guest -> daemon: ready {width,height,name} | frame {seq,mime,data,width,height}
+//                    | thumb {mime,data,width,height} | cursor {x,y,kind}
+//                    | done {id,text?} | error {id?,code}
+//   daemon -> guest: stream {fps,thumbEveryMs} | controller {controller}
+//                    | input {events} (user) | agent {id,events} | screenshot {id}
+// The guest refuses `input` unless the controller is the user and `agent` unless it is the
+// agent, so a stale daemon state can never move the pointer behind the user's back.
+
+export const DESKTOP_MAX_LINE = 8 * 1024 * 1024;
+export const DESKTOP_MAX_EVENTS = 64;
+const DESKTOP_MAX_COORD = 8192;
+const DESKTOP_KEYSYM_RE = /^[A-Za-z0-9_]{1,32}$/;
+const DESKTOP_KEYCOMBO_RE = /^[A-Za-z0-9_]{1,32}(\+[A-Za-z0-9_]{1,32}){0,4}$/;
+
+export type DesktopInputEvent =
+  | { type: "mouse_move"; x: number; y: number }
+  | { type: "mouse_down"; button: number }
+  | { type: "mouse_up"; button: number }
+  | { type: "wheel"; deltaY: number }
+  | { type: "key_down"; keysym: string }
+  | { type: "key_up"; keysym: string }
+  | { type: "click"; x: number; y: number; button: number; double: boolean }
+  | { type: "type"; text: string }
+  | { type: "key"; keysym: string };
+
+export type DesktopController = "agent" | "user";
+
+export function encodeDesktopMessage(message: object): string {
+  return `${JSON.stringify(message)}\n`;
+}
+
+/** Splits a byte stream into JSON messages; oversized or malformed lines are reported, not thrown. */
+export class DesktopDecoder {
+  private buffer: Buffer = Buffer.alloc(0);
+  constructor(private readonly maxLine = DESKTOP_MAX_LINE) {}
+  push(
+    chunk: Buffer,
+    onMessage: (m: Record<string, unknown>) => void,
+    onError?: (code: string) => void,
+  ) {
+    this.buffer = this.buffer.length ? Buffer.concat([this.buffer, chunk]) : chunk;
+    for (;;) {
+      const nl = this.buffer.indexOf(10);
+      if (nl < 0) {
+        if (this.buffer.length > this.maxLine) {
+          this.buffer = Buffer.alloc(0);
+          onError?.("line_too_long");
+        }
+        return;
+      }
+      const line = this.buffer.subarray(0, nl);
+      this.buffer = this.buffer.subarray(nl + 1);
+      if (line.length === 0) continue;
+      if (line.length > this.maxLine) {
+        onError?.("line_too_long");
+        continue;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line.toString("utf8"));
+      } catch {
+        onError?.("bad_json");
+        continue;
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        onError?.("bad_message");
+        continue;
+      }
+      onMessage(parsed as Record<string, unknown>);
+    }
+  }
+}
+
+const isCoord = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= DESKTOP_MAX_COORD;
+const isButton = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 5;
+
+/**
+ * Strict validation of a desktop event batch. User batches (`source: "user"`) only carry the
+ * primitive pointer/key events; the agent's computer tool may also send composite events.
+ */
+export function validateDesktopEvents(
+  raw: unknown,
+  source: DesktopController,
+): DesktopInputEvent[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > DESKTOP_MAX_EVENTS) return null;
+  const out: DesktopInputEvent[] = [];
+  for (const e of raw) {
+    if (!e || typeof e !== "object") return null;
+    const ev = e as Record<string, unknown>;
+    const keys = Object.keys(ev);
+    switch (ev.type) {
+      case "mouse_move":
+        if (keys.length !== 3 || !isCoord(ev.x) || !isCoord(ev.y)) return null;
+        out.push({ type: "mouse_move", x: ev.x, y: ev.y });
+        break;
+      case "mouse_down":
+      case "mouse_up":
+        if (keys.length !== 2 || !isButton(ev.button)) return null;
+        out.push({ type: ev.type, button: ev.button });
+        break;
+      case "wheel":
+        if (
+          keys.length !== 2 ||
+          typeof ev.deltaY !== "number" ||
+          !Number.isInteger(ev.deltaY) ||
+          Math.abs(ev.deltaY) > 100
+        )
+          return null;
+        out.push({ type: "wheel", deltaY: ev.deltaY });
+        break;
+      case "key_down":
+      case "key_up":
+        if (
+          keys.length !== 2 ||
+          typeof ev.keysym !== "string" ||
+          !DESKTOP_KEYSYM_RE.test(ev.keysym)
+        )
+          return null;
+        out.push({ type: ev.type, keysym: ev.keysym });
+        break;
+      case "click":
+        if (source !== "agent" || !isCoord(ev.x) || !isCoord(ev.y)) return null;
+        if (ev.button !== undefined && !isButton(ev.button)) return null;
+        if (ev.double !== undefined && typeof ev.double !== "boolean") return null;
+        out.push({
+          type: "click",
+          x: ev.x,
+          y: ev.y,
+          button: (ev.button as number | undefined) ?? 1,
+          double: ev.double === true,
+        });
+        break;
+      case "type":
+        if (source !== "agent" || typeof ev.text !== "string" || ev.text.length > 4000) return null;
+        out.push({ type: "type", text: ev.text });
+        break;
+      case "key":
+        if (
+          source !== "agent" ||
+          typeof ev.keysym !== "string" ||
+          !DESKTOP_KEYCOMBO_RE.test(ev.keysym)
+        )
+          return null;
+        out.push({ type: "key", keysym: ev.keysym });
+        break;
+      default:
+        return null;
+    }
+  }
+  return out;
+}
+
+/** Who may move the pointer right now. The daemon mirrors takeover/release into this state. */
+export class DesktopControllerState {
+  controller: DesktopController = "agent";
+  set(raw: unknown): boolean {
+    if (raw !== "agent" && raw !== "user") return false;
+    this.controller = raw;
+    return true;
+  }
+  accepts(source: DesktopController): boolean {
+    return this.controller === source;
+  }
+}
+
+function findRunningVm(agentId: string): string | null {
+  const agentDir = join(ROOT, "vms", safeId(agentId));
+  if (!existsSync(agentDir)) return null;
+  for (const entry of readdirSync(agentDir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^r[0-9a-f]{8}$/.test(entry.name)) continue;
+    const runDir = join(agentDir, entry.name);
+    const pidFile = join(runDir, "firecracker.pid");
+    if (!existsSync(pidFile)) continue;
+    const pid = Number(readFileSync(pidFile, "utf8"));
+    if (Number.isInteger(pid) && pid > 1 && pidAlive(pid) && existsSync(join(runDir, "v.sock")))
+      return join(runDir, "v.sock");
+  }
+  return null;
+}
+
+/** Host side: attach the daemon's stdio to the guest desktop agent of the agent's microVM. */
+async function desktop() {
+  const { line, rest } = await readFirstLine(process.stdin);
+  let spec: { agentId?: unknown };
+  try {
+    spec = JSON.parse(line);
+  } catch {
+    return die("invalid desktop spec");
+  }
+  if (typeof spec.agentId !== "string" || !spec.agentId) return die("invalid desktop spec");
+  const rawTimeout = process.env.BOTO_DESKTOP_CONNECT_TIMEOUT_MS?.trim();
+  const timeoutMs = rawTimeout ? Number(rawTimeout) : 90000;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
+    die("BOTO_DESKTOP_CONNECT_TIMEOUT_MS must be a positive number");
+  const deadline = Date.now() + timeoutMs;
+  let guest: Socket | null = null;
+  let lastError = "no running microVM for this agent";
+  while (!guest) {
+    const uds = findRunningVm(spec.agentId);
+    if (uds) {
+      try {
+        guest = await vsockConnect(uds, VSOCK_DESKTOP_PORT);
+        break;
+      } catch (e) {
+        lastError = (e as Error).message;
+      }
+    }
+    if (Date.now() > deadline) return die(`cannot reach the guest desktop: ${lastError}`);
+    await Bun.sleep(500);
+  }
+  guest.on("error", () => {});
+  guest.pipe(process.stdout);
+  guest.resume();
+  pumpStdin(rest, guest);
+  process.stdin.once("end", () => guest?.end());
+  guest.once("close", () => finish(0));
+  process.stdout.once("close", () => {
+    guest?.destroy();
+    finish(0);
+  });
+}
+
+function xdo(display: string, args: string[], input?: string): string | null {
+  const r = spawnSync("xdotool", args, {
+    env: { ...process.env, DISPLAY: display },
+    input,
+    timeout: 10000,
+  });
+  return r.status === 0 ? r.stdout.toString() : null;
+}
+
+function readPointer(display: string): { x: number; y: number } {
+  const out = xdo(display, ["getmouselocation", "--shell"]) ?? "";
+  const x = Number(/X=(\d+)/.exec(out)?.[1] ?? 0);
+  const y = Number(/Y=(\d+)/.exec(out)?.[1] ?? 0);
+  return { x, y };
+}
+
+export function performDesktopEvents(display: string, events: DesktopInputEvent[]): string {
+  let kind = "move";
+  for (const e of events) {
+    switch (e.type) {
+      case "mouse_move":
+        xdo(display, ["mousemove", String(e.x), String(e.y)]);
+        break;
+      case "mouse_down":
+        xdo(display, ["mousedown", String(e.button)]);
+        kind = "click";
+        break;
+      case "mouse_up":
+        xdo(display, ["mouseup", String(e.button)]);
+        kind = "click";
+        break;
+      case "wheel": {
+        const button = e.deltaY > 0 ? "5" : "4";
+        const n = Math.min(Math.abs(e.deltaY), 10);
+        if (n > 0) xdo(display, ["click", "--repeat", String(n), "--delay", "10", button]);
+        break;
+      }
+      case "key_down":
+        xdo(display, ["keydown", "--", e.keysym]);
+        kind = "key";
+        break;
+      case "key_up":
+        xdo(display, ["keyup", "--", e.keysym]);
+        kind = "key";
+        break;
+      case "click":
+        xdo(display, ["mousemove", String(e.x), String(e.y)]);
+        xdo(
+          display,
+          e.double
+            ? ["click", "--repeat", "2", "--delay", "80", String(e.button)]
+            : ["click", String(e.button)],
+        );
+        kind = "click";
+        break;
+      case "type":
+        if (e.text) xdo(display, ["type", "--delay", "12", "--file", "-"], e.text);
+        kind = "type";
+        break;
+      case "key":
+        xdo(display, ["key", "--", e.keysym]);
+        kind = "key";
+        break;
+    }
+  }
+  return kind;
+}
+
+/** Guest side (vsock 5900 via socat): drives DISPLAY :0 with xdotool and grabs frames with scrot. */
+async function guestDesktop() {
+  const display = process.env.DISPLAY || ":0";
+  const send = (m: object) => process.stdout.write(encodeDesktopMessage(m));
+  const geometry = xdo(display, ["getdisplaygeometry"]);
+  if (!geometry) return die("desktop display is not available", 3);
+  const [width = 0, height = 0] = geometry.trim().split(/\s+/).map(Number);
+  if (!width || !height) return die("desktop display geometry is invalid", 3);
+  const hostname = spawnSync("hostname").stdout?.toString().trim() || "boto-vm";
+  const state = new DesktopControllerState();
+  const tmp = `/run/boto/desktop-${process.pid}`;
+  mkdirSync(tmp, { recursive: true });
+  let seq = 0;
+  let fps = 0;
+  let thumbEveryMs = 5000;
+  let lastThumbAt = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let closed = false;
+  const grab = (file: string, args: string[]): Buffer | null => {
+    const r = spawnSync("scrot", ["-o", ...args, file], {
+      env: { ...process.env, DISPLAY: display },
+      timeout: 10000,
+    });
+    if (r.status !== 0 || !existsSync(file)) return null;
+    return readFileSync(file);
+  };
+  const tick = () => {
+    timer = undefined;
+    if (closed) return;
+    const now = Date.now();
+    const wantThumb = now - lastThumbAt >= thumbEveryMs;
+    if (fps > 0) {
+      const frame = grab(join(tmp, "frame.jpg"), ["-q", "60"]);
+      if (frame) {
+        seq += 1;
+        send({
+          type: "frame",
+          seq,
+          mime: "image/jpeg",
+          data: frame.toString("base64"),
+          width,
+          height,
+        });
+      }
+    }
+    if (wantThumb) {
+      lastThumbAt = now;
+      const thumb = grab(join(tmp, "thumb.jpg"), ["-q", "70", "-t", "20"]);
+      const file = join(tmp, "thumb-thumb.jpg");
+      if (thumb && existsSync(file))
+        send({
+          type: "thumb",
+          mime: "image/jpeg",
+          data: readFileSync(file).toString("base64"),
+          width: Math.round(width / 5),
+          height: Math.round(height / 5),
+        });
+    }
+    schedule();
+  };
+  const schedule = () => {
+    if (timer || closed) return;
+    const delay = fps > 0 ? Math.max(Math.round(1000 / fps), 50) : thumbEveryMs;
+    timer = setTimeout(tick, delay);
+  };
+  const handle = (m: Record<string, unknown>) => {
+    switch (m.type) {
+      case "stream": {
+        const rawFps = typeof m.fps === "number" && Number.isFinite(m.fps) ? m.fps : 0;
+        fps = Math.min(Math.max(rawFps, 0), 10);
+        if (typeof m.thumbEveryMs === "number" && m.thumbEveryMs >= 1000)
+          thumbEveryMs = Math.min(m.thumbEveryMs, 60000);
+        if (timer) clearTimeout(timer);
+        timer = undefined;
+        lastThumbAt = 0;
+        tick();
+        break;
+      }
+      case "controller":
+        if (!state.set(m.controller)) send({ type: "error", code: "bad_controller" });
+        break;
+      case "input":
+      case "agent": {
+        const source: DesktopController = m.type === "input" ? "user" : "agent";
+        const id = typeof m.id === "string" ? m.id : undefined;
+        const events = validateDesktopEvents(m.events, source);
+        if (!events) {
+          send({ type: "error", id, code: "bad_events" });
+          break;
+        }
+        if (!state.accepts(source)) {
+          send({ type: "error", id, code: "not_controller" });
+          break;
+        }
+        const kind = performDesktopEvents(display, events);
+        const { x, y } = readPointer(display);
+        if (source === "agent") {
+          send({ type: "cursor", x, y, kind });
+          send({ type: "done", id, text: `pointer at (${x}, ${y})` });
+        }
+        break;
+      }
+      case "screenshot": {
+        const id = typeof m.id === "string" ? m.id : undefined;
+        if (!state.accepts("agent")) {
+          send({ type: "error", id, code: "not_controller" });
+          break;
+        }
+        const dir = "/workspace/computer";
+        mkdirSync(dir, { recursive: true });
+        const path = join(dir, `screen-${Date.now()}.png`);
+        if (grab(path, [])) send({ type: "done", id, text: path, width, height });
+        else send({ type: "error", id, code: "capture_failed" });
+        break;
+      }
+      default:
+        send({ type: "error", code: "unknown_message" });
+    }
+  };
+  send({ type: "ready", width, height, name: hostname });
+  const decoder = new DesktopDecoder();
+  process.stdin.on("data", (chunk: Buffer) =>
+    decoder.push(chunk, handle, (code) => send({ type: "error", code })),
+  );
+  schedule();
+  await new Promise<void>((r) => {
+    const done = () => {
+      closed = true;
+      if (timer) clearTimeout(timer);
+      rmSync(tmp, { recursive: true, force: true });
+      r();
+    };
+    process.stdin.once("end", done);
+    process.stdin.once("close", done);
+    process.stdout.once("error", done);
+  });
+}
+
 if (import.meta.main) {
   const cmd = process.argv[2];
   if (cmd === "preflight") preflight();
   else if (cmd === "run") await run();
   else if (cmd === "bridge") await bridge();
   else if (cmd === "guest-exec") await guestExec();
+  else if (cmd === "desktop") await desktop();
+  else if (cmd === "guest-desktop") await guestDesktop();
   else if (cmd === "version") process.stdout.write(`boto-host ${HOST_VERSION}\n`);
-  else die("usage: boto-host preflight|run|bridge|guest-exec|version", 2);
+  else die("usage: boto-host preflight|run|bridge|guest-exec|desktop|guest-desktop|version", 2);
 }
