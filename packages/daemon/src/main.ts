@@ -32,6 +32,7 @@ import { RuntimeManager } from "./runtime/runtime-manager";
 import { SkillLibrary } from "./skills";
 import { SubagentService } from "./subagents";
 import { TeamClient } from "./team";
+import { TemplateService } from "./templates";
 import { Vault } from "./vault";
 import { VERSION } from "./version";
 import { Voice } from "./voice";
@@ -252,6 +253,7 @@ async function main() {
     browser,
     {
       vault,
+      templates: new TemplateService(db, broadcast),
       vmCredentials,
       computer,
       voice,

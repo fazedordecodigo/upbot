@@ -24,6 +24,7 @@ import type { RuntimeManager } from "./runtime/runtime-manager";
 import type { SkillLibrary } from "./skills";
 import type { SubagentService } from "./subagents";
 import type { TeamClient } from "./team";
+import type { TemplateService } from "./templates";
 import type { Vault } from "./vault";
 import type { Voice } from "./voice";
 
@@ -74,6 +75,7 @@ export class Rpc {
     private browser: BrowserService,
     private extras: {
       vault: Vault;
+      templates: TemplateService;
       vmCredentials: VmCredentials;
       computer: ComputerUse;
       voice: Voice;
@@ -463,6 +465,21 @@ export class Rpc {
         return { ok: true };
       case "routines.list":
         return this.routines.list((params as MethodParsedParams<typeof method>).agentId);
+      case "templates.list":
+        return this.extras.templates.list(
+          (params as MethodParsedParams<typeof method>).includeHidden,
+        );
+      case "templates.create":
+        return this.extras.templates.create(params as MethodParsedParams<typeof method>);
+      case "templates.update":
+        return this.extras.templates.update(params as MethodParsedParams<typeof method>);
+      case "templates.delete":
+        this.extras.templates.delete((params as MethodParsedParams<typeof method>).id);
+        return { ok: true };
+      case "templates.restore":
+        return this.extras.templates.restore((params as MethodParsedParams<typeof method>).id);
+      case "templates.use":
+        return this.extras.templates.use((params as MethodParsedParams<typeof method>).id);
       case "routines.create":
         return this.routines.create(params as MethodParsedParams<typeof method>);
       case "routines.update":

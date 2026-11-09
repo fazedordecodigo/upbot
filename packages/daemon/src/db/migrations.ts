@@ -271,4 +271,23 @@ export const migrations: string[] = [
     interrupted_at INTEGER
   );
   CREATE INDEX approval_records_status ON approval_records(status, created_at)`,
+  `CREATE TABLE templates (
+    id TEXT PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
+    prompt TEXT NOT NULL, icon TEXT NOT NULL, tool_mode TEXT NOT NULL,
+    require_approval INTEGER NOT NULL DEFAULT 0, schedule TEXT, builtin INTEGER NOT NULL DEFAULT 0,
+    hidden_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  );
+  INSERT INTO templates (id, kind, name, description, prompt, icon, tool_mode, require_approval, schedule, builtin, created_at, updated_at) VALUES
+  ('ci', 'task', 'Corrigir o teste que falha no CI e abrir um PR', 'Reproduz a falha no terminal, corrige o código e abre o PR com a descrição da causa.', 'Corrigir o teste que falha no CI e abrir um PR', 'git-pull-request', 'both', 1, NULL, 1, 0, 0),
+  ('email', 'task', 'Resumir a reunião de produto e enviar ao time por e-mail', 'Lê a transcrição, escreve as decisões e os próximos passos e prepara o e-mail.', 'Resumir a reunião de produto e enviar ao time por e-mail', 'mail', 'both', 1, NULL, 1, 0, 0),
+  ('deps', 'task', 'Atualizar as dependências desatualizadas e abrir um PR', 'Lista o que está velho, atualiza, ajusta a configuração e roda os testes.', 'Atualizar as dependências desatualizadas e abrir um PR', 'terminal', 'both', 1, NULL, 1, 0, 0),
+  ('research', 'task', 'Comparar planos de hospedagem e recomendar um', 'Pesquisa as fontes oficiais e entrega um relatório com prós e contras.', 'Comparar planos de hospedagem e recomendar um', 'globe', 'browser', 0, NULL, 1, 0, 0),
+  ('sales', 'routine', 'Toda segunda, consolidar as vendas da semana numa planilha', 'Baixa os relatórios do painel, junta os dados e salva a planilha no Drive.', 'Toda segunda, consolidar as vendas da semana numa planilha', 'sheet', 'both', 0, 'weekly mon 09:00', 1, 0, 0),
+  ('inbox', 'routine', 'Todo dia, resumir o que chegou na minha caixa de entrada', 'Separa o que pede resposta do que pode esperar e escreve um resumo curto.', 'Todo dia, resumir o que chegou na minha caixa de entrada', 'repeat', 'both', 0, 'daily 08:00', 1, 0, 0)`,
+  `ALTER TABLE routines ADD COLUMN run_at INTEGER;
+  ALTER TABLE routines ADD COLUMN tool_mode TEXT NOT NULL DEFAULT 'both';
+  ALTER TABLE routines ADD COLUMN require_approval INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE routines ADD COLUMN private INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE routines ADD COLUMN template_id TEXT;
+  ALTER TABLE routine_runs ADD COLUMN task_id TEXT`,
 ];
