@@ -203,7 +203,7 @@ describe("bridge failure diagnostics", () => {
     expect(daemonStderr).toContain("auth.rejected");
     expect(daemonStderr).not.toContain(wrongToken);
 
-    const realFailure = await runMcpBridge(spec, {}, [
+    const realFailureRequest = runMcpBridge(spec, {}, [
       { jsonrpc: "2.0", id: 1, method: "tools/list" },
       {
         jsonrpc: "2.0",
@@ -212,6 +212,14 @@ describe("bridge failure diagnostics", () => {
         params: { name: "send_message", arguments: { to: SECRET, text: "hi" } },
       },
     ]);
+    const approval = await c.waitForEventWhere(
+      "approval.updated",
+      (a) => a.agentId === agent.id && a.status === "pending",
+      20000,
+    );
+    expect(approval.tool).toBe("send_message");
+    await c.request("approvals.respond", { id: approval.id, decision: "approve" });
+    const realFailure = await realFailureRequest;
     expect(realFailure.replies[0]?.result).toMatchObject({
       tools: expect.arrayContaining([expect.objectContaining({ name: "send_message" })]),
     });
