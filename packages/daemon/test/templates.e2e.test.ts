@@ -116,9 +116,12 @@ test("routine updates reject past runAt without rescheduling completed routines"
     const routines = new RoutineService(
       db,
       agents,
-      () => ({ queueId: "q" }),
+      () => {
+        throw new Error("fallback must not run");
+      },
       () => {},
     );
+    routines.setTaskSink({ create: () => ({ taskId: "task", queueId: null }) });
     const future = Date.now() + 60_000;
     const routine = routines.create({ agentId: bot.id, name: "Once", prompt: "x", runAt: future });
     expect(() => routines.update({ id: routine.id, runAt: Date.now() - 1000 })).toThrow(
