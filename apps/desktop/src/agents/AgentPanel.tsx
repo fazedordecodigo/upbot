@@ -1,4 +1,4 @@
-import type { Agent, AgentOverview } from "@boto/protocol";
+import type { Agent, AgentOverview, Machine } from "@boto/protocol";
 import { useRef, useState } from "react";
 import { useConfirm } from "../dialogs/ConfirmDialog";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
@@ -9,15 +9,17 @@ import { Icon } from "../ui/icons";
 import { Sheet } from "../ui/Sheet";
 import { Switch } from "../ui/Switch";
 import { useToast } from "../ui/Toast";
-import { AgentHeading, TaskRows } from "./AgentParts";
+import { AgentHeading, MachineThumb, TaskRows } from "./AgentParts";
 
 export function AgentPanel({
   agent,
   overview,
+  machines,
   onClose,
 }: {
   agent: Agent;
   overview: AgentOverview;
+  machines: Machine[];
   onClose: () => void;
 }) {
   const { client } = useDaemon();
@@ -153,6 +155,13 @@ export function AgentPanel({
                 </span>
               </div>
               <TaskRows overview={overview} />
+              {machines.length > 0 && (
+                <div className="ag-machines">
+                  {machines.map((machine) => (
+                    <MachineThumb key={machine.id} machine={machine} />
+                  ))}
+                </div>
+              )}
             </section>
             <section className="ap-section">
               <div className="od-row">

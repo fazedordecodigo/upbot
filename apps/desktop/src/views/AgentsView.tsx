@@ -235,6 +235,9 @@ export function AgentsView() {
           key={active.agent.id}
           agent={active.agent}
           overview={active.item}
+          machines={
+            machines.data?.filter((machine) => active.item.machines.includes(machine.id)) ?? []
+          }
           onClose={() => setSelected(undefined)}
         />
       )}

@@ -301,6 +301,109 @@ test("status helpers distinguish paused and failed agents", async () => {
   await rpc.request("agents.delete", { id: agent.id });
 }, 30000);
 
+test("machine thumbnails refresh, survive RPC errors and do not leak between agent panels", async () => {
+  const first = await rpc.request("agents.create", { name: "Desktop one", provider: "devin" });
+  const second = await rpc.request("agents.create", { name: "Desktop two", provider: "devin" });
+  const desktopPage = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const machines = [first, second].map((agent, index) => ({
+    id: `test-machine-${index}`,
+    name: `desktop-${index}`,
+    agentId: agent.id,
+    hostId: null,
+    status: "ready",
+    controller: "agent",
+    width: 1280,
+    height: 800,
+    taskId: null,
+    thumbnailAt: null,
+  }));
+  let failure = false;
+  let brokenImage = false;
+  let frames = 0;
+  await desktopPage.routeWebSocket(`ws://127.0.0.1:${daemon.port}/ws*`, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((payload) => {
+      const message = JSON.parse(String(payload));
+      if (message.method === "desktop.machines") {
+        socket.send(JSON.stringify({ id: message.id, result: machines }));
+      } else if (message.method === "desktop.thumbnail") {
+        frames++;
+        const result = {
+          mime: "image/svg+xml",
+          dataBase64: brokenImage
+            ? "invalid"
+            : Buffer.from(
+                `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800"><text y="40">${message.params.machineId}-${frames}</text></svg>`,
+              ).toString("base64"),
+          at: new Date().toISOString(),
+        };
+        socket.send(
+          JSON.stringify(
+            failure
+              ? { id: message.id, error: { code: "not_found", message: "no thumbnail yet" } }
+              : { id: message.id, result },
+          ),
+        );
+      } else server.send(payload);
+    });
+    server.onMessage((payload) => {
+      const message = JSON.parse(String(payload));
+      const overview = message.event === "agents.overviewChanged" ? message.data : message.result;
+      if (overview?.summary && Array.isArray(overview.agents)) {
+        for (const row of overview.agents) {
+          row.machines = machines
+            .filter((machine) => machine.agentId === row.agentId)
+            .map((machine) => machine.id);
+        }
+        socket.send(JSON.stringify(message));
+      } else socket.send(payload);
+    });
+  });
+  try {
+    await desktopPage.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await desktopPage.getByRole("button", { name: "Abrir menu" }).click();
+    await desktopPage.getByRole("button", { name: /^Agentes/ }).click();
+    const firstCard = desktopPage
+      .locator(".ag-card")
+      .filter({ has: desktopPage.getByText(first.name, { exact: true }) });
+    await firstCard.locator("img").waitFor();
+    const original = await firstCard.locator("img").getAttribute("src");
+    await waitUntil(async () => (await firstCard.locator("img").getAttribute("src")) !== original);
+    expect(await firstCard.locator("img").getAttribute("src")).not.toBe(original);
+    expect(
+      await firstCard
+        .locator("img")
+        .evaluate(
+          (image: HTMLImageElement) =>
+            Math.abs(image.clientWidth / image.clientHeight - 1.6) < 0.02,
+        ),
+    ).toBe(true);
+    await firstCard.getByRole("button", { name: "Abrir painel" }).click();
+    await desktopPage.locator('#agent-panel img[alt="Tela da máquina desktop-0"]').waitFor();
+    await desktopPage.getByRole("button", { name: "Fechar painel do agente" }).click();
+    const secondCard = desktopPage
+      .locator(".ag-card")
+      .filter({ has: desktopPage.getByText(second.name, { exact: true }) });
+    await secondCard.getByRole("button", { name: "Abrir painel" }).click();
+    await desktopPage.locator('#agent-panel img[alt="Tela da máquina desktop-1"]').waitFor();
+    expect(
+      await desktopPage.locator('#agent-panel img[alt="Tela da máquina desktop-0"]').count(),
+    ).toBe(0);
+    failure = true;
+    await desktopPage.locator("#agent-panel .ag-thumb-placeholder").waitFor({ timeout: 15000 });
+    expect(await desktopPage.locator("#agent-panel .ag-thumb img").count()).toBe(0);
+    failure = false;
+    await desktopPage.locator("#agent-panel .ag-thumb img").waitFor({ timeout: 15000 });
+    brokenImage = true;
+    await desktopPage.locator("#agent-panel .ag-thumb-placeholder").waitFor({ timeout: 15000 });
+    expect(await desktopPage.locator("#agent-panel .ag-thumb img").count()).toBe(0);
+  } finally {
+    await desktopPage.close();
+    await rpc.request("agents.delete", { id: first.id });
+    await rpc.request("agents.delete", { id: second.id });
+  }
+}, 60000);
+
 test("capture real board, panel and create dialog in both themes", async () => {
   const shots = process.env.AGENTS_SCREEN_DIR;
   if (!shots) return;
