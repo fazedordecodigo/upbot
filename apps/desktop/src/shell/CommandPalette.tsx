@@ -1,5 +1,5 @@
 import type { MethodResult, Task } from "@boto/protocol";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useThemePref } from "../lib/theme";
 import { TaskStatus } from "../shell-data/TaskStatus";
 import { Dialog } from "../ui/Dialog";
@@ -36,6 +36,11 @@ export function CommandPalette({
   const [search, setSearch] = useState<MethodResult<"tasks.search">>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const selected = useRef<HTMLButtonElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reveal the active option after selection or search results change.
+  useEffect(() => {
+    if (open) selected.current?.scrollIntoView({ block: "nearest" });
+  }, [open, active, search, query]);
   useEffect(() => {
     if (!open) {
       setQuery("");
@@ -182,6 +187,7 @@ export function CommandPalette({
                     role="option"
                     tabIndex={-1}
                     aria-selected={index === active}
+                    ref={index === active ? selected : undefined}
                     onPointerMove={() => setActive(index)}
                     onClick={() => {
                       onClose();

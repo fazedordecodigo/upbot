@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { createConnection, createServer, type Socket } from "node:net";
 import { type Browser, chromium } from "playwright-core";
 import {
   DaemonClient,
@@ -14,7 +15,7 @@ import {
 let daemon: DaemonHandle;
 let rpc: DaemonClient;
 let browser: Browser;
-let vite: ReturnType<typeof Bun.spawn>;
+let vite: ReturnType<typeof Bun.spawn> | undefined;
 let stopped = false;
 const token = crypto.randomUUID();
 const dirs: string[] = [];
@@ -34,11 +35,18 @@ beforeAll(async () => {
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  vite = Bun.spawn([process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420"], {
-    cwd: ROOT,
-    stdout: "ignore",
-    stderr: "inherit",
-  });
+  const running = await fetch(base)
+    .then((r) => r.ok)
+    .catch(() => false);
+  if (!running)
+    vite = Bun.spawn(
+      [process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420", "--strictPort"],
+      {
+        cwd: ROOT,
+        stdout: "ignore",
+        stderr: "inherit",
+      },
+    );
   await until(async () =>
     fetch(base)
       .then((r) => r.ok)
@@ -138,6 +146,135 @@ test("real shell profile, counts, task history, privacy and accent-insensitive s
     await page.close();
   }
 }, 60000);
+
+test("palette keeps keyboard selections visible and opens the selected real task", async () => {
+  const agent = await rpc.request("agents.create", { name: "Busca", provider: "devin" });
+  await rpc.request("queue.pause", { agentId: agent.id });
+  for (let n = 0; n < 22; n++)
+    await rpc.request("tasks.create", {
+      agentId: agent.id,
+      text: `echo:Resultado teclado ${n}`,
+      private: false,
+    });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  try {
+    await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
+    await page.locator("#home-title").waitFor();
+    await page.keyboard.press("Control+k");
+    await page.getByRole("combobox").fill("Resultado teclado");
+    await until(async () => (await page.getByRole("option").count()) === 20);
+    const visible = () =>
+      page.locator('[role="option"][aria-selected="true"]').evaluate((el) => {
+        const list = document.getElementById("command-list")?.getBoundingClientRect();
+        const option = el.getBoundingClientRect();
+        return Boolean(list && option.top >= list.top && option.bottom <= list.bottom);
+      });
+    for (let n = 0; n < 19; n++) await page.keyboard.press("ArrowDown");
+    await until(visible);
+    expect(await page.getByRole("combobox").getAttribute("aria-activedescendant")).toBe(
+      "command-option-19",
+    );
+    await page.keyboard.press("ArrowDown");
+    await until(visible);
+    expect(await page.getByRole("combobox").getAttribute("aria-activedescendant")).toBe(
+      "command-option-0",
+    );
+    await page.keyboard.press("ArrowUp");
+    await until(visible);
+    const selected = await rpc.request("tasks.search", { query: "Resultado teclado", limit: 20 });
+    await page.keyboard.press("Enter");
+    await until(async () => (await page.locator("#main").getAttribute("data-view")) === "task");
+    expect(await page.locator("#task-title").innerText()).toBe(selected.tasks[19]?.title);
+  } finally {
+    await page.close();
+  }
+}, 60000);
+
+test("crash reconnect invalidates old permissions without granting them; live permissions still work", async () => {
+  let target = daemon.port;
+  const sockets = new Set<Socket>();
+  const proxy = createServer((socket) => {
+    const upstream = createConnection({ port: target, host: "127.0.0.1" });
+    for (const peer of [socket, upstream]) {
+      sockets.add(peer);
+      peer.on("close", () => sockets.delete(peer));
+    }
+    socket.on("error", () => upstream.destroy());
+    upstream.on("error", () => socket.destroy());
+    socket.pipe(upstream).pipe(socket);
+  });
+  await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+  const address = proxy.address();
+  if (!address || typeof address === "string") throw new Error("Missing proxy port");
+  const page = await browser.newPage();
+  try {
+    const agent = await rpc.request("agents.create", { name: "Reinício", provider: "devin" });
+    const task = await rpc.request("tasks.create", {
+      agentId: agent.id,
+      text: "tool",
+      private: false,
+    });
+    await page.goto(`${base}/#port=${address.port}&token=${token}&task=${task.id}`);
+    await page.getByRole("button", { name: "Permitir nesta sessão", exact: true }).waitFor();
+    expect((await rpc.request("permissions.list", {})).some((p) => p.agentId === agent.id)).toBe(
+      true,
+    );
+    await stopDaemon(daemon, rpc, dirs[2]);
+    stopped = true;
+    await until(
+      async () =>
+        (await page.getByRole("button", { name: "Permitir nesta sessão", exact: true }).count()) ===
+        0,
+    );
+    daemon = await startDaemon(dirs[0], dirs[1], token, {
+      BOTO_ACP_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
+      FAKE_ACP_STATE_DIR: dirs[2],
+    });
+    stopped = false;
+    target = daemon.port;
+    rpc = await DaemonClient.connect(daemon.port, token);
+    await page.getByText("Este pedido não está mais disponível.", { exact: true }).waitFor();
+    expect((await rpc.request("tasks.get", { id: task.id })).situation).toBe("muted");
+    expect(await rpc.request("permissions.list", {})).toEqual([]);
+    expect(
+      (await rpc.request("tasks.history", { id: task.id })).items.some(
+        (i) => i.kind === "agent_message" && i.text.includes("permission:allow"),
+      ),
+    ).toBe(false);
+    await page.reload();
+    await page.getByText("Este pedido não está mais disponível.", { exact: true }).waitFor();
+    const next = await rpc.request("tasks.create", {
+      agentId: agent.id,
+      text: "tool",
+      private: false,
+    });
+    await page.locator(`[data-task-id="${next.id}"]`).click();
+    expect(
+      await page.getByText("Este pedido não está mais disponível.", { exact: true }).count(),
+    ).toBe(0);
+    await page.getByRole("button", { name: "Permitir nesta sessão", exact: true }).click();
+    await page.getByText("permission:allow_once", { exact: true }).waitFor();
+    expect(await rpc.request("permissions.list", {})).toEqual([]);
+    const input = page.locator("#instruct-input");
+    await input.fill("echo:instrução teclado");
+    await input.press("Shift+Enter");
+    await input.press("x");
+    expect(await input.inputValue()).toBe("echo:instrução teclado\nx");
+    await input.dispatchEvent("keydown", { key: "Enter", isComposing: true });
+    expect(await input.inputValue()).toBe("echo:instrução teclado\nx");
+    await input.press("Enter");
+    await until(async () => (await input.inputValue()) === "");
+    await until(async () =>
+      (await rpc.request("tasks.history", { id: next.id })).items.some(
+        (i) => i.kind === "user_message" && i.text === "echo:instrução teclado\nx",
+      ),
+    );
+  } finally {
+    await page.close();
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => proxy.close(() => resolve()));
+  }
+}, 90000);
 
 test("daemon disconnect reports search failure and reverts the private default", async () => {
   const page = await browser.newPage();
