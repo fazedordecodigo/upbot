@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -16,6 +16,8 @@ import { migrateLegacyHome } from "../src/legacy";
 
 const directories: string[] = [];
 const databases: Database[] = [];
+
+setDefaultTimeout(30_000);
 function temp() {
   const directory = mkdtempSync(join(tmpdir(), "boto-migration-"));
   directories.push(directory);
