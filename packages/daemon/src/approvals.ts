@@ -394,8 +394,8 @@ export class ApprovalService {
 
   list(agentId?: string): Approval[] {
     const all = new Map<string, Approval>();
-    for (const a of this.stored(agentId)) all.set(a.id, a);
-    for (const a of [...this.recent, ...this.pending.values()]) all.set(a.id, a);
+    for (const a of [...this.pending.values(), ...this.recent, ...this.stored(agentId)])
+      if (!all.has(a.id)) all.set(a.id, a);
     return [...all.values()]
       .filter((a) => !agentId || a.agentId === agentId)
       .sort((a, b) => b.createdAt - a.createdAt);
