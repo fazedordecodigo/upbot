@@ -137,7 +137,7 @@ export function MachineThumb({ machine }: { machine: Machine }) {
     <figure className="ag-thumb">
       {src ? (
         <img
-          className="od-media od-media-cover"
+          className="od-media"
           src={src}
           onError={() => setSrc(undefined)}
           alt={`Tela da máquina ${machine.name}`}

@@ -21,7 +21,8 @@
 .ag-time { color: var(--boto-color-muted-foreground); }
 .ag-machines { display: grid; gap: var(--boto-space-2); }
 .ag-thumb { background: var(--boto-color-rio-negro); border-radius: var(--boto-radius-md); overflow: hidden; color: var(--boto-color-nevoa); }
-.ag-thumb img, .ag-thumb-placeholder { aspect-ratio: 16 / 10; }
+.ag-thumb img { display: block; width: 100%; height: auto; }
+.ag-thumb-placeholder { aspect-ratio: 16 / 10; }
 .ag-thumb-placeholder { display: grid; place-items: center; }
 .ag-thumb figcaption { display: flex; justify-content: space-between; gap: var(--boto-space-2); padding: var(--boto-space-2); font: var(--boto-font-size-xs) var(--boto-font-mono); }
 .ag-card-foot { display: flex; flex-wrap: wrap; gap: var(--boto-space-2); margin-top: auto; }

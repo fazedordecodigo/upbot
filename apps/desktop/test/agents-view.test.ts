@@ -380,6 +380,28 @@ test("machine thumbnails refresh, survive RPC errors and do not leak between age
     ).toBe(true);
     await firstCard.getByRole("button", { name: "Abrir painel" }).click();
     await desktopPage.locator('#agent-panel img[alt="Tela da máquina desktop-0"]').waitFor();
+    for (const [width, height] of [
+      [1440, 900],
+      [390, 844],
+    ]) {
+      await desktopPage.setViewportSize({ width, height });
+      for (const selector of [".ag-card .ag-thumb img", "#agent-panel .ag-thumb img"]) {
+        expect(
+          await desktopPage
+            .locator(selector)
+            .first()
+            .evaluate((image: HTMLImageElement) => {
+              const frame = image.closest("figure");
+              if (!frame || !image.naturalWidth) return false;
+              const rect = image.getBoundingClientRect();
+              return (
+                Math.abs(rect.width - frame.getBoundingClientRect().width) <= 1 &&
+                Math.abs(rect.width / rect.height - image.naturalWidth / image.naturalHeight) < 0.02
+              );
+            }),
+        ).toBe(true);
+      }
+    }
     await desktopPage.getByRole("button", { name: "Fechar painel do agente" }).click();
     const secondCard = desktopPage
       .locator(".ag-card")
