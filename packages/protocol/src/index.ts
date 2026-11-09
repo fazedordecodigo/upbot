@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { type DesktopEventMap, desktopMethodMap } from "./vm-desktop";
+
+export * from "./vm-desktop";
 
 export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   devin: "~/.config/devin/config.json",
@@ -1264,6 +1267,7 @@ export const methodMap = {
   "channels.archive": { params: ChannelIdParams, result: Channel },
   "channels.restore": { params: ChannelIdParams, result: Channel },
   "channels.reassign": { params: ChannelsReassignParams, result: Channel },
+  ...desktopMethodMap,
 } as const;
 
 export type MethodName = keyof typeof methodMap;
@@ -1310,4 +1314,4 @@ export type DaemonEventMap = {
   "channel.created": Channel;
   "channel.updated": Channel;
   "channel.message": ChannelMessage;
-};
+} & DesktopEventMap;
