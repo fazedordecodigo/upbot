@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { join } from "node:path";
 import type { Agent } from "@boto/protocol";
+import type { ApprovalService } from "../src/approvals";
 import { migrations } from "../src/db/migrations";
 import { DesktopService, machineSlug } from "../src/desktop";
 import { HostStore } from "../src/remote/hosts";
@@ -82,6 +83,33 @@ describe("DesktopService (in-process, fake host stream)", () => {
         .map((m) => m.name)
         .sort(),
     ).toEqual(["codigo-01", "codigo-02"]);
+  });
+
+  test("releasing or detaching a desktop controller leaves browser takeover approvals pending", () => {
+    const decisions: string[] = [];
+    const service = new DesktopService(
+      db,
+      hosts,
+      (id) => agents.get(id) ?? null,
+      () => {},
+    );
+    service.approvals = {
+      list: () => [{ id: "browser-login", kind: "takeover", status: "pending" }],
+      respond: async ({ decision }: { decision: string }) => {
+        decisions.push(decision);
+      },
+    } as unknown as ApprovalService;
+    service.attach("owner", () => {});
+    const machine = service.list()[0]!;
+    try {
+      service.takeover(machine.id, "owner");
+      service.release(machine.id, "owner");
+      service.takeover(machine.id, "owner");
+      service.detach("owner");
+      expect(decisions).toEqual([]);
+    } finally {
+      service.stop();
+    }
   });
 
   test("agent computer actions reach the guest unless the user controls the machine", async () => {

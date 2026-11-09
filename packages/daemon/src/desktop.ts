@@ -397,18 +397,7 @@ export class DesktopService {
     st.controller = controller;
     st.owner = owner;
     if (st.child && st.ready) this.write(st, { type: "controller", controller });
-    if (controller === "agent" && changed) this.finishTakeoverApprovals(st.agentId);
     if (changed) this.emitMachine(st);
-  }
-
-  private finishTakeoverApprovals(agentId: string) {
-    if (!this.approvals) return;
-    for (const a of this.approvals.list(agentId)) {
-      if (a.kind !== "takeover" || a.status !== "pending") continue;
-      this.approvals.respond({ id: a.id, decision: "done" }).catch((e) => {
-        this.log("desktop takeover approval", { error: errorFields(e) });
-      });
-    }
   }
 
   private applyStreamMode(st: MachineState) {
