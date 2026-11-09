@@ -556,9 +556,7 @@ export class TaskService {
   }
 
   list(p: MethodParsedParams<"tasks.list">): { items: Task[]; nextCursor: string | null } {
-    const where: string[] = [
-      p.includePrivate ? "(t.private = 0 OR t.situation != 'done')" : "t.private = 0",
-    ];
+    const where: string[] = ["t.private = 0"];
     const args: (string | number)[] = [];
     if (p.situation) {
       where.push("t.situation = ?");

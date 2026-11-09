@@ -69,7 +69,7 @@ function errorDiagnostics(e: unknown, depth = 0): ErrorDiagnostics {
 }
 
 /** Identity of the WebSocket connection a request came from (desktop streams are per connection). */
-export type RpcConnection = { id: string };
+export type RpcConnection = { id: string; watchTask?: (id: string, watch: boolean) => void };
 
 export class Rpc {
   constructor(
@@ -349,8 +349,12 @@ export class Rpc {
       }
       case "agents.statuses":
         return this.runtimes.statuses();
-      case "permissions.list":
-        return this.runtimes.pendingPermissions();
+      case "permissions.list": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.runtimes
+          .pendingPermissions()
+          .filter((permission) => this.chat.visibleTurn(permission.turnId, p.taskId));
+      }
       case "permissions.respond": {
         const p = params as MethodParsedParams<typeof method>;
         this.runtimes.respondPermission(p.requestId, p.optionId);
@@ -478,8 +482,14 @@ export class Rpc {
       case "pages.delete":
         this.extras.pages.delete((params as MethodParsedParams<typeof method>).id);
         return { ok: true };
-      case "approvals.list":
-        return this.extras.approvals.list((params as MethodParsedParams<typeof method>).agentId);
+      case "approvals.list": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.approvals
+          .list(p.agentId)
+          .filter((approval) =>
+            this.chat.visibleTurn(approval.turnId, p.taskId, approval.agentId, approval.createdAt),
+          );
+      }
       case "approvals.respond":
         return this.extras.approvals.respond(params as MethodParsedParams<typeof method>);
       case "approvals.rules":
@@ -688,6 +698,13 @@ export class Rpc {
         return this.extras.tasks.create(params as MethodParsedParams<typeof method>);
       case "tasks.list":
         return this.extras.tasks.list(params as MethodParsedParams<typeof method>);
+      case "tasks.subscribe": {
+        const p = params as MethodParsedParams<typeof method>;
+        if (!conn?.watchTask) throw new RpcError("bad_request", "WebSocket connection required");
+        if (p.watch) this.extras.tasks.get(p.id);
+        conn.watchTask(p.id, p.watch);
+        return { ok: true };
+      }
       case "tasks.get":
         return this.extras.tasks.get((params as MethodParsedParams<typeof method>).id);
       case "tasks.history":

@@ -377,6 +377,7 @@ export class ApprovalService {
     const turn = this.runtimes().currentTurn(agentId);
     const query = { agentId, turnId: turn?.id ?? null, tool, isAppTool, permission: kind };
     const forced = this.askPolicies.some((policy) => policy(query));
+    if (forced) return "ask";
     if (app && kind) {
       if (
         !isSensitivePermission(kind) &&
@@ -384,10 +385,8 @@ export class ApprovalService {
         this.grants.get(`${agentId}:${turn.id}`)?.has(`${app.id}:${kind}`)
       )
         return "allow";
-      if (forced) return "ask";
       return app.permissions[kind] === "allow" ? "allow" : "ask";
     }
-    if (forced) return "ask";
     if (hits.some((r) => r.action === "allow" && r.pattern !== "*")) return "allow";
     return "allow";
   }
