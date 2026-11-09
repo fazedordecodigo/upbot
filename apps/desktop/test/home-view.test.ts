@@ -145,7 +145,7 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
     }
     await page.reload();
     await rpc.request("tasks.create", { agentId: writer.id, text: "echo:Resumo entregue" });
-    await page.locator("#deliveries .delivery-item").waitFor();
+    await page.locator("#deliveries .delivery-item").filter({ hasText: "Resumo" }).waitFor();
     expect(await page.locator("#deliveries").innerText()).toContain("Resumo");
     const completedDb = new Database(join(state, "data", "boto.db"));
     completedDb.exec("PRAGMA busy_timeout = 5000");
