@@ -29,6 +29,7 @@ beforeAll(async () => {
     BOTO_MARKETPLACE_URL: `file://${join(ROOT, "marketplace/index.json")}`,
   });
   rpc = await DaemonClient.connect(daemon.port, token);
+  await rpc.request("onboarding.complete", {});
   await rpc.request("agents.create", { name: "Modelos", provider: "devin" });
   vite = Bun.spawn(
     [process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420", "--strictPort"],

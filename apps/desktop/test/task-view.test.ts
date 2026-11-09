@@ -42,6 +42,7 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
       });
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   const client = await DaemonClient.connect(daemon.port, token);
+  await client.request("onboarding.complete", {});
   try {
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {

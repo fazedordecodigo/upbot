@@ -38,6 +38,7 @@ beforeAll(async () => {
     BOTO_PROVIDER_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
   });
   rpc = await DaemonClient.connect(daemon.port, token);
+  await rpc.request("onboarding.complete", {});
   vite = Bun.spawn([process.execPath, "run", "dev", "--port", "1420"], {
     cwd: join(ROOT, "apps/desktop"),
     stdout: "ignore",

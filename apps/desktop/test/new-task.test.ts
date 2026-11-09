@@ -43,6 +43,7 @@ beforeAll(async () => {
     FAKE_ACP_STATE_DIR: state,
   });
   rpc = await DaemonClient.connect(daemon.port, token);
+  await rpc.request("onboarding.complete", {});
   alpha = await rpc.request("agents.create", { name: "Alpha", provider: "devin" });
   beta = await rpc.request("agents.create", { name: "Beta", provider: "devin" });
   base = "http://localhost:1420";
@@ -214,6 +215,7 @@ test(
       expect((await rpc.request("tasks.list", {})).items.some((item) => item.id === task.id)).toBe(
         false,
       );
+      await until(async () => (await page.locator("#main").getAttribute("data-view")) === "task");
       await rpc.request("tasks.stop", { id: task.id });
       await page.keyboard.press("Control+Shift+O");
       await until(() => page.locator("#composer-input").isEnabled());

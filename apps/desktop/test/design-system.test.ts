@@ -235,7 +235,7 @@ test("failed initial refresh recovers on reconnect and reloads real counts", asy
   let profile: Profile = {
     name: "",
     about: "",
-    onboardingCompletedAt: null,
+    onboardingCompletedAt: 1,
     defaults: { private: false, requireApproval: false, delegationMode: "now", toolMode: "both" },
     theme: null,
     sidebarWidth: null,

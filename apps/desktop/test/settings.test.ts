@@ -42,6 +42,7 @@ beforeAll(async () => {
     true,
   );
   rpc = await DaemonClient.connect(daemon.port, token);
+  await rpc.request("onboarding.complete", {});
   vite = Bun.spawn(
     [process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420", "--strictPort"],
     { cwd: ROOT, stdout: "ignore", stderr: "ignore" },

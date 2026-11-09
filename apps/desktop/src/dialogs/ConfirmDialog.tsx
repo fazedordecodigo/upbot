@@ -47,42 +47,44 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
-      <Dialog
-        open={request !== null}
-        onClose={() => settle(false)}
-        id="confirm"
-        aria-labelledby="confirm-title"
-        aria-describedby="confirm-desc"
-      >
-        <div className="dialog-body">
-          <div className="dialog-header">
-            <h2 className="dialog-title" id="confirm-title">
-              {request?.title}
-            </h2>
-            <p className="dialog-description" id="confirm-desc">
-              {request?.description}
-            </p>
+      {request && (
+        <Dialog
+          open={request !== null}
+          onClose={() => settle(false)}
+          id="confirm"
+          aria-labelledby="confirm-title"
+          aria-describedby="confirm-desc"
+        >
+          <div className="dialog-body">
+            <div className="dialog-header">
+              <h2 className="dialog-title" id="confirm-title">
+                {request?.title}
+              </h2>
+              <p className="dialog-description" id="confirm-desc">
+                {request?.description}
+              </p>
+            </div>
+            <div className="dialog-footer">
+              <button
+                type="button"
+                className="btn btn-outline"
+                id="confirm-cancel"
+                onClick={() => settle(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-destructive"
+                id="confirm-ok"
+                onClick={() => settle(true)}
+              >
+                {request?.action}
+              </button>
+            </div>
           </div>
-          <div className="dialog-footer">
-            <button
-              type="button"
-              className="btn btn-outline"
-              id="confirm-cancel"
-              onClick={() => settle(false)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn-destructive"
-              id="confirm-ok"
-              onClick={() => settle(true)}
-            >
-              {request?.action}
-            </button>
-          </div>
-        </div>
-      </Dialog>
+        </Dialog>
+      )}
     </ConfirmContext.Provider>
   );
 }

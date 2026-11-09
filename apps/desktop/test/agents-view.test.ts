@@ -37,6 +37,7 @@ beforeAll(async () => {
     FAKE_ACP_NEW_DELAY_MS: "1500",
   });
   rpc = await DaemonClient.connect(daemon.port, token);
+  await rpc.request("onboarding.complete", {});
   const ready = async () => {
     try {
       return (await fetch("http://localhost:1420")).ok;
@@ -96,6 +97,10 @@ test("real agents can be created, delegated to, configured, filtered and deleted
   expect(agent.requireApproval).toBe(false);
   expect(await page.locator(".ag-card-title").textContent()).toBe("Financeiro");
   expect(await page.locator(".ag-card .ag-card-role").textContent()).toBe("Confere notas fiscais");
+  await waitUntil(
+    async () =>
+      (await page.locator(".ag-card .status").first().textContent())?.includes("Livre") === true,
+  );
   expect(await page.locator(".ag-card .status").first().textContent()).toContain("Livre");
   expect(await page.locator(".ag-stat-value").first().textContent()).toBe("1");
   await page.locator("#ap-add-btn").click();

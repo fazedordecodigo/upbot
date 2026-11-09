@@ -33,6 +33,7 @@ beforeAll(async () => {
     FAKE_ACP_STATE_DIR: dirs[2],
   });
   rpc = await DaemonClient.connect(daemon.port, token);
+  await rpc.request("onboarding.complete", {});
   vite = Bun.spawn([process.execPath, "run", "--cwd", "apps/desktop", "dev", "--port", "1420"], {
     cwd: ROOT,
     stdout: "ignore",
