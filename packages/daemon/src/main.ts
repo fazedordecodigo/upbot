@@ -328,10 +328,16 @@ async function main() {
       .map((m) => m.id),
   );
   desktop.taskFor = (agentId) => runtimes.currentTurn(agentId)?.taskId ?? null;
-  bridge.taskFor = (agentId) => {
-    const taskId = runtimes.currentTaskId(agentId);
-    return taskId ? taskService.runtimeInfo(taskId) : null;
-  };
+  bridge.tasksFor = (agentId) =>
+    runtimes.activeTurns(agentId).flatMap((turn) => {
+      const stored = chat.getTurn(turn.id);
+      if (!stored) throw new Error("running turn policy unavailable");
+      const taskId = stored.taskId;
+      if (!taskId) return [];
+      const task = taskService.runtimeInfo(taskId);
+      if (!task || task.agentId !== agentId) throw new Error("running task policy unavailable");
+      return [task];
+    });
   bridge.computer = computer;
   const mobile = new MobileServer(db);
   const team = new TeamClient(db, store, chat, () => runtimes, vault, broadcast);

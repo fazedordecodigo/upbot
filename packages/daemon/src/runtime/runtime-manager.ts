@@ -183,8 +183,9 @@ export class RuntimeManager {
 
   /** Cancels the agent's running turn when it belongs to the task; the queue keeps going. */
   cancelTask(agentId: string, taskId: string): void {
-    const rt = this.runtimes.get(agentId);
-    if (rt && rt.currentTurn()?.taskId === taskId) rt.cancel({ pauseQueue: false });
+    for (const rt of this.pool(agentId)) {
+      if (rt.currentTurn()?.taskId === taskId) rt.cancel({ pauseQueue: false });
+    }
   }
 
   /** Drops the task's queued entries (stop); returns how many were removed. */

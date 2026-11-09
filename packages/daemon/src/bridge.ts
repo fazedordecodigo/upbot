@@ -503,8 +503,8 @@ export class Bridge {
   skills: SkillLibrary | null = null;
   broadcast: Broadcast | null = null;
   subagents: SubagentService | null = null;
-  /** Task owning the agent's current session, for per-task tool gating. */
-  taskFor: ((agentId: string) => TaskRuntimeInfo | null) | null = null;
+  /** All running tasks: per-agent bridge tokens cannot identify the calling instance. */
+  tasksFor: ((agentId: string) => TaskRuntimeInfo[]) | null = null;
 
   constructor(
     private agents: AgentStore,
@@ -543,16 +543,23 @@ export class Bridge {
   }
 
   async handle(agentId: string, body: Json): Promise<Json> {
-    const task = this.taskFor?.(agentId) ?? null;
     if (body.method === "tools/list") {
       const appTools = await this.apps?.toolsFor(agentId).catch((e) => {
         console.error("[botod] bridge tools/list failed", { agentId, ...errorDiagnostics(e) });
         return [];
       });
-      const builtIn = task
-        ? BRIDGE_TOOLS.filter((t) => taskToolAllowed(task, t.name, false))
-        : BRIDGE_TOOLS;
-      return { tools: [...builtIn, ...(appTools ?? [])] };
+      const tasks = this.tasksFor?.(agentId) ?? [];
+      const builtIn = BRIDGE_TOOLS.filter((t) =>
+        tasks.every((task) => taskToolAllowed(task, t.name, false)),
+      );
+      return {
+        tools: [
+          ...builtIn,
+          ...(appTools ?? []).filter((t) =>
+            tasks.every((task) => taskToolAllowed(task, t.name, true)),
+          ),
+        ],
+      };
     }
     if (body.method !== "tools/call")
       throw new Error(`unknown bridge method ${String(body.method)}`);
@@ -566,7 +573,9 @@ export class Bridge {
     try {
       name = String(params.name);
       isApp = this.apps?.isAppTool(name) ?? false;
-      if (task && !taskToolAllowed(task, name, isApp))
+      const tasks = this.tasksFor?.(agentId) ?? [];
+      const task = tasks.find((task) => !taskToolAllowed(task, name, isApp));
+      if (task)
         throw new GateRejection(
           "denied",
           task.private && name === "remember"
@@ -574,7 +583,10 @@ export class Bridge {
             : `${name} is not available in this task (tool mode: ${task.toolMode}); do not retry it`,
         );
       await this.approvals?.gate(agentId, name, args, isApp, {
-        forceAsk: task?.requireApproval === true && isExternalAction(name, args, isApp),
+        forceAsk:
+          (tasks.some((task) => task.requireApproval) ||
+            this.runtimes().currentTurn(agentId) === null) &&
+          isExternalAction(name, args, isApp),
       });
       r =
         (isApp ? await this.apps!.call(agentId, name, args) : null) ??

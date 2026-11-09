@@ -439,6 +439,102 @@ describe("tasks e2e", () => {
   );
 
   test(
+    "ambiguous bridge calls intersect policies including restrictive extra instances",
+    async () => {
+      const agent = await c.request("agents.create", {
+        name: "Concurrent policies",
+        provider: "devin",
+        maxInstances: 2,
+        requireApproval: false,
+      });
+      const primary = await c.request("tasks.create", {
+        agentId: agent.id,
+        text: "slow",
+        toolMode: "browser",
+        requireApproval: false,
+      });
+      await waitTask(primary.id, (t) => t.sessionId !== null);
+      const extra = await c.request("tasks.create", {
+        agentId: agent.id,
+        text: "slow",
+        toolMode: "terminal",
+        private: true,
+        requireApproval: true,
+      });
+      try {
+        await c.waitForEventWhere(
+          "item.created",
+          (i) => i.taskId === extra.id && i.kind === "agent_message",
+        );
+        const turns = (await c.request("agents.overview", {})).agents.find(
+          (a) => a.agentId === agent.id,
+        );
+        expect(turns?.running).toHaveLength(2);
+        const request = readLog(stateDir).find(
+          (r) =>
+            r.method === "session/new" && (r.params as { cwd: string }).cwd === agent.workspacePath,
+        );
+        if (!request) throw new Error("missing session request");
+        const spec = (
+          request.params as {
+            mcpServers: { name: string; env: { name: string; value: string }[] }[];
+          }
+        ).mcpServers.find((s) => s.name === "boto");
+        const env = Object.fromEntries(spec!.env.map((e) => [e.name, e.value]));
+        const bridge = async (method: string, params = {}) => {
+          const response = await fetch(env.BOTO_BRIDGE_URL!, {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${env.BOTO_BRIDGE_TOKEN}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ method, params }),
+          });
+          expect(response.ok).toBe(true);
+          return response.json();
+        };
+        const listed = await bridge("tools/list");
+        const names = listed.tools.map((t: { name: string }) => t.name);
+        expect(names).not.toContain("remember");
+        expect(names).not.toContain("share_file");
+        expect(names).not.toContain("browser_open");
+        for (const name of ["remember", "share_file", "browser_open"])
+          expect(await bridge("tools/call", { name, arguments: {} })).toMatchObject({
+            isError: true,
+          });
+        expect(await c.request("memories.list", { agentId: agent.id })).toEqual([]);
+        const sending = bridge("tools/call", {
+          name: "send_message",
+          arguments: { to: "Beta", text: "must not send" },
+        });
+        const approval = await c.waitForEventWhere(
+          "approval.updated",
+          (ap) => ap.agentId === agent.id && ap.status === "pending",
+        );
+        expect(approval.tool).toBe("send_message");
+        await c.request("approvals.respond", { id: approval.id, decision: "deny" });
+        expect(await sending).toMatchObject({ isError: true });
+        await c.request("tasks.stop", { id: extra.id });
+        const end = Date.now() + 10000;
+        while (
+          (await c.request("agents.overview", {})).agents.find((a) => a.agentId === agent.id)
+            ?.running.length !== 1
+        ) {
+          if (Date.now() > end) throw new Error("extra turn did not stop");
+          await Bun.sleep(50);
+        }
+        const restored = (await bridge("tools/list")).tools.map((t: { name: string }) => t.name);
+        expect(restored).toContain("remember");
+        expect(restored).toContain("browser_open");
+        expect(restored).not.toContain("share_file");
+      } finally {
+        await c.request("agents.delete", { id: agent.id });
+      }
+    },
+    T,
+  );
+
+  test(
     "search, rename, deliveries and list pagination",
     async () => {
       const task = await c.request("tasks.create", {
