@@ -23,6 +23,7 @@ import { MemoryStore } from "./memories";
 import { MobileServer } from "./mobile";
 import { PageLibrary } from "./pages";
 import { botoContext, seedDefaultBot } from "./persona";
+import { ProfileService } from "./profile";
 import { readyLine } from "./ready";
 import { VmCredentials } from "./remote/credentials";
 import { HostStore } from "./remote/hosts";
@@ -212,9 +213,13 @@ async function main() {
     queue,
     broadcast,
     (id) => bridge.serversFor(id),
-    (id) => botoContext(workspaceRoot) + memories.promptBlock(id) + skills.promptBlock(),
+    (id, turnId, fresh) =>
+      (fresh ? botoContext(workspaceRoot) : "") +
+      memories.promptBlock(id, turnId, fresh) +
+      (fresh ? skills.promptBlock((items) => memories.recordUsage(turnId, items)) : ""),
     (id) => hosts.launchFor(id, bridge.port),
     () => [workspaceRoot],
+    (turnId) => memories.usage(turnId),
   );
   const subagents = new SubagentService(db, store, chat, queue, () => runtimes, hosts, broadcast);
   bridge.subagents = subagents;
@@ -290,6 +295,7 @@ async function main() {
       hosts,
       subagents,
       tasks: taskService,
+      profile: new ProfileService(db, memories, broadcast),
     },
   );
 

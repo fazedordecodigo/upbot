@@ -2,6 +2,7 @@ import type {
   Agent,
   AgentStatusInfo,
   ConfigOption,
+  MemoryUsage,
   PendingPermission,
   QueueState,
 } from "@boto/protocol";
@@ -22,9 +23,10 @@ export class RuntimeManager {
     private queue: QueueStore,
     private broadcast: Broadcast,
     private mcpServers: (agentId: string) => McpServerSpec[] = () => [],
-    private sessionContext: (agentId: string) => string = () => "",
+    private sessionContext: (agentId: string, turnId: string, fresh: boolean) => string = () => "",
     private remoteFor: (agentId: string) => RemoteLaunch | null = () => null,
     private sharedDirs: () => string[] = () => [],
+    private memoryUsage: (turnId: string) => MemoryUsage = () => ({ count: 0, kinds: [] }),
   ) {}
 
   private runtimeFor(agentId: string): AgentRuntime {
@@ -43,6 +45,7 @@ export class RuntimeManager {
         this.remoteFor,
         this.sharedDirs,
         () => this.tasks,
+        this.memoryUsage,
       );
       this.runtimes.set(agentId, rt);
     }

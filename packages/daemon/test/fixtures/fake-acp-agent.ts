@@ -198,7 +198,7 @@ async function handlePrompt(ctx: Ctx): Promise<{ stopReason: string }> {
     .replace(/^(?:@[\w-]+\s+)+/, "");
   // session context blocks prepended by the daemon are not part of the command
   const stripped = full.replace(
-    /^(?:<(boto_context|agent_instructions|agent_memories|skills_library|conversation_summary|conversation_history|attachments|task_context)>[\s\S]*?<\/\1>\s*)+/,
+    /^(?:<(boto_context|user_profile|agent_instructions|agent_memories|skills_library|conversation_summary|conversation_history|attachments|task_context)>[\s\S]*?<\/\1>\s*)+/,
     "",
   );
   const external = /^<(external_message|team_message)[^>]*>\n([\s\S]*?)\n<\/\1>/.exec(stripped);

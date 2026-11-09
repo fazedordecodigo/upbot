@@ -334,4 +334,28 @@ export const migrations: string[] = [
   ALTER TABLE routines ADD COLUMN private INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE routines ADD COLUMN template_id TEXT;
   ALTER TABLE routine_runs ADD COLUMN task_id TEXT`,
+  // 23: user-scope profile memory and prompt memory provenance
+  `CREATE TABLE memories_next (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT REFERENCES agents(id),
+    kind TEXT NOT NULL DEFAULT 'agent' CHECK(kind IN ('profile', 'agent', 'skill')),
+    text TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER,
+    CHECK((kind = 'profile' AND agent_id IS NULL) OR (kind != 'profile' AND agent_id IS NOT NULL))
+  );
+  INSERT INTO memories_next (id, agent_id, text, created_at, updated_at, deleted_at)
+    SELECT id, agent_id, text, created_at, updated_at, deleted_at FROM memories;
+  DROP TABLE memories;
+  ALTER TABLE memories_next RENAME TO memories;
+  CREATE INDEX memories_agent ON memories(agent_id, created_at);
+  CREATE UNIQUE INDEX memories_user_profile ON memories(kind) WHERE kind = 'profile';
+  CREATE TABLE turn_memory_usage (
+    turn_id TEXT NOT NULL REFERENCES turns(id),
+    memory_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('profile', 'agent', 'skill')),
+    text TEXT NOT NULL,
+    PRIMARY KEY(turn_id, memory_id, kind)
+  )`,
 ];
