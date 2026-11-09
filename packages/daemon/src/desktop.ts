@@ -14,6 +14,7 @@ import type {
 } from "@boto/protocol";
 import type { ApprovalService } from "./approvals";
 import type { RemoteComputer } from "./computer";
+import { x11KeyCombo } from "./computer-platform";
 import { spawnEnv } from "./env/login-path";
 import { envOverride } from "./env/vars";
 import { BUN_PATH, HELPER, type HostStore, shq, sshArgs } from "./remote/hosts";
@@ -316,12 +317,7 @@ export class DesktopService {
         return this.agentAction(st, { type: "agent", events: [{ type: "type", text }] });
       },
       key: async (_agent, key, modifiers) => {
-        const mods = Array.isArray(modifiers)
-          ? modifiers.filter((m): m is string => typeof m === "string")
-          : [];
-        const combo = [...mods, key].join("+");
-        if (!/^[A-Za-z0-9_]{1,32}(\+[A-Za-z0-9_]{1,32}){0,4}$/.test(combo))
-          throw new Error("key must be an X keysym name with up to four modifiers");
+        const combo = x11KeyCombo(key, modifiers);
         return this.agentAction(st, { type: "agent", events: [{ type: "key", keysym: combo }] });
       },
     };
