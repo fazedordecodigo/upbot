@@ -96,7 +96,11 @@ export class RuntimeManager {
     const pool = this.pool(agentId);
     for (const status of STATUS_PRIORITY) {
       const rt = pool.find((r) => r.status === status);
-      if (rt) return { status, error: rt.statusError };
+      if (rt)
+        return {
+          status,
+          error: this.chat.isPrivateTask(rt.currentTaskId()) ? null : rt.statusError,
+        };
     }
     return { status: "idle", error: null };
   }
