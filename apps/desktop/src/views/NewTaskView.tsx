@@ -2,7 +2,6 @@ import type { ToolMode, When } from "@boto/protocol";
 import { useEffect, useRef, useState } from "react";
 import { errorFields, logWarn } from "../lib/log";
 import { attachmentError, delegateTask, draftError, greeting } from "../lib/new-task";
-import { readStorage } from "../lib/storage";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
 import { usePrivateMode } from "../shell/Topbar";
@@ -40,8 +39,6 @@ function NewTaskComposer() {
   const fileInput = useRef<HTMLInputElement>(null);
   const fileIds = useRef(new WeakMap<File, string>());
   const input = useRef<HTMLTextAreaElement>(null);
-  const privateSetter = useRef(setPrivateMode);
-  privateSetter.current = setPrivateMode;
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -60,8 +57,6 @@ function NewTaskComposer() {
     ])
       .then(([profile, template]) => {
         if (!active) return;
-        if (readStorage("boto.private-task") === null)
-          privateSetter.current(profile.defaults.private);
         setToolMode(template?.toolMode ?? profile.defaults.toolMode);
         setRequireApproval(template?.requireApproval ?? profile.defaults.requireApproval);
         if (template) {
