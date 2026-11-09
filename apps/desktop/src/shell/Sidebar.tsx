@@ -13,7 +13,7 @@ import { useRouter, type ViewName } from "./router";
 
 const navigation: { view: ViewName; label: string; icon: IconName; action: string }[] = [
   { view: "home", label: "Início", icon: "home", action: "go-home" },
-  { view: "agents", label: "Agentes", icon: "users", action: "go-agents" },
+  { view: "agents", label: "Bots", icon: "users", action: "go-agents" },
   { view: "routines", label: "Rotinas", icon: "repeat", action: "go-routines" },
   { view: "templates", label: "Modelos", icon: "layout-template", action: "go-templates" },
   { view: "marketplace", label: "Marketplace", icon: "store", action: "go-marketplace" },

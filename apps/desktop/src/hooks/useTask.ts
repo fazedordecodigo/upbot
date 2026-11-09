@@ -39,6 +39,7 @@ export function useTask(client: DaemonClient, taskId?: string) {
     let items: ChatItem[] = [];
     let turns: Turn[] = [];
     let approvals: Approval[] = [];
+    let pendingPermissions = new Map<string, PendingPermission>();
     let paging = false;
     let eventTask: Task | null = null;
     let eventItems: ChatItem[] = [];
@@ -53,6 +54,9 @@ export function useTask(client: DaemonClient, taskId?: string) {
           ...s,
           items: [...items].sort((a, b) => a.seq - b.seq),
           turns,
+          permissions: [...pendingPermissions.values()].filter((permission) =>
+            turns.some((turn) => turn.id === permission.turnId),
+          ),
           approvals: approvals.filter((a) =>
             a.turnId ? turns.some((t) => t.id === a.turnId) : a.agentId === taskAgentId,
           ),
@@ -76,7 +80,7 @@ export function useTask(client: DaemonClient, taskId?: string) {
         if (!alive) return;
         subscribed = true;
         await client.request("tasks.subscribe", { id: taskId, watch: true });
-        const [task, history, list, agents, permissions] = await Promise.all([
+        const [task, history, list, agents, permissionList] = await Promise.all([
           client.request("tasks.get", { id: taskId }),
           client.request("tasks.history", {
             id: taskId,
@@ -92,12 +96,13 @@ export function useTask(client: DaemonClient, taskId?: string) {
         turns = older ? merge(history.turns, turns) : merge(history.turns, eventTurns);
         approvals = merge(list, eventApprovals);
         const pending = new Map(
-          permissions.map((permission) => [permission.requestId, permission]),
+          permissionList.map((permission) => [permission.requestId, permission]),
         );
         for (const [id, permission] of eventPermissions) {
           if (permission) pending.set(id, permission);
           else pending.delete(id);
         }
+        pendingPermissions = pending;
         setState((s) => ({
           ...s,
           task: eventTask ?? task,
@@ -105,7 +110,6 @@ export function useTask(client: DaemonClient, taskId?: string) {
           hasMore: history.hasMore,
           loading: false,
           error: false,
-          permissions: [...pending.values()],
           permissionsReady: true,
         }));
         publish();
@@ -177,20 +181,12 @@ export function useTask(client: DaemonClient, taskId?: string) {
       listen("turn.ended", turn),
       listen("permission.requested", (permission) => {
         eventPermissions.set(permission.requestId, permission);
-        setState((s) => ({
-          ...s,
-          permissions: [
-            ...s.permissions.filter((p) => p.requestId !== permission.requestId),
-            permission,
-          ],
-        }));
+        pendingPermissions.set(permission.requestId, permission);
+        publish();
       }),
       listen("permission.resolved", ({ requestId, optionId }) => {
         eventPermissions.set(requestId, null);
-        setState((s) => ({
-          ...s,
-          permissions: s.permissions.filter((p) => p.requestId !== requestId),
-        }));
+        pendingPermissions.delete(requestId);
         items = items.map((i) =>
           i.kind === "permission" && i.requestId === requestId
             ? { ...i, resolution: { optionId }, updatedAt: Date.now() }

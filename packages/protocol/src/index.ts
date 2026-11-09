@@ -1183,7 +1183,7 @@ export const methodMap = {
   },
   "vault.delete": { params: z.object({ name: VaultName }).strict(), result: Ok },
   "computer.access": {
-    params: z.object({}).strict(),
+    params: z.object({ agentId: z.string().optional() }).strict(),
     result: z.object({
       available: z.boolean(),
       reason: z.string().optional(),
