@@ -560,7 +560,7 @@ export class Rpc {
         return { ok: true };
       case "computer.access":
         return {
-          ...this.extras.computer.status(),
+          ...this.extras.computer.status((params as MethodParsedParams<typeof method>).agentId),
           agentIds: this.extras.computer.access(),
         };
       case "computer.setAccess": {

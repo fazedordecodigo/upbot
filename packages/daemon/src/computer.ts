@@ -44,11 +44,12 @@ export class ComputerUse {
     setSetting(this.db, "computer_use_agents", [...new Set(agentIds)]);
   }
 
-  available(): boolean {
-    return this.status().available;
+  available(agentId?: string): boolean {
+    return this.status(agentId).available;
   }
 
-  status(): { available: boolean; reason?: string } {
+  status(agentId?: string): { available: boolean; reason?: string } {
+    if (agentId && this.remote(agentId)) return { available: true };
     const support = computerSupport(this.environment);
     return "backend" in support
       ? { available: true }

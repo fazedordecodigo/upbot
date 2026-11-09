@@ -43,6 +43,8 @@ describe("desktop.* (daemon e2e with a fake host desktop stream)", () => {
       FAKE_SSH_HOME: sshHome,
       FAKE_DESKTOP_LOG: desktopLog,
       FAKE_DESKTOP_EXIT_FILE: exitFile,
+      XDG_SESSION_TYPE: "wayland",
+      DISPLAY: "",
     });
     c = await DaemonClient.connect(daemon.port, TOKEN);
     c2 = await DaemonClient.connect(daemon.port, TOKEN);
@@ -69,6 +71,11 @@ describe("desktop.* (daemon e2e with a fake host desktop stream)", () => {
   });
 
   test("desktop.machines lists one named machine per microVM agent", async () => {
+    expect(await c.request("computer.access", { agentId: a1.id })).toMatchObject({
+      available: true,
+    });
+    if (process.platform === "linux")
+      expect(await c.request("computer.access", {})).toMatchObject({ available: false });
     const machines = await c.request("desktop.machines", {});
     expect(machines.map((m) => m.name).sort()).toEqual(["codigo-01", "codigo-02"]);
     m1 = machines.find((m) => m.agentId === a1.id)!;
