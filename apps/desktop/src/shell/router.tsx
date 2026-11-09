@@ -17,11 +17,12 @@ type Router = {
 };
 const RouterContext = createContext<Router | null>(null);
 export function RouterProvider({ children }: { children: ReactNode }) {
-  const [route, setRoute] = useState<{ view: ViewName; params: RouteParams; revision: number }>({
-    view: "home",
-    params: {},
-    revision: 0,
-  });
+  const [route, setRoute] = useState<{ view: ViewName; params: RouteParams; revision: number }>(
+    () => {
+      const taskId = new URLSearchParams(location.hash.slice(1)).get("task");
+      return { view: taskId ? "task" : "home", params: taskId ? { id: taskId } : {}, revision: 0 };
+    },
+  );
   const navigate = useCallback(
     (view: ViewName, params: RouteParams = {}) =>
       setRoute((previous) => ({ view, params, revision: previous.revision + 1 })),
