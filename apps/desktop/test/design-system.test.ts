@@ -173,7 +173,7 @@ test("mobile Sheet closes on navigation, Escape, backdrop and desktop breakpoint
   }
 }, 30000);
 
-test("user menu supports keyboard, dialogs restore focus, tooltip is labelled, tray stays empty", async () => {
+test("user menu supports keyboard, dialogs restore focus, tooltip is labelled, legacy tray route mounts the shell", async () => {
   const p = await page();
   try {
     await p.getByRole("button", { name: "Menu da conta" }).click();
@@ -207,7 +207,8 @@ test("user menu supports keyboard, dialogs restore focus, tooltip is labelled, t
     await p.getByRole("tooltip").waitFor();
     expect(await p.getByRole("tooltip").innerText()).toBe("Alternar tema");
     await p.goto(`${base}/#/menubar`);
-    await until(async () => (await p.locator("#root").innerHTML()) === "");
+    await p.locator("#home-title").waitFor();
+    expect(await p.locator("#main").getAttribute("data-view")).toBe("home");
   } finally {
     await p.close();
   }

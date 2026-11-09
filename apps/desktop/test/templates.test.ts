@@ -26,12 +26,14 @@ const base = "http://localhost:1420";
 beforeAll(async () => {
   state = mkdtempSync(join(tmpdir(), "boto-templates-ui-"));
   daemon = await startDaemon(join(state, "data"), join(state, "agents"), token, {
+    BOTO_DEFAULT_BOT: "on",
     BOTO_PROVIDER_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
     BOTO_MARKETPLACE_URL: `file://${join(ROOT, "marketplace/index.json")}`,
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  await rpc.request("agents.create", { name: "Modelos", provider: "devin" });
+  const seeded = (await rpc.request("agents.list", {})).find((agent) => agent.isDefault)!;
+  await rpc.request("agents.update", { id: seeded.id, name: "Modelos", provider: "devin" });
   vite = await startVite();
   browser = await chromium.launch({ channel: "chrome", headless: true });
 }, 30_000);

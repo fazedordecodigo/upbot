@@ -43,6 +43,11 @@ beforeAll(async () => {
         "-e",
         "await Bun.sleep(1500)",
       ]),
+      BOTO_PROVIDER_TERMINAL_COMMAND: JSON.stringify([
+        process.execPath,
+        "-e",
+        'const child = Bun.spawn(process.argv.slice(1), { stdin: "inherit", stdout: "inherit", stderr: "inherit" }); process.exit(await child.exited);',
+      ]),
     },
     true,
   );
