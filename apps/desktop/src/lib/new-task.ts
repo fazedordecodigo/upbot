@@ -76,28 +76,29 @@ export async function delegateTask(client: DaemonClient, draft: NewTaskDraft) {
     toolMode: draft.toolMode,
     requireApproval: draft.requireApproval,
     ...(draft.templateId ? { templateId: draft.templateId } : {}),
-    ...(draft.files.length ? { attachments: await Promise.all(draft.files.map(attachment)) } : {}),
   };
   const timing = draft.schedule
     ? { schedule: draft.schedule, runAt: null }
     : whenToRoutine(draft.when);
+  const attachments = draft.files.length
+    ? await Promise.all(draft.files.map(attachment))
+    : undefined;
   if (timing) {
     const routine = await client.request("routines.create", {
       ...policy,
       name: draft.text.trim().split("\n")[0]?.slice(0, 80) ?? "",
       prompt: draft.text.trim(),
+      ...(attachments ? { attachments } : {}),
       ...timing,
       webhook: false,
       enabled: true,
-      ...(draft.files.length
-        ? { attachments: await Promise.all(draft.files.map(attachment)) }
-        : {}),
     });
     return { view: "routines", id: routine.id } as const;
   }
   const params: MethodParams<"tasks.create"> = {
     ...policy,
     text: draft.text.trim(),
+    ...(attachments ? { attachments } : {}),
   };
   const task = await client.request("tasks.create", params);
   return { view: "task", id: task.id } as const;

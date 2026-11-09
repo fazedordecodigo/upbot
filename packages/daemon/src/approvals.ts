@@ -168,7 +168,7 @@ export class ApprovalService {
     try {
       this.insertAudit(event, data, a);
     } catch (error) {
-      console.error("[botod] approval.audit_write_failed", (error as Error).message);
+      console.error("[botod] approval.audit_write_failed", errorDiagnostics(error));
     }
   }
 
@@ -463,6 +463,7 @@ export class ApprovalService {
         kind: done.kind,
         tool: done.tool,
         appId: done.appId ?? null,
+        appName: done.appName ?? null,
         permission: done.permission ?? null,
         secretName: done.kind === "secret" ? done.secretName : null,
         status,
@@ -471,7 +472,10 @@ export class ApprovalService {
         reason: outcome?.reason ?? null,
         failure: outcome?.failure ?? null,
         background: done.background,
-        ageMs: Date.now() - done.createdAt,
+        createdAt: done.createdAt,
+        expiresAt: done.expiresAt,
+        resolvedAt: done.resolvedAt,
+        ageMs: done.resolvedAt - done.createdAt,
       },
       done,
     );

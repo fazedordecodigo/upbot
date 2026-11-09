@@ -144,6 +144,66 @@ describe("tasks e2e", () => {
   );
 
   test(
+    "removing queued instructions finishes only idle tasks with no remaining work",
+    async () => {
+      await c.request("queue.pause", { agentId: b.id });
+      try {
+        const task = await c.request("tasks.create", { agentId: b.id, text: "echo:removed" });
+        const next = await c.request("tasks.instruct", { id: task.id, text: "echo:remaining" });
+        const initial = (await c.request("queue.get", { agentId: b.id })).items.find(
+          (i) => i.taskId === task.id && i.id !== next.queueId,
+        );
+        expect(initial).toBeDefined();
+        await c.request("queue.remove", { queueId: initial!.id });
+        expect((await c.request("tasks.get", { id: task.id })).situation).toBe("run");
+
+        const updated = c.waitForEventWhere(
+          "task.updated",
+          (t) => t.id === task.id && t.situation === "done",
+        );
+        await c.request("queue.remove", { queueId: next.queueId });
+        expect(await updated).toMatchObject({ outcome: "stopped", sessionId: null });
+        const done = await c.request("tasks.get", { id: task.id });
+        expect(done.endedAt).not.toBeNull();
+        expect((await c.request("tasks.history", { id: task.id })).turns).toEqual([]);
+
+        const hidden = await c.request("tasks.create", {
+          agentId: b.id,
+          text: "echo:private removed",
+          private: true,
+        });
+        const queued = (await c.request("queue.get", { agentId: b.id })).items.find(
+          (i) => i.taskId === hidden.id,
+        );
+        await c.request("queue.remove", { queueId: queued!.id });
+        expect(await c.request("tasks.get", { id: hidden.id })).toMatchObject({
+          situation: "done",
+          outcome: "stopped",
+          prompt: "",
+        });
+        expect(
+          (await c.request("tasks.list", { includePrivate: true })).items.map((t) => t.id),
+        ).not.toContain(hidden.id);
+      } finally {
+        await c.request("queue.resume", { agentId: b.id });
+      }
+
+      const running = await c.request("tasks.create", {
+        agentId: b.id,
+        text: "slow",
+        requireApproval: false,
+      });
+      await waitTask(running.id, (t) => t.sessionId !== null);
+      const followup = await c.request("tasks.instruct", { id: running.id, text: "echo:removed" });
+      await c.request("queue.remove", { queueId: followup.queueId });
+      expect((await c.request("tasks.get", { id: running.id })).situation).toBe("run");
+      await c.request("tasks.stop", { id: running.id });
+      await c.waitForEventWhere("turn.ended", (t) => t.taskId === running.id, 30_000);
+    },
+    T,
+  );
+
+  test(
     "routine runs create tasks with saved policy and routine prompt metadata",
     async () => {
       await c.request("queue.pause", { agentId: b.id });
@@ -708,6 +768,29 @@ describe("tasks across a daemon restart", () => {
         const news = readLog(stateDir).filter((l) => l.method === "session/new");
         expect(news.length).toBe(2);
         expect((await c.request("tasks.get", { id: task.id })).sessionId).toBe(sessionId);
+
+        await c.request("queue.pause", { agentId: agent.id });
+        const queued = await c.request("tasks.create", { agentId: agent.id, text: "echo:queued" });
+        const entry = (await c.request("queue.get", { agentId: agent.id })).items[0]!;
+        await stopDaemon(d, c, stateDir);
+        d = await startDaemon(dataDir, agentsRoot, TOKEN, env);
+        c = await DaemonClient.connect(d.port, TOKEN);
+        expect((await c.request("tasks.get", { id: queued.id })).situation).toBe("run");
+        const queueUpdated = c.waitForEventWhere("queue.updated", (q) => q.agentId === agent.id);
+        await c.request("queue.remove", { queueId: entry.id });
+        expect((await queueUpdated).items).toEqual([]);
+        expect(await c.request("tasks.get", { id: queued.id })).toMatchObject({
+          situation: "done",
+          outcome: "stopped",
+          sessionId: null,
+        });
+        await stopDaemon(d, c, stateDir);
+        d = await startDaemon(dataDir, agentsRoot, TOKEN, env);
+        c = await DaemonClient.connect(d.port, TOKEN);
+        expect(await c.request("tasks.get", { id: queued.id })).toMatchObject({
+          situation: "done",
+          outcome: "stopped",
+        });
       } finally {
         await stopDaemon(d, c, stateDir);
         for (const dir of [dataDir, agentsRoot, stateDir]) await removeDir(dir);

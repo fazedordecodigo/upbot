@@ -228,9 +228,11 @@ export class RuntimeManager {
         return;
       }
     }
-    if (!this.queue.remove(queueId)) {
+    const item = this.queue.row(queueId);
+    if (!item || !this.queue.remove(queueId)) {
       throw new RpcError("not_found", "queue item not found or already started");
     }
+    this.broadcast("queue.updated", this.getQueue(item.agent_id));
   }
 
   pauseQueue(agentId: string): QueueState {

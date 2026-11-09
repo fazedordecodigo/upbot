@@ -5,7 +5,7 @@ import { WHEN_SCHEDULES, whenToRoutine } from "@boto/protocol";
 import { AgentStore } from "../src/agents";
 import { openDatabase } from "../src/db";
 import { RoutineService } from "../src/routines";
-import { DaemonClient, ROOT, startDaemon, stopDaemon, tmp } from "./helpers";
+import { DaemonClient, FAKE_AGENT, ROOT, readLog, startDaemon, stopDaemon, tmp } from "./helpers";
 
 test("Quando maps local dates and recurring schedules", () => {
   const now = new Date(2026, 2, 7, 23, 45).getTime();
@@ -178,3 +178,118 @@ test("one-shot routines create tasks once, retain runAt and record sink errors",
     for (const path of [data, root]) rmSync(path, { recursive: true, force: true });
   }
 });
+
+test("scheduled attachments, policy, profile defaults and template changes survive a daemon restart", async () => {
+  const data = tmp("scheduled-files-data-");
+  const root = tmp("scheduled-files-bots-");
+  const state = tmp("scheduled-files-acp-");
+  const token = crypto.randomUUID();
+  const env = {
+    BOTO_ACP_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
+    FAKE_ACP_STATE_DIR: state,
+  };
+  let daemon = await startDaemon(data, root, token, env);
+  let c = await DaemonClient.connect(daemon.port, token);
+  try {
+    const bot = await c.request("agents.create", {
+      name: "Scheduler",
+      provider: "devin",
+      requireApproval: false,
+    });
+    const profile = await c.request("profile.update", {
+      defaults: {
+        delegationMode: "scheduled",
+        private: true,
+        toolMode: "browser",
+        requireApproval: true,
+      },
+    });
+    await c.request("onboarding.complete", {});
+    const template = await c.request("templates.create", {
+      kind: "routine",
+      name: "Files",
+      prompt: "echo:scheduled files",
+      schedule: "daily 08:00",
+    });
+    await c.request("templates.update", { id: template.id, name: "Files updated" });
+    await c.request("templates.delete", { id: "ci" });
+    const routine = await c.request("routines.create", {
+      agentId: bot.id,
+      name: "Scheduled files",
+      prompt: "echo:scheduled files",
+      runAt: Date.now() + 3600_000,
+      templateId: template.id,
+      toolMode: "browser",
+      requireApproval: true,
+      private: false,
+      attachments: [
+        {
+          name: "context.txt",
+          mime: "text/plain",
+          dataBase64: Buffer.from("persistent attachment").toString("base64"),
+        },
+      ],
+    });
+    const attachment = routine.attachments?.[0];
+    if (!attachment) throw new Error("attachment missing");
+    expect(readFileSync(attachment.path, "utf8")).toBe("persistent attachment");
+    expect(JSON.stringify(routine)).not.toContain("dataBase64");
+    await stopDaemon(daemon, c, state);
+    daemon = await startDaemon(data, root, token, env);
+    c = await DaemonClient.connect(daemon.port, token);
+    expect((await c.request("profile.get", {})).defaults).toEqual(profile.defaults);
+    expect((await c.request("profile.get", {})).onboardingCompletedAt).not.toBeNull();
+    expect((await c.request("templates.list", {})).find((t) => t.id === template.id)?.name).toBe(
+      "Files updated",
+    );
+    expect((await c.request("templates.list", {})).some((t) => t.id === "ci")).toBe(false);
+    expect((await c.request("templates.restore", { id: "ci" })).hidden).toBe(false);
+    expect((await c.request("routines.list", {})).find((r) => r.id === routine.id)).toEqual(
+      routine,
+    );
+    await c.request("queue.pause", { agentId: bot.id });
+    const run = await c.request("routines.run", { id: routine.id });
+    expect(run.error).toBeNull();
+    if (!run.taskId) throw new Error("scheduled task missing");
+    expect(await c.request("tasks.get", { id: run.taskId })).toMatchObject({
+      routineId: routine.id,
+      templateId: template.id,
+      private: false,
+      toolMode: "browser",
+      requireApproval: true,
+    });
+    await c.request("queue.resume", { agentId: bot.id });
+    await c.waitForEventWhere(
+      "task.updated",
+      (t) => t.id === run.taskId && t.situation === "done",
+      30_000,
+    );
+    const history = await c.request("tasks.history", { id: run.taskId });
+    expect(history.items.find((i) => i.kind === "user_message")).toMatchObject({
+      attachments: [attachment],
+      routine: { id: routine.id, name: routine.name, trigger: "manual" },
+    });
+    const prompt = readLog(state)
+      .filter((entry) => entry.method === "session/prompt")
+      .at(-1);
+    expect(JSON.stringify(prompt?.params)).toContain(attachment.path);
+    expect(JSON.stringify(prompt?.params)).toContain("<routine");
+    expect(JSON.stringify(prompt?.params)).toContain("<task_context>");
+    await expect(
+      c.request("routines.create", {
+        agentId: bot.id,
+        name: "Invalid",
+        prompt: "x",
+        schedule: "daily 08:00",
+        attachments: Array.from({ length: 11 }, () => ({
+          name: "a",
+          mime: "text/plain",
+          dataBase64: "YQ==",
+        })),
+      }),
+    ).rejects.toMatchObject({ code: "bad_request" });
+  } finally {
+    await stopDaemon(daemon, c, state);
+    for (const path of [data, root, state]) rmSync(path, { recursive: true, force: true });
+  }
+}, 60_000);

@@ -120,6 +120,30 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     await page.reload();
     await page.locator("#timeline").waitFor();
 
+    await page.reload();
+    await page.getByText("tool-ok:note-created", { exact: true }).waitFor();
+    expect(await page.locator("#timeline").innerText()).toMatch(/Aprovada · \d{2}:\d{2}/);
+    expect(await page.locator("#timeline").innerText()).not.toContain(
+      "Horário da decisão indisponível",
+    );
+    await client.request("profile.update", { about: "Perfil real para o indicador de memória." });
+    const memoryTask = await client.request("tasks.create", {
+      agentId: agent.id,
+      text: "echo:memory navigation",
+    });
+    await page.goto(
+      `http://localhost:1420/#port=${daemon.port}&token=${token}&task=${memoryTask.id}`,
+    );
+    await page.reload();
+    await page.getByText("memory navigation", { exact: true }).waitFor();
+    await page.getByRole("button", { name: /Usou .* itens da memória/ }).click();
+    await page.getByRole("button", { name: "Editar memória", exact: true }).click();
+    await page.locator("#st-memory").waitFor();
+    expect(await page.locator("#st-tab-memory").getAttribute("aria-selected")).toBe("true");
+    await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}&task=${task.id}`);
+    await page.reload();
+    await page.locator("#instruct-input:not([disabled])").waitFor();
+
     const slow = await client.request("tasks.instruct", { id: task.id, text: "slow" });
     await client.waitForEventWhere("turn.started", (turn) => turn.queueId === slow.queueId);
     await page.locator("#ctl-pause").click();

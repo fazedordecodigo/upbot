@@ -79,7 +79,7 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
         defaults: {
           private: privateTask,
           delegationMode: mode,
-          ...(mode === "approval" ? { requireApproval: true } : {}),
+          requireApproval: mode !== "now",
         },
       });
       await client.request("onboarding.complete", {});

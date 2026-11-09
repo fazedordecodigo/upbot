@@ -441,3 +441,27 @@ test(
   },
   T,
 );
+
+test(
+  "saved delegation timing and Nova rotina initialize a scheduled composer, while templates override defaults",
+  async () => {
+    await rpc.request("profile.update", { defaults: { delegationMode: "scheduled" } });
+    const page = await app();
+    try {
+      expect(await page.locator("#when-label").innerText()).toBe("Daqui a 1 hora");
+      await page.locator('#sidebar [data-nav="routines"]').click();
+      await page.getByRole("button", { name: "Nova rotina", exact: true }).click();
+      await until(() => page.locator("#composer-input").isEnabled());
+      expect(await page.locator("#when-label").innerText()).toBe("Todo dia às 8h");
+      await page.locator('#sidebar [data-nav="templates"]').click();
+      await page.locator('[data-template="ci"]').click();
+      await until(() => page.locator("#composer-input").isEnabled());
+      expect(await page.locator("#when-label").innerText()).toBe("Agora");
+      expect(await page.locator("#approval-switch").getAttribute("aria-checked")).toBe("true");
+    } finally {
+      await rpc.request("profile.update", { defaults: { delegationMode: "approval" } });
+      await page.close();
+    }
+  },
+  T,
+);

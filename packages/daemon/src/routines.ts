@@ -8,6 +8,7 @@ import type {
   RoutineTrigger,
   ToolMode,
 } from "@boto/protocol";
+import { ChatAttachment as AttachmentSchema } from "@boto/protocol";
 import type { AgentStore } from "./agents";
 import { attachmentsBlock, saveAttachments } from "./attachments";
 import { envPositiveNumber } from "./env/vars";
@@ -141,7 +142,7 @@ export class RoutineService {
 
   private toRoutine(r: Row): Routine {
     return {
-      attachments: JSON.parse(r.attachments),
+      attachments: AttachmentSchema.array().parse(JSON.parse(r.attachments)),
       runAt: r.run_at,
       toolMode: r.tool_mode,
       requireApproval: r.require_approval === 1,

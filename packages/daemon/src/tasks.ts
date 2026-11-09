@@ -309,6 +309,7 @@ export class TaskService {
       case "permission.requested":
       case "permission.resolved":
       case "approval.updated":
+      case "queue.updated":
         this.recomputeAgent((data as { agentId: string }).agentId);
         return;
       case "agent.deleted":

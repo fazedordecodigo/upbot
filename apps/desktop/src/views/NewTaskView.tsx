@@ -73,6 +73,13 @@ function NewTaskComposer() {
             (profile.defaults.delegationMode === "approval" || profile.defaults.requireApproval),
         );
         setTemplateMissing(Boolean(params.templateId) && !template);
+        setWhen(
+          params.when === "daily"
+            ? "daily"
+            : profile.defaults.delegationMode === "scheduled"
+              ? "in1h"
+              : "now",
+        );
         if (template) {
           setText(template.prompt);
           setTemplateId(template.templateId);
@@ -88,7 +95,7 @@ function NewTaskComposer() {
     return () => {
       active = false;
     };
-  }, [client, connected, loaded, params.templateId, retry]);
+  }, [client, connected, loaded, params.templateId, params.when, retry]);
 
   useEffect(() => {
     if (!agentId && !params.agentId && agents.length)
