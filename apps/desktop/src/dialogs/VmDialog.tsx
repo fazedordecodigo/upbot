@@ -67,7 +67,7 @@ function VmContent({ machineId, onClose }: { machineId: string; onClose: () => v
             {session.machine?.name ?? "Máquina"}
           </h2>
           <p className="vm-sub od-truncate" id="vm-sub">
-            {agent?.name ?? "Agente"} ·{" "}
+            {agent?.name ?? "Bot"} ·{" "}
             {session.owned
               ? "Usada por você"
               : session.machine

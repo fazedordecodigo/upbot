@@ -49,6 +49,7 @@ test.skipIf(process.platform === "win32")(
         BOTO_PROVIDER_COMMAND_DEVIN: missing,
         BOTO_PROVIDER_COMMAND_GROK: missing,
         BOTO_PROVIDER_LOGIN_COMMAND_CODEX: JSON.stringify([login]),
+        BOTO_PROVIDER_TERMINAL_COMMAND: JSON.stringify(["/bin/sh", "-c", 'exec "$@"', "login"]),
       },
       true,
     );

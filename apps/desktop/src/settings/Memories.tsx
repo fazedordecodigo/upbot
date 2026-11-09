@@ -108,7 +108,7 @@ function MemoryRow({
       >
         <div className="dialog-header">
           <h2 id={`delete-${memory.id}`}>Apagar memória?</h2>
-          <p>Esta memória será apagada das próximas sessões do agente.</p>
+          <p>Esta memória será apagada das próximas sessões do bot.</p>
         </div>
         <div className="dialog-footer">
           <button type="button" className="btn btn-outline" onClick={() => setConfirm(false)}>
@@ -175,8 +175,8 @@ export function Memories() {
   return (
     <div className="st-block">
       <BlockHead
-        title="Memórias dos agentes"
-        description="O que cada agente guardou para lembrar nas próximas sessões. Edite ou apague o que não estiver certo."
+        title="Memórias dos bots"
+        description="O que cada bot guardou para lembrar nas próximas sessões. Edite ou apague o que não estiver certo."
       />
       <div id="st-memories" aria-busy={!loaded && !error}>
         <QueryState query={{ loaded, error, reload }}>
@@ -189,7 +189,7 @@ export function Memories() {
               )}
             </ul>
           ) : (
-            <p className="st-empty">Nenhum agente guardou memórias ainda.</p>
+            <p className="st-empty">Nenhum bot guardou memórias ainda.</p>
           )}
         </QueryState>
       </div>

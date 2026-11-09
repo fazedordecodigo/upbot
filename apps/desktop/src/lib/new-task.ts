@@ -58,7 +58,7 @@ export type NewTaskDraft = {
 
 export function draftError(draft: NewTaskDraft): string | null {
   if (!draft.text.trim()) return "Descreva a tarefa e o resultado esperado.";
-  if (!draft.agentId) return "Escolha um agente para delegar a tarefa.";
+  if (!draft.agentId) return "Escolha um bot para delegar a tarefa.";
   const scheduled = draft.when !== "now" || draft.schedule !== null;
   if (draft.text.trim().length > (scheduled ? 20_000 : 100_000))
     return scheduled

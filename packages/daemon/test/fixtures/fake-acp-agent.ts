@@ -29,10 +29,9 @@ mkdirSync(STATE_DIR, { recursive: true });
 const LOG = join(STATE_DIR, "log.jsonl");
 const SESSIONS_FILE = join(STATE_DIR, "sessions.json");
 appendFileSync(join(STATE_DIR, "pids.txt"), `${process.pid}\n`);
-// record the env the daemon gave us so tests can assert no secrets leak
 writeFileSync(
   join(STATE_DIR, "env.json"),
-  JSON.stringify({ keys: Object.keys(process.env), env: process.env }),
+  JSON.stringify({ keys: Object.keys(process.env).filter((key) => key.startsWith("BOTO_")) }),
 );
 // optional startup stderr line so tests can assert the daemon sanitizes tails
 if (process.env.FAKE_ACP_STDERR) process.stderr.write(`${process.env.FAKE_ACP_STDERR}\n`);

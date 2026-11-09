@@ -377,4 +377,23 @@ export const migrations: string[] = [
   // 30: decided approvals stay in approval_records with their decision time, so task
   // timelines show approval cards and decision times after a daemon restart.
   `ALTER TABLE approval_records ADD COLUMN resolved_at INTEGER`,
+  // 31: marketplace installation ownership and immutable artifact fingerprints
+  `CREATE TABLE marketplace_installations (
+    source TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    PRIMARY KEY (source, item_id)
+  );
+  CREATE TABLE marketplace_artifacts (
+    source TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('skill', 'agent')),
+    name TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    created INTEGER NOT NULL,
+    PRIMARY KEY (source, item_id, kind, name)
+  );
+  CREATE INDEX marketplace_artifact_refs ON marketplace_artifacts(kind, name)`,
+  // 32: retain explicit uninstall state and registry skill identity
+  `ALTER TABLE marketplace_installations ADD COLUMN active INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE marketplace_artifacts ADD COLUMN registry_id TEXT`,
 ];

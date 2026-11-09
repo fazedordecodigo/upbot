@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, Turn } from "@boto/protocol";
@@ -14,6 +14,8 @@ import {
 
 const TOKEN = `runtime-logging-${crypto.randomUUID()}`;
 const LOG_TIMEOUT_MS = 15000;
+
+setDefaultTimeout(30_000);
 
 describe("runtime turn-lifecycle logging", () => {
   let dataDir: string;

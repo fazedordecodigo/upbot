@@ -146,6 +146,15 @@ export function marketplaceMethods(
       params: z.object({ id: z.string(), source: z.string().optional() }).strict(),
       result: MarketplaceItem,
     },
+    "marketplace.uninstall": {
+      params: z.object({ source: z.string(), id: z.string() }).strict(),
+      result: z.object({
+        ok: z.literal(true),
+        removed: z.array(z.string()),
+        preserved: z.array(z.string()),
+        agents: z.array(z.string()),
+      }),
+    },
     "marketplace.install": {
       params: z
         .object({

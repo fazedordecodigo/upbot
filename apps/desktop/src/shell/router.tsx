@@ -23,11 +23,17 @@ export function RouterProvider({ children }: { children: ReactNode }) {
       return { view: taskId ? "task" : "home", params: taskId ? { id: taskId } : {}, revision: 0 };
     },
   );
-  const navigate = useCallback(
-    (view: ViewName, params: RouteParams = {}) =>
-      setRoute((previous) => ({ view, params, revision: previous.revision + 1 })),
-    [],
-  );
+  const navigate = useCallback((view: ViewName, params: RouteParams = {}) => {
+    const hash = new URLSearchParams(location.hash.slice(1));
+    if (view === "task" && params.id) hash.set("task", params.id);
+    else hash.delete("task");
+    history.replaceState(
+      null,
+      "",
+      `${location.pathname}${location.search}${hash.size ? `#${hash}` : ""}`,
+    );
+    setRoute((previous) => ({ view, params, revision: previous.revision + 1 }));
+  }, []);
   useEffect(() => {
     if (route.revision > 0) document.querySelector<HTMLElement>("#main h1")?.focus();
   }, [route]);

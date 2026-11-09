@@ -115,8 +115,8 @@ function createMachine(client: DaemonClient, id: string) {
       }
       return () => {
         listeners.delete(listener);
-        void release().catch(failure);
         if (!listeners.size) {
+          void release().catch(failure);
           generation++;
           clearInput();
           for (const off of offs) off();

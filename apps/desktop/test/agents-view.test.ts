@@ -50,7 +50,7 @@ beforeAll(async () => {
     });
   });
   await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-  await page.getByRole("button", { name: "Agentes", exact: true }).click();
+  await page.getByRole("button", { name: "Bots", exact: true }).click();
 }, 60000);
 
 afterAll(async () => {
@@ -72,7 +72,7 @@ test("relative time handles current, past and future timestamps", () => {
 });
 
 test("real agents can be created, delegated to, configured, filtered and deleted", async () => {
-  await page.getByText("Nenhum agente ainda. Crie o primeiro para delegar tarefas.").waitFor();
+  await page.getByText("Nenhum bot ainda. Crie o primeiro para delegar tarefas.").waitFor();
   await page.locator("#new-agent").click();
   expect((await page.locator("#agent-new").boundingBox())?.width).toBe(760);
   expect(
@@ -86,7 +86,7 @@ test("real agents can be created, delegated to, configured, filtered and deleted
       .evaluate((element) => getComputedStyle(element).fontWeight),
   ).toBe("500");
   await page.locator("#an-create").click();
-  expect(await page.locator("#an-name-error").textContent()).toBe("Dê um nome ao agente.");
+  expect(await page.locator("#an-name-error").textContent()).toBe("Dê um nome ao bot.");
   await page.locator("#an-name").fill("Financeiro");
   await page.locator("#an-role").fill("Confere notas fiscais");
   await page.locator("#an-approval").click();
@@ -122,9 +122,9 @@ test("real agents can be created, delegated to, configured, filtered and deleted
   );
   await page.locator('#agent-panel [role="switch"]').click();
   await waitUntil(async () => (await rpc.request("agents.list", {}))[0]?.requireApproval === true);
-  await page.getByRole("button", { name: "Fechar painel do agente" }).click();
+  await page.getByRole("button", { name: "Fechar painel do bot" }).click();
   await page.getByRole("radio", { name: "Trabalhando" }).click();
-  await page.getByText("Nenhum agente nesta situação.").waitFor();
+  await page.getByText("Nenhum bot nesta situação.").waitFor();
   expect(await page.locator(".ag-card").count()).toBe(0);
   await page.getByRole("radio", { name: "Trabalhando" }).press("Home");
   await page.locator(".ag-card").waitFor();
@@ -139,7 +139,7 @@ test("real agents can be created, delegated to, configured, filtered and deleted
   expect(await page.locator("#view-agents #confirm").count()).toBe(0);
   expect(await page.locator("#confirm-title").textContent()).toBe("Excluir Financeiro?");
   expect(await page.locator("#confirm-desc").textContent()).toBe(
-    "O agente sai do quadro e a fila dele é cancelada. A pasta de trabalho fica no computador.",
+    "O bot sai do quadro e a fila dele é cancelada. A pasta de trabalho fica no computador.",
   );
   await page.locator("#confirm-cancel").click();
   await page.locator("#confirm").waitFor({ state: "detached" });
@@ -148,7 +148,7 @@ test("real agents can be created, delegated to, configured, filtered and deleted
   await page.locator(".ap-delete").click();
   await page.locator("#confirm[open]").waitFor();
   await page.locator("#confirm-ok").click();
-  await page.getByText("Nenhum agente ainda. Crie o primeiro para delegar tarefas.").waitFor();
+  await page.getByText("Nenhum bot ainda. Crie o primeiro para delegar tarefas.").waitFor();
   expect((await rpc.request("agents.list", {})).length).toBe(0);
   expect(deletedIds).toEqual([agent.id]);
 }, 60000);
@@ -174,7 +174,7 @@ test("unknown overview numbers are honest during loading and RPC failure, then r
   });
   async function openAgents() {
     await pendingPage.getByRole("button", { name: "Abrir menu" }).click();
-    await pendingPage.getByRole("button", { name: "Agentes", exact: true }).click();
+    await pendingPage.getByRole("button", { name: "Bots", exact: true }).click();
   }
   async function expectUnknown() {
     expect(await pendingPage.locator(".ag-stat-value").allTextContents()).toEqual([
@@ -195,13 +195,13 @@ test("unknown overview numbers are honest during loading and RPC failure, then r
   try {
     await pendingPage.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
     await openAgents();
-    await pendingPage.getByText("Carregando agentes…").waitFor();
+    await pendingPage.getByText("Carregando bots…").waitFor();
     await waitUntil(async () => !!release);
     await expectUnknown();
     mode = "live";
     release?.();
     await pendingPage
-      .getByText("Nenhum agente ainda. Crie o primeiro para delegar tarefas.")
+      .getByText("Nenhum bot ainda. Crie o primeiro para delegar tarefas.")
       .waitFor();
     expect(await pendingPage.locator(".ag-stat-value").allTextContents()).toEqual([
       "0",
@@ -219,12 +219,12 @@ test("unknown overview numbers are honest during loading and RPC failure, then r
     mode = "fail";
     await pendingPage.reload();
     await openAgents();
-    await pendingPage.getByText("Não foi possível carregar os agentes.").waitFor();
+    await pendingPage.getByText("Não foi possível carregar os bots.").waitFor();
     await expectUnknown();
     mode = "live";
     await pendingPage.getByRole("button", { name: "Tentar de novo" }).click();
     await pendingPage
-      .getByText("Nenhum agente ainda. Crie o primeiro para delegar tarefas.")
+      .getByText("Nenhum bot ainda. Crie o primeiro para delegar tarefas.")
       .waitFor();
     expect(await pendingPage.locator(".ag-stat-value").first().textContent()).toBe("0");
   } finally {
@@ -257,7 +257,7 @@ test("agent config startup errors show the real message and retry the RPC", asyn
       expectedMessage = (error as Error).message;
     }
     await errorPage.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
-    await errorPage.getByRole("button", { name: /^Agentes/ }).click();
+    await errorPage.getByRole("button", { name: /^Bots/ }).click();
     await errorPage.getByRole("button", { name: "Abrir painel" }).click();
     const alert = errorPage.locator('#agent-panel [role="alert"]');
     await alert.waitFor();
@@ -348,7 +348,7 @@ test("machine thumbnails refresh, survive RPC errors and do not leak between age
   try {
     await desktopPage.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
     await desktopPage.getByRole("button", { name: "Abrir menu" }).click();
-    await desktopPage.getByRole("button", { name: /^Agentes/ }).click();
+    await desktopPage.getByRole("button", { name: /^Bots/ }).click();
     const firstCard = desktopPage
       .locator(".ag-card")
       .filter({ has: desktopPage.getByText(first.name, { exact: true }) });
@@ -388,7 +388,7 @@ test("machine thumbnails refresh, survive RPC errors and do not leak between age
         ).toBe(true);
       }
     }
-    await desktopPage.getByRole("button", { name: "Fechar painel do agente" }).click();
+    await desktopPage.getByRole("button", { name: "Fechar painel do bot" }).click();
     const secondCard = desktopPage
       .locator(".ag-card")
       .filter({ has: desktopPage.getByText(second.name, { exact: true }) });
@@ -442,7 +442,7 @@ test("capture real board, panel and create dialog in both themes", async () => {
         await Promise.all(element.getAnimations().map((animation) => animation.finished));
       });
       await page.screenshot({ path: join(shots, `app-panel-${width}-${theme}.png`) });
-      await page.getByRole("button", { name: "Fechar painel do agente" }).click();
+      await page.getByRole("button", { name: "Fechar painel do bot" }).click();
       await page.locator("#new-agent").click();
       await page.screenshot({ path: join(shots, `app-new-${width}-${theme}.png`) });
       await page.locator("#agent-new").getByRole("button", { name: "Cancelar" }).click();

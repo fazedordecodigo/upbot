@@ -43,6 +43,11 @@ beforeAll(async () => {
         "-e",
         "await Bun.sleep(1500)",
       ]),
+      BOTO_PROVIDER_TERMINAL_COMMAND: JSON.stringify([
+        process.execPath,
+        "-e",
+        'const child = Bun.spawn(process.argv.slice(1), { stdin: "inherit", stdout: "inherit", stderr: "inherit" }); process.exit(await child.exited);',
+      ]),
     },
     true,
   );
@@ -59,6 +64,34 @@ afterAll(async () => {
   await vite?.stop();
   if (directory) await removeDir(directory);
 }, 30000);
+
+test("approval default toggle clears approval delegation but preserves now and scheduled modes", async () => {
+  await rpc.request("profile.update", {
+    defaults: { requireApproval: true, delegationMode: "approval" },
+  });
+  const p = await settings();
+  try {
+    await tab(p, "privacy");
+    await p.locator("#st-approval:not(:disabled)").click();
+    await until(async () => !(await rpc.request("profile.get", {})).defaults.requireApproval);
+    expect((await rpc.request("profile.get", {})).defaults.delegationMode).toBe("now");
+    await p.locator("#st-approval:not(:disabled)").click();
+    await until(async () => (await rpc.request("profile.get", {})).defaults.requireApproval);
+    expect((await rpc.request("profile.get", {})).defaults.delegationMode).toBe("now");
+    await rpc.request("profile.update", { defaults: { delegationMode: "scheduled" } });
+    await p.reload();
+    await p.locator(".sb-settings").click();
+    await tab(p, "privacy");
+    await p.locator("#st-approval:not(:disabled)").click();
+    await until(async () => !(await rpc.request("profile.get", {})).defaults.requireApproval);
+    expect((await rpc.request("profile.get", {})).defaults.delegationMode).toBe("scheduled");
+  } finally {
+    await p.close();
+    await rpc.request("profile.update", {
+      defaults: { requireApproval: true, delegationMode: "now" },
+    });
+  }
+}, 30_000);
 
 async function settings() {
   const p = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -138,7 +171,7 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
     });
     expect(await p.locator("#st-about-count").innerText()).toBe("25/600");
     expect(await p.locator("#st-memories").innerText()).toContain(
-      "Nenhum agente guardou memórias ainda.",
+      "Nenhum bot guardou memórias ainda.",
     );
     const agent = await rpc.request("agents.create", { name: "Memória UI", provider: "devin" });
     const memory = await rpc.request("memories.add", {

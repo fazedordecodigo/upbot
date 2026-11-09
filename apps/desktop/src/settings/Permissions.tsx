@@ -28,7 +28,7 @@ export function Permissions() {
                   {{ computer: "Computador", app: "App", mcp: "Servidor MCP" }[p.group]} ·{" "}
                   {p.agentId
                     ? (agents.find((agent) => agent.id === p.agentId)?.name ?? p.agentId)
-                    : "Todos os agentes"}
+                    : "Todos os bots"}
                 </span>
               </span>
               <button

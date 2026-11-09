@@ -61,19 +61,7 @@ export function MarketplaceDetail({
           throw new Error("App instalado não encontrado. Atualize a lista e tente de novo.");
         await client.request("apps.delete", { id: app.id });
       } else {
-        const installedSkills = await client.request("skills.list", {});
-        const names =
-          item.kind === "plugin"
-            ? (skills.data?.items ?? [])
-                .filter((skill) => skill.source === item.source && item.includes.includes(skill.id))
-                .map((skill) => skill.name)
-            : [item.name];
-        if (item.kind === "plugin" && !skills.data)
-          throw new Error("Não foi possível carregar as skills. Tente de novo.");
-        for (const name of names) {
-          if (installedSkills.some((skill) => skill.name === name))
-            await client.request("skills.delete", { name });
-        }
+        await client.request("marketplace.uninstall", { source: item.source, id: item.id });
       }
       setInstalled(false);
       onChanged();
@@ -84,6 +72,7 @@ export function MarketplaceDetail({
           ? e.message
           : marketplaceError(e, `Não foi possível remover ${item.name}. Tente de novo.`),
       );
+      throw e;
     } finally {
       setPending(false);
     }
@@ -114,7 +103,7 @@ export function MarketplaceDetail({
                       mcp: "Servidor MCP",
                       skill: "Skill",
                       plugin: "Plugin",
-                      agent: "Agente",
+                      agent: "Bot",
                     }[item.kind]
                   }
                 </span>
@@ -163,7 +152,7 @@ export function MarketplaceDetail({
               </a>
             )}
             <p className="mk-permission">
-              Na primeira vez que um agente usa uma ferramenta numa sessão, ele pede sua permissão.
+              Na primeira vez que um bot usa uma ferramenta numa sessão, ele pede sua permissão.
             </p>
             <p className="mk-status" role="status">
               {status}
@@ -177,16 +166,16 @@ export function MarketplaceDetail({
               <div className="od-stack mk-installed">
                 <InstalledBadge />
                 {item.kind === "agent" ? (
-                  <p>Gerencie este item em Agentes.</p>
+                  <p>Gerencie este item em Bots.</p>
                 ) : (
                   <button
                     type="button"
                     className="btn btn-destructive"
-                    disabled={pending || (item.kind === "plugin" && !skills.data)}
+                    disabled={pending}
                     onClick={() =>
                       void confirm({
                         title: `Remover ${item.name}?`,
-                        description: "Este item deixará de ficar disponível para os agentes.",
+                        description: "Este item deixará de ficar disponível para os bots.",
                         action: "Remover",
                         pendingAction: "Removendo…",
                         onConfirm: remove,

@@ -15,6 +15,7 @@ import { readStorage, writeStorage } from "../lib/storage";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
 import { LiveDesk } from "../task/LiveDesk";
+import { SecretApproval } from "../task/SecretApproval";
 import { Icon, type IconName } from "../ui/icons";
 import { useToast } from "../ui/Toast";
 import "./TaskView.css";
@@ -50,7 +51,7 @@ function Memory({ item }: { item: Extract<ChatItem, { kind: "agent_message" }> }
   }, []);
   if (!item.memoryUsage?.count) return null;
   const names = item.memoryUsage.kinds.map(
-    (kind) => ({ profile: "Perfil", agent: "Agente", skill: "Skill" })[kind],
+    (kind) => ({ profile: "Perfil", agent: "Bot", skill: "Skill" })[kind],
   );
   const kinds = names.length > 1 ? `${names.slice(0, -1).join(", ")} e ${names.at(-1)}` : names[0];
   return (
@@ -119,7 +120,7 @@ function TaskSurface() {
   const session = useMachine(client, machine?.id);
   const takeoverLabel = session.owned ? "Devolver ao Boto" : "Assumir o controle";
   const takeoverReason = !machine
-    ? "Este agente não tem uma área de trabalho"
+    ? "Este bot não tem uma área de trabalho"
     : session.machine?.status !== "ready"
       ? "A máquina ainda não está pronta"
       : task?.outcome === "stopped"
@@ -150,7 +151,7 @@ function TaskSurface() {
     if (data.items.length && bottom.current)
       scroll.current?.scrollTo({ top: scroll.current.scrollHeight });
   }, [data.items]);
-  const act = async (operation: () => Promise<unknown>, success?: () => void) => {
+  const act = async (operation: () => Promise<unknown>, success?: () => void, rethrow = false) => {
     const id = params.id;
     setBusy(true);
     try {
@@ -159,6 +160,7 @@ function TaskSurface() {
     } catch (error) {
       logError("task.action_failed", errorFields(error));
       if (current.current === id) toast("Não foi possível concluir a ação. Tente de novo.");
+      if (rethrow) throw error;
     } finally {
       if (current.current === id) setBusy(false);
     }
@@ -293,7 +295,8 @@ function TaskSurface() {
                   "O Boto para na etapa atual e não continua depois. O que já foi feito fica em Arquivos.",
                 action: "Encerrar tarefa",
                 cancel: "Continuar a tarefa",
-                onConfirm: () => act(() => client.request("tasks.stop", { id: task.id })),
+                onConfirm: () =>
+                  act(() => client.request("tasks.stop", { id: task.id }), undefined, true),
               })
             }
           >
@@ -436,7 +439,14 @@ function TaskSurface() {
                           )}
                           {a.status === "pending" ? (
                             <div className="task-actions">
-                              {handover && machine && !takeoverReason ? (
+                              {a.kind === "secret" ? (
+                                <SecretApproval
+                                  client={client}
+                                  id={a.id}
+                                  disabled={busy}
+                                  onBusyChange={setBusy}
+                                />
+                              ) : handover && machine && !takeoverReason ? (
                                 <button
                                   type="button"
                                   className="btn btn-primary"
@@ -723,7 +733,7 @@ function TaskSurface() {
           }}
         />
         {/* biome-ignore lint/a11y/useSemanticElements: preserve the desktop pane prototype contract. */}
-        <div className="pc" id="pc-pane" role="region" aria-label="Área de trabalho do agente">
+        <div className="pc" id="pc-pane" role="region" aria-label="Área de trabalho do bot">
           <div className="desk" id="task-desk" data-desk="task">
             <LiveDesk
               session={session}

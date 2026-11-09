@@ -73,6 +73,6 @@ test("private task view keeps live replies and mandatory approvals without shari
     await browser.close();
     await vite.stop();
     await stopDaemon(daemon, client, dirs[2]!);
-    for (const dir of dirs) removeDir(dir);
+    for (const dir of dirs) await removeDir(dir);
   }
 }, 60_000);

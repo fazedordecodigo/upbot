@@ -38,12 +38,14 @@ beforeAll(async () => {
   const state = tmp("new-task-acp-");
   dirs.push(data, agents, state);
   daemon = await startDaemon(data, agents, token, {
+    BOTO_DEFAULT_BOT: "on",
     BOTO_ACP_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
     FAKE_ACP_STATE_DIR: state,
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  alpha = await rpc.request("agents.create", { name: "Alpha", provider: "devin" });
+  const seeded = (await rpc.request("agents.list", {})).find((agent) => agent.isDefault)!;
+  alpha = await rpc.request("agents.update", { id: seeded.id, name: "Alpha", provider: "devin" });
   beta = await rpc.request("agents.create", { name: "Beta", provider: "devin" });
   base = "http://localhost:1420";
   vite = await startVite();
@@ -57,14 +59,20 @@ afterAll(async () => {
   for (const dir of dirs) await removeDir(dir);
 }, T);
 
-async function app(templateId?: string, agentId?: string, onTask?: (task: Task) => void) {
+async function app(
+  templateId?: string,
+  agentId?: string,
+  onTask?: (task: Task) => void,
+  onAgentDeleted?: () => void,
+) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  if (onTask)
+  if (onTask || onAgentDeleted)
     page.on("websocket", (socket) =>
       socket.on("framereceived", ({ payload }) => {
         const message = JSON.parse(String(payload));
+        if (message.event === "agent.deleted") onAgentDeleted?.();
         const result = Task.safeParse(message.result);
-        if (result.success) onTask(result.data);
+        if (result.success) onTask?.(result.data);
       }),
     );
   page.setDefaultTimeout(10_000);
@@ -190,7 +198,7 @@ test(
 );
 
 test(
-  "private toggle is sent per task and agent deletion does not silently switch the recipient",
+  "private toggle is sent per task and deleted route recipients fall back to the default bot",
   async () => {
     await rpc.request("queue.pause", { agentId: alpha.id });
     let resolveTask!: (task: Task) => void;
@@ -217,17 +225,30 @@ test(
         provider: "devin",
       });
       await page.close();
-      const unavailable = await app(undefined, disposable.id);
+      let deletedSeen = false;
+      const fallback = new Promise<Task>((resolve) => {
+        resolveTask = resolve;
+      });
+      const unavailable = await app(
+        undefined,
+        disposable.id,
+        (task) => resolveTask(task),
+        () => {
+          deletedSeen = true;
+        },
+      );
       try {
-        await unavailable.locator("#composer-input").fill("Não trocar o agente");
+        await unavailable.locator("#composer-input").fill("echo:usar o Boto padrão");
         await rpc.request("agents.delete", { id: disposable.id });
-        await until(() => unavailable.locator("#send").isDisabled());
-        expect(await unavailable.locator("#new-task-status").innerText()).toContain(
-          "Escolha outro agente",
-        );
+        await until(async () => deletedSeen);
+        expect(await unavailable.locator("#send").isEnabled()).toBe(true);
         expect(await unavailable.locator("#composer-input").inputValue()).toBe(
-          "Não trocar o agente",
+          "echo:usar o Boto padrão",
         );
+        await unavailable.locator("#send").click();
+        const fallbackTask = await fallback;
+        expect(fallbackTask.agentId).toBe(alpha.id);
+        await rpc.request("tasks.stop", { id: fallbackTask.id });
       } finally {
         await unavailable.close();
       }

@@ -82,7 +82,7 @@ test("theme toggle keeps the prototype moon icon and page heads keep actions inl
     }
     for (const [view, action] of [
       ["Rotinas", "Nova rotina"],
-      ["Agentes", "Novo agente"],
+      ["Bots", "Novo bot"],
     ] as const) {
       await page.getByRole("button", { name: "Abrir menu" }).click();
       await page.locator("dialog.sheet").getByRole("button", { name: view, exact: true }).click();

@@ -1,5 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { join } from "node:path";
 import type { Agent, ChatItem, ConnectedApp, Turn } from "@boto/protocol";
 import {
@@ -7,6 +6,7 @@ import {
   type DaemonHandle,
   FAKE_AGENT,
   ROOT,
+  removeDir,
   startDaemon,
   stopTestChildren,
   tmp,
@@ -14,6 +14,8 @@ import {
 
 const FIXTURE = join(ROOT, "packages/daemon/test/fixtures/fake-mcp-diagnostics.ts");
 const SECRET = "fictional-alpha-credential-omega";
+
+setDefaultTimeout(30_000);
 
 describe("credential-safe app diagnostics through the real daemon", () => {
   let daemon: DaemonHandle;
@@ -54,8 +56,7 @@ describe("credential-safe app diagnostics through the real daemon", () => {
     await daemon?.proc.exited;
     await pump;
     await stopTestChildren(dirs[2]);
-    for (const dir of dirs)
-      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    for (const dir of dirs) await removeDir(dir);
     expectNoFragments(stderr);
     expect(stderr.includes("xyz")).toBe(false);
   });

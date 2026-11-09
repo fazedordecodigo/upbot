@@ -10,7 +10,7 @@ bun test apps/desktop/test
 
 ## Layout
 
-- `src/main.tsx`: storage migration, theme initialization, shell mount; the tray route remains empty.
+- `src/main.tsx`: storage migration, theme initialization and main shell mount. Tray clicks and the shortcut focus this window.
 - `src/shell/`: App, Sidebar, Topbar, in-memory router, daemon context and native integration.
 - `src/ui/`: Dialog, Sheet, Dropdown, Tooltip layer, Toast provider, Switch and typed sprite icons.
 - `src/views/`: one TSX file per view, importing its own same-named CSS file (even when empty).
@@ -25,7 +25,7 @@ One view = one file + one CSS; don't edit shared files for view-specific work.
 
 The visual reference is [`docs/design/index.html`](../../docs/design/index.html),
 its `assets/boto-ui.css` and icon sprite. `DESIGN.md` governs dynamic regions absent
-from the prototype. Visible copy is pt-BR and uses “Agentes”; unknown numbers render
+from the prototype. Visible copy is pt-BR and uses “Bots”; unknown numbers render
 as “a definir”. Product data comes from the daemon, not sample datasets.
 
 | Surface | Daemon methods |
@@ -33,10 +33,10 @@ as “a definir”. Product data comes from the daemon, not sample datasets.
 | Início | `profile.get`, `tasks.list`, `tasks.deliveries`, `tasks.get`, `desktop.machines`, `approvals.list` |
 | Nova tarefa | `agents.list`, `providers.getDefault`, `profile.get`, `templates.use`, `tasks.create`, `routines.create` |
 | Tarefa / Área de trabalho | `tasks.get`, `tasks.history`, `tasks.instruct`, `tasks.pause`, `tasks.resume`, `tasks.stop`; `permissions.respond`, `approvals.list`, `approvals.respond`, `memories.usage`; `desktop.subscribe`, `desktop.input`, `desktop.takeover`, `desktop.release` |
-| Agentes / painel / Novo agente | `agents.overview`, `agents.statuses`, `agents.create`, `agents.update`, `agents.delete`, `agents.configOptions`, `agents.setConfig`; `queue.get`, `queue.pause`, `queue.resume`, `queue.remove`, `chat.history`, `tasks.create`, `memories.list`, `desktop.machines`, `desktop.thumbnail` |
+| Bots / painel / Novo bot | `agents.overview`, `agents.statuses`, `agents.create`, `agents.update`, `agents.delete`, `agents.configOptions`, `agents.setConfig`; `queue.get`, `queue.pause`, `queue.resume`, `queue.remove`, `chat.history`, `tasks.create`, `memories.list`, `desktop.machines`, `desktop.thumbnail` |
 | Rotinas | `routines.list`, `routines.update`, `routines.run`, `routines.delete`; creation uses the scheduled composer and `routines.create` |
 | Modelos | `templates.list`, `templates.use`; prefills Nova tarefa and forwards `templateId` when delegating |
-| Marketplace | `marketplace.list`, `marketplace.install`; tabs, category/search and details use registry data |
+| Marketplace | `marketplace.list`, `marketplace.install`, `marketplace.uninstall`; tabs, category/search and details use registry data. The daemon preserves shared or modified artifacts on uninstall |
 | Configurações: Provedor de IA | `providers.list`, `providers.scan`, `providers.login`, `providers.setDefault`, `providers.setApiKey`, `providers.deleteApiKey` |
 | Configurações: Você e a memória | `profile.get`, `profile.update`, `profile.forget`, `memories.list`, `memories.update`, `memories.delete` |
 | Configurações: Aparência / Privacidade | `profile.update`, `permissions.list`, `permissions.respond` |
@@ -62,17 +62,24 @@ After `bun install`, run from the repository root in one terminal:
 
 ```sh
 ROOT="$PWD"
+umask 077
 STATE="$(mktemp -d "$HOME/boto-preview.XXXXXX")"
-TOKEN="$(bun -e 'console.log(crypto.randomUUID())')"
+openssl rand -hex 32 > "$STATE/token"
+chmod 600 "$STATE/token"
+TOKEN="$(cat "$STATE/token")"
+printf 'Preview state directory: %s\n' "$STATE"
 ACP="$(bun -e 'console.log(JSON.stringify([process.execPath, process.cwd() + "/packages/daemon/test/fixtures/fake-acp-agent.ts"]))')"
 { printf '%s\n' "$TOKEN"; cat; } | \
   BOTO_PROVIDER_COMMAND_DEVIN="$ACP" \
+  FAKE_ACP_STATE_DIR="$STATE/fake-acp" \
   BOTO_MARKETPLACE_URL="file://$ROOT/marketplace/index.json" \
   bun packages/daemon/src/main.ts --data-dir "$STATE/data" --agents-root "$STATE/agents"
 ```
 
 Keep stdin open: its first line authenticates the daemon; EOF stops it. The fake ACP
-is a development/test provider, not product data. Do not log or commit the token.
+is a development/test provider, not product data. Do not enable shell tracing (`set -x`),
+echo or commit the token, or share credential-bearing URLs. Only the state directory
+path is printed; the token file is private and outside the checkout.
 In separate terminals, still from the repository root:
 
 ```sh
@@ -80,12 +87,22 @@ bun run --cwd apps/desktop dev --port 1420 --strictPort
 python3 -m http.server 8765 --bind 127.0.0.1
 ```
 
-Open `http://localhost:1420/#port=<port>&token=<token>` with the port from
-`BOTO_READY` and the token held in `TOKEN`. Open the reference at
+In another shell, reuse the private token file without printing its contents. Replace
+the state suffix with the directory printed above, and use the port from `BOTO_READY`:
+
+```sh
+STATE="$HOME/boto-preview.XXXXXX" # replace with the printed directory
+PORT=12345 # replace with the BOTO_READY port
+TOKEN="$(cat "$STATE/token")"
+xdg-open "http://localhost:1420/#port=$PORT&token=$TOKEN" # macOS: use open instead
+unset TOKEN
+```
+
+Remove the preview state directory after stopping the daemon. Open the reference at
 `http://127.0.0.1:8765/docs/design/index.html`. Complete onboarding in the app;
 onboarding checks instead start with a fresh data directory.
 
-For automated setup, follow `test/agent-config.test.ts` and
+For automated setup, follow `test/new-task.test.ts` and
 `packages/daemon/test/helpers.ts`: `startDaemon`, `DaemonClient.connect`,
 `onboarding.complete`, `agents.create`, `providers.setDefault`, `tasks.create` with
 `echo: hi`, and `routines.create` for recurring (`schedule`) and once-only (`runAt`)
