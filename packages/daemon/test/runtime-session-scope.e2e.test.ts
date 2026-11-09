@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { expect, test } from "bun:test";
 import { join } from "node:path";
 import {
   DaemonClient,

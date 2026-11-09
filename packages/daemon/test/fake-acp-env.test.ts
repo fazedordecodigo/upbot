@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FAKE_AGENT, removeDir, ROOT, tmp } from "./helpers";
+import { FAKE_AGENT, ROOT, removeDir, tmp } from "./helpers";
 
 test("fake provider records only reserved environment key names, never values", async () => {
   const dir = tmp("fixture-env-");
