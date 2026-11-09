@@ -1,0 +1,4 @@
+.composer { display: grid; gap: var(--boto-space-3); padding: var(--boto-space-4); border: 1px solid var(--boto-color-input); border-radius: var(--boto-radius-lg); background: var(--boto-color-card); }
+.composer-input { width: 100%; resize: vertical; background: transparent; border: 0; }
+.composer-foot, .composer-options, .composer-approval { display: flex; flex-wrap: wrap; align-items: center; gap: var(--boto-space-3); }
+.chat-greet, .chat-compose { margin-block: var(--boto-space-8); }

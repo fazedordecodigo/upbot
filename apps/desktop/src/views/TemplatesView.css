@@ -1,0 +1,8 @@
+.template { border: 0; border-radius: var(--boto-radius-md); padding: var(--boto-space-3); text-align: left; background: transparent; }
+.template:hover { background: var(--boto-color-accent-surface); }
+.templates-view section { margin-block: var(--boto-space-8); }
+.template-desc, .template-meta { color: var(--boto-color-muted-foreground); }
+.templates { display: grid; gap: var(--boto-space-3); }
+.template { display: flex; align-items: flex-start; gap: var(--boto-space-3); border: 1px solid var(--boto-color-border); background: var(--boto-color-card); }
+.template-name { font-weight: 600; }
+.template-desc, .template-meta { font-size: var(--boto-font-size-sm); }
