@@ -15,6 +15,9 @@ type Row = {
   created_at: number;
   updated_at: number;
   deleted_at: number | null;
+  role: string;
+  require_approval: number;
+  max_instances: number | null;
 };
 
 function rowToAgent(r: Row): Agent {
@@ -28,6 +31,9 @@ function rowToAgent(r: Row): Agent {
     avatar: r.avatar_json ? (JSON.parse(r.avatar_json) as Agent["avatar"]) : null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    role: r.role,
+    requireApproval: r.require_approval === 1,
+    maxInstances: r.max_instances,
   };
 }
 
@@ -58,8 +64,8 @@ export class AgentStore {
     mkdirSync(workspacePath, { recursive: true });
     this.db
       .query(
-        `INSERT INTO agents (id, name, instructions, provider, config_json, workspace_path, avatar_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (id, name, instructions, provider, config_json, workspace_path, avatar_json, created_at, updated_at, role, require_approval, max_instances)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -71,6 +77,9 @@ export class AgentStore {
         params.avatar ? JSON.stringify(params.avatar) : null,
         now,
         now,
+        params.role ?? "",
+        params.requireApproval === false ? 0 : 1,
+        params.maxInstances ?? null,
       );
     return this.get(id)!;
   }
@@ -83,9 +92,13 @@ export class AgentStore {
     const provider = params.provider ?? existing.provider;
     const avatar = params.avatar === undefined ? existing.avatar : params.avatar;
     const config = provider === existing.provider ? existing.config : {};
+    const role = params.role ?? existing.role;
+    const requireApproval = params.requireApproval ?? existing.requireApproval;
+    const maxInstances =
+      params.maxInstances === undefined ? existing.maxInstances : params.maxInstances;
     this.db
       .query(
-        "UPDATE agents SET name = ?, instructions = ?, provider = ?, avatar_json = ?, config_json = ?, updated_at = ? WHERE id = ?",
+        "UPDATE agents SET name = ?, instructions = ?, provider = ?, avatar_json = ?, config_json = ?, role = ?, require_approval = ?, max_instances = ?, updated_at = ? WHERE id = ?",
       )
       .run(
         name,
@@ -93,6 +106,9 @@ export class AgentStore {
         provider,
         avatar ? JSON.stringify(avatar) : null,
         JSON.stringify(config),
+        role,
+        requireApproval ? 1 : 0,
+        maxInstances,
         Date.now(),
         params.id,
       );

@@ -10,12 +10,22 @@ import type { AgentStore } from "../agents";
 import type { ChatStore, QueueSource, QueueStore } from "../chat-store";
 import type { McpServerSpec, RemoteLaunch } from "../providers/types";
 import type { TaskRuntimeHooks } from "../task-policy";
-import { AgentRuntime, type Broadcast, RpcError } from "./agent-runtime";
+import { AgentRuntime, type Broadcast, RpcError, type RuntimeOptions } from "./agent-runtime";
+import { AgentScheduler, instanceCapacity } from "./scheduler";
+
+const STATUS_PRIORITY: AgentStatusInfo["status"][] = [
+  "awaiting_permission",
+  "running",
+  "starting",
+  "error",
+  "idle",
+];
 
 export class RuntimeManager {
   private runtimes = new Map<string, AgentRuntime>();
   /** Task lookups for task-scoped sessions (set by the daemon once TaskService exists). */
   tasks: TaskRuntimeHooks | null = null;
+  private scheduler: AgentScheduler<AgentRuntime>;
 
   constructor(
     private agents: AgentStore,
@@ -27,37 +37,108 @@ export class RuntimeManager {
     private remoteFor: (agentId: string) => RemoteLaunch | null = () => null,
     private sharedDirs: () => string[] = () => [],
     private memoryUsage: (turnId: string) => MemoryUsage = () => ({ count: 0, kinds: [] }),
-  ) {}
+  ) {
+    this.scheduler = new AgentScheduler<AgentRuntime>({
+      primary: (agentId) => this.runtimeFor(agentId),
+      spawn: (agentId) => this.createRuntime(agentId, true),
+      capacity: (agentId) => instanceCapacity(this.agents.get(agentId)?.maxInstances),
+      paused: (agentId) => this.agents.queuePaused(agentId),
+      hasQueued: (agentId) => this.queue.peek(agentId) !== null,
+    });
+  }
+
+  private createRuntime(agentId: string, ephemeral: boolean): AgentRuntime {
+    const agent = this.agents.get(agentId);
+    if (!agent) throw new RpcError("not_found", "agent not found");
+    const opts: RuntimeOptions = {
+      ephemeral,
+      onStatus: () => this.statusChanged(agentId),
+      mayStart: () => this.scheduler.mayStart(agentId, this.runtimes.get(agentId)),
+      onTurnFinished: () => this.reschedule(agentId),
+    };
+    return new AgentRuntime(
+      agent,
+      this.agents,
+      this.chat,
+      this.queue,
+      this.broadcast,
+      this.mcpServers,
+      this.sessionContext,
+      this.remoteFor,
+      this.sharedDirs,
+      () => this.tasks,
+      this.memoryUsage,
+      opts,
+    );
+  }
 
   private runtimeFor(agentId: string): AgentRuntime {
     let rt = this.runtimes.get(agentId);
     if (!rt) {
-      const agent = this.agents.get(agentId);
-      if (!agent) throw new RpcError("not_found", "agent not found");
-      rt = new AgentRuntime(
-        agent,
-        this.agents,
-        this.chat,
-        this.queue,
-        this.broadcast,
-        this.mcpServers,
-        this.sessionContext,
-        this.remoteFor,
-        this.sharedDirs,
-        () => this.tasks,
-        this.memoryUsage,
-      );
+      rt = this.createRuntime(agentId, false);
       this.runtimes.set(agentId, rt);
     }
     return rt;
   }
 
+  /** The primary runtime plus every extra instance of the agent. */
+  private pool(agentId: string): AgentRuntime[] {
+    const primary = this.runtimes.get(agentId);
+    const extras = this.scheduler.extras(agentId);
+    return primary ? [primary, ...extras] : extras;
+  }
+
+  private all(): AgentRuntime[] {
+    return [...this.runtimes.values(), ...this.scheduler.allExtras()];
+  }
+
+  private aggregateStatus(agentId: string): AgentStatusInfo {
+    const pool = this.pool(agentId);
+    for (const status of STATUS_PRIORITY) {
+      const rt = pool.find((r) => r.status === status);
+      if (rt) return { status, error: rt.statusError };
+    }
+    return { status: "idle", error: null };
+  }
+
+  private statusChanged(agentId: string): void {
+    this.broadcast("agent.status", { agentId, ...this.aggregateStatus(agentId) });
+    this.reschedule(agentId);
+  }
+
+  private reschedule(agentId: string): void {
+    queueMicrotask(() => {
+      if (this.agents.get(agentId)) this.scheduler.schedule(agentId);
+    });
+  }
+
+  /** Starts queued work on free instances (e.g. after maxInstances grew). */
+  schedule(agentId: string): void {
+    this.scheduler.schedule(agentId);
+  }
+
+  /** Running turns across every instance of the agent. */
+  activeTurns(agentId: string): { id: string; startedAt: number; awaiting: boolean }[] {
+    return this.pool(agentId).flatMap((rt) => {
+      const t = rt.activeTurn();
+      return t ? [t] : [];
+    });
+  }
+
+  activeInstances(agentId: string): number {
+    return this.activeTurns(agentId).length;
+  }
+
   send(agentId: string, text: string): { queueId: string } {
-    return this.runtimeFor(agentId).send(text);
+    const r = this.runtimeFor(agentId).send(text);
+    this.scheduler.schedule(agentId);
+    return r;
   }
 
   sendFrom(agentId: string, text: string, from: QueueSource): { queueId: string } {
-    return this.runtimeFor(agentId).send(text, from);
+    const r = this.runtimeFor(agentId).send(text, from);
+    this.scheduler.schedule(agentId);
+    return r;
   }
 
   usage(agentId: string) {
@@ -78,13 +159,21 @@ export class RuntimeManager {
   }
 
   cancelChannelTurns(channelId: string): void {
-    for (const rt of this.runtimes.values()) {
+    for (const rt of this.all()) {
       if (rt.currentChannelId() === channelId) rt.cancel();
     }
   }
 
+  /**
+   * The agent's running turn. Null when several instances run at once: bridge calls carry only
+   * the agent, so they cannot be attributed to one turn (approvals then skip task grants).
+   */
   currentTurn(agentId: string): { id: string; background: boolean; taskId: string | null } | null {
-    return this.runtimes.get(agentId)?.currentTurn() ?? null;
+    const turns = this.pool(agentId).flatMap((rt) => {
+      const t = rt.currentTurn();
+      return t ? [t] : [];
+    });
+    return turns.length === 1 ? turns[0]! : null;
   }
 
   /** Task owning the agent's current provider session (null = plain chat or no runtime). */
@@ -113,11 +202,11 @@ export class RuntimeManager {
   }
 
   currentHops(agentId: string): number {
-    return this.runtimes.get(agentId)?.currentHops() ?? 0;
+    return Math.max(0, ...this.pool(agentId).map((rt) => rt.currentHops()));
   }
 
   bridgeActivity(agentId: string): void {
-    this.runtimes.get(agentId)?.bridgeActivity();
+    for (const rt of this.pool(agentId)) rt.bridgeActivity();
   }
 
   getQueue(agentId: string): QueueState {
@@ -148,7 +237,9 @@ export class RuntimeManager {
   }
 
   resumeQueue(agentId: string): QueueState {
-    return this.runtimeFor(agentId).resumeQueue();
+    const s = this.runtimeFor(agentId).resumeQueue();
+    this.scheduler.schedule(agentId);
+    return s;
   }
 
   async configOptions(agentId: string): Promise<ConfigOption[]> {
@@ -169,6 +260,7 @@ export class RuntimeManager {
       if (this.agents.queuePaused(agentId)) continue;
       try {
         this.runtimeFor(agentId).drain();
+        this.scheduler.schedule(agentId);
       } catch (e) {
         console.error(`[botod] drain failed for ${agentId}:`, (e as Error).message);
       }
@@ -176,16 +268,16 @@ export class RuntimeManager {
   }
 
   cancel(agentId: string): void {
-    const rt = this.runtimes.get(agentId);
-    if (!rt) {
+    const pool = this.pool(agentId);
+    if (!pool.length) {
       if (!this.agents.get(agentId)) throw new RpcError("not_found", "agent not found");
       return;
     }
-    rt.cancel();
+    for (const rt of pool) rt.cancel();
   }
 
   respondPermission(requestId: string, optionId: string | null): void {
-    for (const rt of this.runtimes.values()) {
+    for (const rt of this.all()) {
       if (rt.listPending().some((p) => p.requestId === requestId)) {
         rt.respondPermission(requestId, optionId);
         return;
@@ -195,42 +287,48 @@ export class RuntimeManager {
   }
 
   pendingPermissions(): PendingPermission[] {
-    return [...this.runtimes.values()].flatMap((rt) => rt.listPending());
+    return this.all().flatMap((rt) => rt.listPending());
   }
 
   statuses(): Record<string, AgentStatusInfo> {
     const out: Record<string, AgentStatusInfo> = {};
     for (const agent of this.agents.list()) {
-      const rt = this.runtimes.get(agent.id);
-      out[agent.id] = rt
-        ? { status: rt.status, error: rt.statusError }
-        : { status: "idle", error: null };
+      out[agent.id] = this.aggregateStatus(agent.id);
     }
     return out;
   }
 
   /** Agent update: refresh the runtime's cached agent; kill session if provider changed. */
   async agentUpdated(agent: Agent, providerChanged: boolean): Promise<void> {
+    for (const extra of this.scheduler.extras(agent.id)) extra.updateAgent(agent);
+    if (providerChanged)
+      await Promise.allSettled(this.scheduler.take(agent.id).map((r) => r.dispose()));
     const rt = this.runtimes.get(agent.id);
-    if (!rt) return;
-    rt.updateAgent(agent);
-    if (providerChanged) await rt.dispose(true);
+    if (rt) {
+      rt.updateAgent(agent);
+      if (providerChanged) await rt.dispose(true);
+    }
+    this.scheduler.schedule(agent.id);
   }
 
   /** Drops the provider session (e.g. placement changed); the queue resumes on a new one. */
   async restartSession(agentId: string): Promise<void> {
     this.chat.clearAgentSession(agentId);
+    await Promise.allSettled(this.scheduler.take(agentId).map((r) => r.dispose()));
     await this.runtimes.get(agentId)?.dispose(true);
+    this.scheduler.schedule(agentId);
   }
 
   async agentDeleted(agentId: string): Promise<void> {
-    const rt = this.runtimes.get(agentId);
+    const pool = this.pool(agentId);
     this.runtimes.delete(agentId);
-    await rt?.dispose();
+    this.scheduler.take(agentId);
+    await Promise.allSettled(pool.map((rt) => rt.dispose()));
   }
 
   async closeAll(): Promise<void> {
-    const all = [...this.runtimes.values()].map((rt) => rt.dispose());
+    const all = this.all().map((rt) => rt.dispose());
+    this.scheduler.takeAll();
     await Promise.allSettled(all);
     this.runtimes.clear();
   }

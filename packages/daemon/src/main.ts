@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { AgentStore } from "./agents";
+import { AgentsOverviewService, agentApprovalPolicy } from "./agents-overview";
 import { ApprovalService } from "./approvals";
 import { AppsService } from "./apps";
 import { Bridge } from "./bridge";
@@ -165,6 +166,7 @@ async function main() {
 
   let approvalsRef: ApprovalService | null = null;
   let tasks: TaskService | null = null;
+  let overviewRef: AgentsOverviewService | null = null;
   const db = openDatabase(dataDir);
   dbRef = db;
   const chat = new ChatStore(db);
@@ -197,6 +199,7 @@ async function main() {
         log(`task event hook failed: event=${event} ${errorFields(e)}`);
       }
     }
+    overviewRef?.onEvent(event);
     if (event === "turn.ended") {
       const turn = data as import("@boto/protocol").Turn;
       queueMicrotask(() => {
@@ -264,6 +267,15 @@ async function main() {
   const pages = new PageLibrary(db, workspaceRoot, broadcast);
   bridge.pages = pages;
   approvalsRef = approvals;
+  approvals.addAskPolicy(agentApprovalPolicy(store));
+  const overview = new AgentsOverviewService(
+    store,
+    queue,
+    () => runtimes,
+    () => approvalsRef,
+    broadcast,
+  );
+  overviewRef = overview;
   bridge.connectors = new Connectors(vault);
   tasks = new TaskService(db, store, chat, queue, () => runtimes, broadcast, {
     pendingApprovals: () => approvals.list().filter((a) => a.status === "pending"),
@@ -312,6 +324,7 @@ async function main() {
       tasks: taskService,
       profile: new ProfileService(db, memories, broadcast),
       desktop,
+      overview,
     },
   );
 

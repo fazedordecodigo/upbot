@@ -160,6 +160,18 @@ const TEXT_FLUSH_MS = 150;
 /** Pending streamed bytes that trigger an immediate flush (bounds crash loss). */
 const TEXT_FLUSH_MAX_PENDING_BYTES = 8 * 1024;
 
+/** Hooks the scheduler uses to run several instances of one agent. */
+export type RuntimeOptions = {
+  /** Extra instance: never resumes or stores the agent's provider session, skips usage/compaction. */
+  ephemeral?: boolean;
+  /** Replaces the direct agent.status broadcast (the manager aggregates every instance). */
+  onStatus?: () => void;
+  /** Capacity gate checked before a queued item starts. */
+  mayStart?: () => boolean;
+  /** Called after a turn of this runtime ended. */
+  onTurnFinished?: () => void;
+};
+
 export class AgentRuntime {
   status: AgentStatus = "idle";
   statusError: string | null = null;
@@ -209,11 +221,26 @@ export class AgentRuntime {
     private sharedDirs: () => string[] = () => [],
     private tasks: () => TaskRuntimeHooks | null = () => null,
     private memoryUsage: (turnId: string) => MemoryUsage = () => ({ count: 0, kinds: [] }),
+    private opts: RuntimeOptions = {},
   ) {}
 
   /** Task owning the current provider session (null for the plain chat). */
   currentTaskId(): string | null {
     return this.sessionScope;
+  }
+
+  /** The running turn with its start time and whether it waits on a permission answer. */
+  activeTurn(): { id: string; startedAt: number; awaiting: boolean } | null {
+    return this.turn
+      ? { id: this.turn.id, startedAt: this.turnStartedAt, awaiting: this.pending.size > 0 }
+      : null;
+  }
+
+  /** True when this runtime can start the next queued item right now. */
+  canPull(): boolean {
+    return (
+      !this.turn && !this.draining && !this.sessionStarting && !this.disposing && !this.compacting
+    );
   }
 
   /** Agent-to-agent hop count of the running turn (0 when idle or user-initiated). */
@@ -243,7 +270,8 @@ export class AgentRuntime {
   private setStatus(status: AgentStatus, error: string | null = null) {
     this.status = status;
     this.statusError = error;
-    this.broadcast("agent.status", { agentId: this.agent.id, status, error });
+    if (this.opts.onStatus) this.opts.onStatus();
+    else this.broadcast("agent.status", { agentId: this.agent.id, status, error });
   }
 
   /**
@@ -321,6 +349,7 @@ export class AgentRuntime {
     if (this.draining || this.turn || this.sessionStarting || this.disposing || this.compacting)
       return;
     if (this.agents.queuePaused(this.agent.id)) return;
+    if (this.opts.mayStart && !this.opts.mayStart()) return;
     const next = this.queue.peek(this.agent.id, this.sessionScope);
     if (!next) return;
     const scope = next.task_id ?? null;
@@ -382,7 +411,7 @@ export class AgentRuntime {
     if (this.session) return this.session;
     this.sessionStarting ??= (async () => {
       const scope = this.sessionScope;
-      const stored = this.store.getAgentSession(this.agent.id);
+      const stored = this.opts.ephemeral ? null : this.store.getAgentSession(this.agent.id);
       const resumeSessionId =
         stored && stored.provider === this.agent.provider && stored.taskId === scope
           ? stored.sessionId
@@ -401,8 +430,10 @@ export class AgentRuntime {
         ...(remote ? { remote } : { extraDirs: this.sharedDirs() }),
       });
       this.sessionTag = tag;
+      if (!this.opts.ephemeral) {
       this.store.upsertAgentSession(this.agent.id, this.agent.provider, session.sessionId, scope);
       if (scope) this.tasks()?.setSession(scope, session.sessionId);
+      }
       return session;
     })();
     const started = this.sessionStarting;
@@ -573,6 +604,7 @@ export class AgentRuntime {
     const ended = this.store.endTurn(turn.id, status, stopReason, error);
     this.broadcast("turn.ended", ended);
     if (this.turn === turn) this.turn = null;
+    this.opts.onTurnFinished?.();
     this.closeTextItem();
     if (this.status !== "error") this.setStatus("idle");
     // queue policy: user stop pauses the queue; failed turn auto-pauses it
@@ -588,7 +620,7 @@ export class AgentRuntime {
         return;
       }
     }
-    if (status === "completed" && this.shouldAutoCompact()) {
+    if (status === "completed" && !this.opts.ephemeral && this.shouldAutoCompact()) {
       this.compact("auto").catch((e) =>
         this.logRuntime("auto-compaction failed", `turn=${turn.id} ${errorFields(e)}`),
       );
@@ -851,6 +883,7 @@ export class AgentRuntime {
 
   private onUpdate(u: Parameters<ProviderHooks["onUpdate"]>[0]): void {
     if (u.type === "usage") {
+      if (this.opts.ephemeral) return;
       this.broadcast("agent.usage", this.store.applyUsage(this.agent.id, u));
       return;
     }

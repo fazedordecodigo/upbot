@@ -25,6 +25,14 @@ export * from "./profile";
 import { type DesktopEventMap, desktopMethodMap } from "./vm-desktop";
 
 export * from "./vm-desktop";
+import {
+  AgentCockpitFields,
+  AgentCockpitParams,
+  type AgentsCockpitEventMap,
+  agentsCockpitMethods,
+} from "./agents-cockpit";
+
+export * from "./agents-cockpit";
 
 export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   devin: "~/.config/devin/config.json",
@@ -83,6 +91,7 @@ export const Agent = z.object({
   avatar: AgentAvatar.nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
+  ...AgentCockpitFields,
 });
 export type Agent = z.infer<typeof Agent>;
 
@@ -97,6 +106,7 @@ export const AgentsCreateParams = z
     instructions: z.string().optional(),
     provider: ProviderId,
     avatar: AgentAvatar.nullable().optional(),
+    ...AgentCockpitParams,
   })
   .strict();
 export type AgentsCreateParams = z.infer<typeof AgentsCreateParams>;
@@ -109,6 +119,7 @@ export const AgentsUpdateParams = z
     instructions: z.string().optional(),
     provider: ProviderId.optional(),
     avatar: AgentAvatar.nullable().optional(),
+    ...AgentCockpitParams,
   })
   .strict();
 export type AgentsUpdateParams = z.infer<typeof AgentsUpdateParams>;
@@ -1329,6 +1340,7 @@ export const methodMap = {
   },
   "tasks.deliveries": { params: TasksDeliveriesParams, result: z.array(TaskDelivery) },
   ...desktopMethodMap,
+  ...agentsCockpitMethods,
 } as const;
 
 export type MethodName = keyof typeof methodMap;
@@ -1337,7 +1349,7 @@ export type MethodParams<M extends MethodName> = z.input<(typeof methodMap)[M]["
 export type MethodParsedParams<M extends MethodName> = z.infer<(typeof methodMap)[M]["params"]>;
 export type MethodResult<M extends MethodName> = z.infer<(typeof methodMap)[M]["result"]>;
 
-export type DaemonEventMap = {
+export type DaemonEventMap = AgentsCockpitEventMap & {
   "templates.changed": { id: string };
   "profile.changed": Profile;
   "agent.created": Agent;

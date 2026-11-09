@@ -1,5 +1,6 @@
 import { type MethodName, type MethodParsedParams, methodMap } from "@boto/protocol";
 import type { AgentStore } from "./agents";
+import type { AgentsOverviewService } from "./agents-overview";
 import type { ApprovalService } from "./approvals";
 import type { AppsService } from "./apps";
 import { attachmentsBlock, saveAttachments } from "./attachments";
@@ -23,6 +24,7 @@ import type { HostStore } from "./remote/hosts";
 import type { RoutineService } from "./routines";
 import { asBadRequest, RpcError } from "./runtime/agent-runtime";
 import type { RuntimeManager } from "./runtime/runtime-manager";
+import { instanceCapacity } from "./runtime/scheduler";
 import type { SkillLibrary } from "./skills";
 import type { SubagentService } from "./subagents";
 import type { TaskService } from "./tasks";
@@ -98,6 +100,7 @@ export class Rpc {
       tasks: TaskService;
       profile: ProfileService;
       desktop: DesktopService;
+      overview?: AgentsOverviewService;
     },
   ) {}
 
@@ -226,9 +229,19 @@ export class Rpc {
       case "agents.update": {
         const p = params as MethodParsedParams<typeof method>;
         const before = this.agents.get(p.id);
+        if (before && p.maxInstances !== undefined) {
+          const active = this.runtimes.activeInstances(p.id);
+          if (instanceCapacity(p.maxInstances) < active)
+            throw new RpcError(
+              "bad_request",
+              `maxInstances cannot be below the ${active} instances in use`,
+            );
+        }
         const agent = this.agents.update(p);
         if (!agent) throw new RpcError("not_found", "agent not found");
         if (before) void this.runtimes.agentUpdated(agent, before.provider !== agent.provider);
+        if (before && before.maxInstances !== agent.maxInstances)
+          queueMicrotask(() => this.runtimes.schedule(agent.id));
         queueMicrotask(() => this.broadcast("agent.updated", agent));
         return agent;
       }
@@ -656,6 +669,10 @@ export class Rpc {
       }
       case "tasks.deliveries":
         return this.extras.tasks.deliveries(params as MethodParsedParams<typeof method>);
+      case "agents.overview": {
+        if (!this.extras.overview) throw new RpcError("internal", "agents overview unavailable");
+        return this.extras.overview.overview();
+      }
       default: {
         const _method: never = method;
         throw new RpcError("internal", `unhandled method: ${_method}`);

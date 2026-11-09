@@ -366,4 +366,8 @@ export const migrations: string[] = [
     host_id TEXT,
     created_at INTEGER NOT NULL
   )`,
+  // 23: agents cockpit — role ("O que ele faz"), per-agent approval policy, parallel instances
+  `ALTER TABLE agents ADD COLUMN role TEXT NOT NULL DEFAULT '';
+  ALTER TABLE agents ADD COLUMN require_approval INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE agents ADD COLUMN max_instances INTEGER`,
 ];

@@ -153,6 +153,7 @@ describe("bridge failure diagnostics", () => {
       name: "Bridge diagnostics",
       provider: "devin",
       instructions: "",
+      requireApproval: false,
     })) as Agent;
     const { queueId } = (await c.request("chat.send", {
       agentId: agent.id,

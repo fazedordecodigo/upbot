@@ -564,6 +564,10 @@ export class QueueStore {
     return this.db.query("SELECT * FROM queue WHERE id = ?").get(queueId) as QueueRow | null;
   }
 
+  byTurn(turnId: string): QueueRow | null {
+    return this.db.query("SELECT * FROM queue WHERE turn_id = ?").get(turnId) as QueueRow | null;
+  }
+
   markStarted(queueId: string, turnId: string): void {
     this.db
       .query("UPDATE queue SET status = 'started', turn_id = ?, started_at = ? WHERE id = ?")
