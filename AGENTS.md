@@ -45,13 +45,13 @@ when the task touches that area — do not preload every reference.
   invalid rows throw `InvalidSettingError`, surfaced over RPC as `internal` naming the key;
   boot-time mobile/team consumers keep the feature off and log; `default_bot_seeded` is a
   presence check). Tests: `test/settings.e2e.test.ts`.
-- `apps/desktop` — Tauri 2 + React 19 + Vite + Tailwind 4. Rust spawns the sidecar via
+- `apps/desktop` — Tauri 2 + React 19 + Vite. Rust spawns the sidecar via
   `tauri-plugin-shell`, parses the READY line, and exposes `daemon_connection` ->
   `{port, token}`. Frontend WS client: `src/lib/daemon.ts`.
   Design system (Rio Negro): `apps/desktop/src/styles/tokens.json` is the source of truth;
   `bun scripts/build-tokens.ts` writes `tokens.css` (`--boto-*`) and `legacy-bridge.css`.
   Bricolage Grotesque, Inter and JetBrains Mono are packaged in `apps/desktop/src/fonts/` (SIL OFL).
-  Icons live in `apps/desktop/src/components/ds/icons.tsx`. See `docs/design-system.md`.
+  Icons live in `apps/desktop/src/ui/icons.tsx`. See `docs/design-system.md`.
 - `spikes` — `acp-probe.ts` probes agent CLIs for ACP support:
   `bun spikes/acp-probe.ts <name> -- <cmd...>` writes `spikes/out/acp-<name>.json`.
 - `scripts/smoke-acp-real.ts` — runs the compiled daemon with a Finder-like PATH

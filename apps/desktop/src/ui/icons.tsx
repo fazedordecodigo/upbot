@@ -1,0 +1,68 @@
+export const iconNames = [
+  "app-window",
+  "arrow-left",
+  "arrow-right",
+  "arrow-up",
+  "arrow-up-right",
+  "book-open",
+  "calendar",
+  "check",
+  "chevron-down",
+  "chevron-up-down",
+  "circle-alert",
+  "circle-check",
+  "circle-pause",
+  "circle-slash",
+  "clock",
+  "cpu",
+  "download",
+  "eye-off",
+  "file-code",
+  "file-text",
+  "folder",
+  "git-pull-request",
+  "globe",
+  "home",
+  "info",
+  "keyboard",
+  "layout-template",
+  "list-checks",
+  "loader",
+  "mail",
+  "menu",
+  "monitor",
+  "moon",
+  "mouse-pointer",
+  "palette",
+  "panel-left",
+  "paperclip",
+  "pause",
+  "play",
+  "plus",
+  "power",
+  "refresh-cw",
+  "repeat",
+  "search",
+  "send",
+  "settings",
+  "sheet",
+  "shield-check",
+  "store",
+  "sun",
+  "terminal",
+  "trash",
+  "user-check",
+  "users",
+  "x",
+] as const;
+export type IconName = (typeof iconNames)[number];
+const iconNameSet: ReadonlySet<string> = new Set(iconNames);
+export const isIconName = (name: string): name is IconName => iconNameSet.has(name);
+
+export function Icon({ name, className }: { name: IconName; className?: string }) {
+  return (
+    <svg className={`od-icon${className ? ` ${className}` : ""}`} aria-hidden="true">
+      <use href={`/assets/icons.svg#i-${name}`} />
+    </svg>
+  );
+}
