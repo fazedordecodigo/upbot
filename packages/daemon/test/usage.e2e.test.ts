@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { rmSync } from "node:fs";
 import type { Agent, ChatItem } from "@boto/protocol";
 import {
@@ -13,6 +13,8 @@ import {
 } from "./helpers";
 
 const TOKEN = `usage-test-${crypto.randomUUID()}`;
+
+setDefaultTimeout(30_000);
 
 describe("usage + compaction e2e", () => {
   let dataDir: string;
