@@ -1216,6 +1216,7 @@ export const methodMap = {
     params: z
       .object({
         agentId: z.string(),
+        attachments: ChatSendParams.shape.attachments,
         name: RoutineFields.name,
         runAt: z.number().nullable().optional(),
         toolMode: ToolMode.optional(),

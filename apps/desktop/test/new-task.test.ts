@@ -313,13 +313,42 @@ test(
       expect(await page.getByRole("menu").count()).toBe(0);
       expect(await page.evaluate(() => document.activeElement?.id)).toBe("when-trigger");
       await page.locator("#composer-input").fill("Uma tarefa com anexo");
+      const privateSwitch = page.locator("#private-switch");
+      if ((await privateSwitch.getAttribute("aria-checked")) === "true")
+        await privateSwitch.click();
       await page.locator("#file-input").setInputFiles({
         name: "arquivo.txt",
         mimeType: "text/plain",
         buffer: Buffer.from("arquivo"),
       });
-      expect(await page.locator("#send").isDisabled()).toBe(true);
-      expect(await page.locator("#new-task-status").innerText()).toContain("remova os anexos");
+      expect(await page.locator("#send").isEnabled()).toBe(true);
+      await page.locator("#send").click();
+      await page.waitForFunction(
+        () => document.querySelector("#main")?.getAttribute("data-view") === "routines",
+      );
+      const routine = (await rpc.request("routines.list", {})).find(
+        (r) => r.prompt === "Uma tarefa com anexo",
+      );
+      expect(routine?.schedule).toBe("weekly mon 09:00");
+      const run = await rpc.request("routines.run", { id: routine!.id });
+      await until(
+        async () => (await rpc.request("tasks.get", { id: run.taskId! })).situation === "done",
+      );
+      const history = await rpc.request("tasks.history", { id: run.taskId! });
+      expect(
+        history.items.some(
+          (item) => item.kind === "user_message" && item.attachments?.[0]?.name === "arquivo.txt",
+        ),
+      ).toBe(true);
+      await page.reload();
+      await page.locator("#home-title").waitFor();
+      await page.keyboard.press("Control+Shift+O");
+      await page.locator("#composer-input").fill("Outra tarefa");
+      await page.locator("#file-input").setInputFiles({
+        name: "arquivo.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.from("arquivo"),
+      });
       await page.getByRole("button", { name: "Remover arquivo.txt" }).click();
       expect(await page.locator("#send").isEnabled()).toBe(true);
     } finally {

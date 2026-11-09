@@ -305,7 +305,10 @@ async function main() {
           title: p.title,
           source: {
             prompt: p.sendPrompt,
-            meta: { routine: { id: p.routineId, name: p.title, trigger: p.trigger } },
+            meta: {
+              routine: { id: p.routineId, name: p.title, trigger: p.trigger },
+              attachments: p.attachments,
+            },
           },
         },
       );

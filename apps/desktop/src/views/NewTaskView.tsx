@@ -13,7 +13,11 @@ import "./NewTaskView.css";
 
 export function NewTaskView() {
   const { params } = useRouter();
-  return <NewTaskComposer key={`${params.agentId ?? ""}:${params.templateId ?? ""}`} />;
+  return (
+    <NewTaskComposer
+      key={`${params.agentId ?? ""}:${params.templateId ?? ""}:${params.when ?? ""}`}
+    />
+  );
 }
 
 function NewTaskComposer() {
@@ -23,7 +27,7 @@ function NewTaskComposer() {
   const toast = useToast();
   const [text, setText] = useState("");
   const [agentId, setAgentId] = useState(params.agentId ?? "");
-  const [when, setWhen] = useState<When>("now");
+  const [when, setWhen] = useState<When>(params.when === "daily" ? "daily" : "now");
   const [schedule, setSchedule] = useState<string | null>(null);
   const [toolMode, setToolMode] = useState<ToolMode>("both");
   const [requireApproval, setRequireApproval] = useState(true);
