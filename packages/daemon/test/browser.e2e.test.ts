@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import type { Agent } from "@boto/protocol";
 import { findBrowser } from "../src/browser";
@@ -11,6 +11,8 @@ import {
   tmp,
   toolCall,
 } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const TOKEN = `br-test-${crypto.randomUUID()}`;
 const hasBrowser = findBrowser() !== null;

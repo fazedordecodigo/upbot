@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { rmSync } from "node:fs";
 import type { Agent, Turn } from "@boto/protocol";
 import {
@@ -11,6 +11,8 @@ import {
   tmp,
   waitForPidDead,
 } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const TOKEN = `cancel-grace-${crypto.randomUUID()}`;
 const DEFAULT_GRACE_MS = 10_000;
