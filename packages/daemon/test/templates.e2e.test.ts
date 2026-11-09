@@ -106,6 +106,29 @@ test("templates seed, lifecycle, prefill, validation and events", async () => {
   }
 }, 30_000);
 
+test("routine updates reject past runAt without rescheduling completed routines", () => {
+  const data = tmp("update-oneshot-data-");
+  const root = tmp("update-oneshot-bots-");
+  const db = openDatabase(data);
+  try {
+    const agents = new AgentStore(db, root);
+    const bot = agents.create({ name: "Scheduler", provider: "devin", instructions: "" });
+    const routines = new RoutineService(db, agents, () => ({ queueId: "q" }), () => {});
+    const future = Date.now() + 60_000;
+    const routine = routines.create({ agentId: bot.id, name: "Once", prompt: "x", runAt: future });
+    expect(() => routines.update({ id: routine.id, runAt: Date.now() - 1000 })).toThrow(
+      "runAt is in the past",
+    );
+    expect(routines.get(routine.id).runAt).toBe(future);
+    routines.tick(future);
+    expect(routines.update({ id: routine.id, name: "Completed" }).name).toBe("Completed");
+    expect(routines.update({ id: routine.id, runAt: null }).runAt).toBeNull();
+  } finally {
+    db.close();
+    for (const path of [data, root]) rmSync(path, { recursive: true, force: true });
+  }
+});
+
 test("one-shot routines create tasks once, retain runAt and record sink errors", () => {
   const data = tmp("oneshot-data-");
   const root = tmp("oneshot-bots-");

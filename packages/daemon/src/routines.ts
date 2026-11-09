@@ -251,6 +251,8 @@ export class RoutineService {
   update(p: MethodParsedParams<"routines.update">): Routine {
     const r = this.row(p.id);
     if (!r) throw new RpcError("not_found", "routine not found");
+    if (p.runAt != null && p.runAt < Date.now())
+      throw new RpcError("bad_request", "runAt is in the past");
     if (p.schedule && p.runAt != null)
       throw new RpcError("bad_request", "schedule and runAt are mutually exclusive");
     const schedule =
