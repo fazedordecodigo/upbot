@@ -408,6 +408,18 @@ export class ApprovalService {
     >,
   ): Promise<{ approval: Approval; value?: string }> {
     const cur = this.runtimes().currentTurn(agentId);
+    if (
+      !cur &&
+      this.db
+        .query(
+          "SELECT 1 FROM tasks WHERE agent_id = ? AND private = 1 AND ended_at IS NULL LIMIT 1",
+        )
+        .get(agentId)
+    )
+      throw new GateRejection(
+        "denied",
+        "approval requires an unambiguous private task context; retry when only one turn is running",
+      );
     const background = cur?.background ?? true;
     const ttl = background
       ? envPositiveNumber("BOTO_APPROVAL_BACKGROUND_TTL_MS", 10 * 60_000)

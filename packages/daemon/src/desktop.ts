@@ -153,6 +153,7 @@ export class DesktopService {
         this.emitMachine(existing);
         if (this.wanted(existing)) this.ensure(existing);
       }
+      if (!existing.child && this.wanted(existing)) this.ensure(existing);
       return existing;
     }
     let row = this.db

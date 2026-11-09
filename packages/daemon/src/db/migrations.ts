@@ -393,4 +393,7 @@ export const migrations: string[] = [
     PRIMARY KEY (source, item_id, kind, name)
   );
   CREATE INDEX marketplace_artifact_refs ON marketplace_artifacts(kind, name)`,
+  // 32: retain explicit uninstall state and registry skill identity
+  `ALTER TABLE marketplace_installations ADD COLUMN active INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE marketplace_artifacts ADD COLUMN registry_id TEXT`,
 ];

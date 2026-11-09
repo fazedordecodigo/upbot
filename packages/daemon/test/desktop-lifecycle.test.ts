@@ -72,6 +72,25 @@ test("a stopped guest cannot supply its old thumbnail to a later request", async
   });
 }, 10_000);
 
+test("a subscribed viewer reconnects when Firecracker returns on the same host", async () => {
+  await withDesktop(async (desktop, db, id) => {
+    db.query("UPDATE agent_placement SET isolation = 'none' WHERE agent_id = 'bot'").run();
+    desktop.placementChanged("bot");
+    expect(desktop.list()).toEqual([]);
+    const internal = desktop as unknown as {
+      states: Map<string, { child: ChildProcess | null; ready: boolean }>;
+    };
+    const state = internal.states.get(id)!;
+    expect(state.child).toBeNull();
+    db.query("UPDATE agent_placement SET isolation = 'firecracker' WHERE agent_id = 'bot'").run();
+    desktop.placementChanged("bot");
+    expect(state.child).not.toBeNull();
+    const deadline = Date.now() + 3000;
+    while (!state.ready && Date.now() < deadline) await Bun.sleep(10);
+    expect(state.ready).toBe(true);
+  });
+}, 10_000);
+
 test("a guest ready message invalidates any image from the prior guest identity", async () => {
   await withDesktop(async (desktop, _db, id) => {
     const internal = desktop as unknown as {

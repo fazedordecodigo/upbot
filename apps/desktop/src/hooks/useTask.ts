@@ -34,7 +34,6 @@ export function useTask(client: DaemonClient, taskId?: string) {
   useEffect(() => {
     let alive = true;
     let subscribed = false;
-    let taskAgentId: string | undefined;
     let version = 0;
     let items: ChatItem[] = [];
     let turns: Turn[] = [];
@@ -57,9 +56,7 @@ export function useTask(client: DaemonClient, taskId?: string) {
           permissions: [...pendingPermissions.values()].filter((permission) =>
             turns.some((turn) => turn.id === permission.turnId),
           ),
-          approvals: approvals.filter((a) =>
-            a.turnId ? turns.some((t) => t.id === a.turnId) : a.agentId === taskAgentId,
-          ),
+          approvals: approvals.filter((a) => turns.some((t) => t.id === a.turnId)),
         }));
     };
     setState({ ...empty(), scope: taskId });
@@ -91,7 +88,6 @@ export function useTask(client: DaemonClient, taskId?: string) {
           client.request("permissions.list", { taskId }),
         ]);
         if (!alive || current !== version) return;
-        taskAgentId = task.agentId;
         items = older ? merge(history.items, items) : merge(history.items, eventItems);
         turns = older ? merge(history.turns, turns) : merge(history.turns, eventTurns);
         approvals = merge(list, eventApprovals);
