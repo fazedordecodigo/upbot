@@ -30,8 +30,46 @@ globalThis.WebSocket = CountingWebSocket;
 const { DaemonClient } = await import("../src/lib/daemon");
 
 afterAll(() => {
+  globalThis.WebSocket = NativeWebSocket;
   delete tauriGlobals.window;
   delete tauriGlobals.__TAURI_INTERNALS__;
+});
+
+test("first socket retry re-resolves the connection and notifies refresh subscribers", async () => {
+  let attempts = 0;
+  const server = Bun.serve({
+    port: 0,
+    fetch(request, server) {
+      attempts++;
+      if (attempts === 1) return new Response(null, { status: 503 });
+      return server.upgrade(request) ? undefined : new Response(null, { status: 400 });
+    },
+    websocket: {
+      message(socket, message) {
+        const request = JSON.parse(String(message));
+        socket.send(JSON.stringify({ id: request.id, result: [] }));
+      },
+    },
+  });
+  invokeCount = 0;
+  resolveConnection = async () => ({ port: server.port, token: "t" });
+  const client = new DaemonClient();
+  let refreshed = false;
+  const off = client.onReconnect(() => {
+    void client.request("agents.list", {}).then(() => {
+      refreshed = true;
+    });
+  });
+  try {
+    await expect(client.connect()).rejects.toThrow();
+    await waitFor(() => refreshed);
+    expect(invokeCount).toBe(2);
+    expect(attempts).toBe(2);
+  } finally {
+    off();
+    client.close();
+    server.stop(true);
+  }
 });
 
 function serve() {
@@ -51,6 +89,53 @@ function serve() {
     },
   });
 }
+
+test("refresh requests recover after an initial RPC failure and socket reconnect", async () => {
+  let fail = true;
+  let firstSocket: { terminate: () => void } | undefined;
+  const server = Bun.serve({
+    port: 0,
+    fetch(request, server) {
+      return server.upgrade(request) ? undefined : new Response(null, { status: 400 });
+    },
+    websocket: {
+      open(socket) {
+        firstSocket = socket;
+      },
+      message(socket, message) {
+        const request = JSON.parse(String(message));
+        socket.send(
+          JSON.stringify(
+            fail
+              ? { id: request.id, error: { code: "internal", message: "falha simulada" } }
+              : { id: request.id, result: [] },
+          ),
+        );
+      },
+    },
+  });
+  invokeCount = 0;
+  resolveConnection = async () => ({ port: server.port, token: "t" });
+  const client = new DaemonClient();
+  let refreshed = false;
+  const off = client.onReconnect(() => {
+    void client.request("agents.list", {}).then(() => {
+      refreshed = true;
+    });
+  });
+  try {
+    await client.connect();
+    await expect(client.request("agents.list", {})).rejects.toThrow("falha simulada");
+    fail = false;
+    firstSocket?.terminate();
+    await waitFor(() => refreshed);
+    expect(invokeCount).toBe(2);
+  } finally {
+    off();
+    client.close();
+    server.stop(true);
+  }
+});
 
 async function waitFor(predicate: () => boolean) {
   const deadline = Date.now() + 3000;

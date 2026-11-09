@@ -1,0 +1,3 @@
+.shortcut-list { margin: 0; }
+.shortcut-row { padding-block: var(--boto-space-2); }
+.shortcut-row dd { margin: 0; }

@@ -1,0 +1,5 @@
+.command-search { padding-bottom: var(--boto-space-4); }
+.command-input { border: 0; background: transparent; min-width: 0; }
+.command-list { max-height: calc(var(--boto-space-20) * 4); }
+.command-item[aria-selected="true"] { background: var(--boto-color-accent-surface); }
+.command-empty { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }

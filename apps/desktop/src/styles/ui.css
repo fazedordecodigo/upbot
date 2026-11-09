@@ -68,6 +68,10 @@ dialog::backdrop { background: var(--boto-color-overlay); }
 .input:focus-visible, .textarea:focus-visible { border-color: var(--boto-color-ring); box-shadow: 0 0 0 var(--boto-size-input-halo) color-mix(in srgb, var(--boto-color-ring) 20%, transparent); }
 .tooltip { position: fixed; max-width: calc(var(--boto-space-20) * 3); padding: var(--boto-space-2) var(--boto-space-3); border-radius: var(--boto-radius-sm); background: var(--boto-color-foreground); color: var(--boto-color-background); font-size: var(--boto-size-icon-status); pointer-events: none; }
 .toast { max-width: calc(var(--boto-space-20) * 4 + var(--boto-space-10)); }
+.toaster:empty { display: none; }
+.tooltip { z-index: 100; }
+.dropdown-menu { min-width: calc(var(--boto-space-20) * 2 + var(--boto-space-16)); }
+.dropdown-item { min-height: var(--boto-size-control); }
 
 @media (pointer: coarse) {
   button:not(.switch), .btn, .tabs-trigger { min-height: var(--boto-size-target); }
