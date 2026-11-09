@@ -14,7 +14,7 @@ export function getProfileDefaults(db: Database): ProfileDefaults {
   return getSetting(db, "profile.defaults", ProfileDefaults, {
     private: false,
     requireApproval: true,
-    delegationMode: "now",
+    delegationMode: "approval",
     toolMode: "both",
   });
 }

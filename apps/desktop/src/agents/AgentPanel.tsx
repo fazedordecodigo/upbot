@@ -1,10 +1,10 @@
 import type { Agent, AgentOverview } from "@boto/protocol";
 import { useRef, useState } from "react";
+import { useConfirm } from "../dialogs/ConfirmDialog";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { errorMessage } from "../lib/errors";
 import { PROVIDER_NAMES } from "../lib/ui";
 import { useDaemon } from "../shell/daemon";
-import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/icons";
 import { Sheet } from "../ui/Sheet";
 import { Switch } from "../ui/Switch";
@@ -58,7 +58,7 @@ export function AgentPanel({
   const [settingsError, setSettingsError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [confirm, setConfirm] = useState(false);
+  const confirm = useConfirm();
   const input = useRef<HTMLTextAreaElement>(null);
   const immediate = !overview.paused && overview.instances.active < overview.instances.capacity;
   const last = history.data?.items.filter((item) => item.kind === "agent_message").at(-1);
@@ -325,7 +325,22 @@ export function AgentPanel({
               <button
                 type="button"
                 className="btn btn-outline ap-delete"
-                onClick={() => setConfirm(true)}
+                onClick={() =>
+                  void confirm({
+                    title: `Excluir ${agent.name}?`,
+                    description:
+                      "O agente sai do quadro e a fila dele é cancelada. A pasta de trabalho fica no computador.",
+                    action: "Excluir agente",
+                    onConfirm: () =>
+                      client
+                        .request("agents.delete", { id: agentId })
+                        .then(() => {
+                          toast(`${agent.name} foi excluído.`);
+                          onClose();
+                        })
+                        .catch((e: unknown) => toast(errorMessage(e))),
+                  })
+                }
               >
                 Excluir agente
               </button>
@@ -333,56 +348,6 @@ export function AgentPanel({
           </div>
         </div>
       </Sheet>
-      <Dialog
-        open={confirm}
-        onClose={() => setConfirm(false)}
-        id="confirm"
-        aria-labelledby="confirm-title"
-        aria-describedby="confirm-desc"
-      >
-        <div className="dialog-body">
-          <div className="dialog-header">
-            <h2 className="dialog-title" id="confirm-title">
-              Excluir {agent.name}?
-            </h2>
-            <p className="dialog-description" id="confirm-desc">
-              O agente sai do quadro e a fila dele é cancelada. A pasta de trabalho fica no
-              computador.
-            </p>
-          </div>
-          <div className="dialog-footer">
-            <button
-              type="button"
-              className="btn btn-outline"
-              id="confirm-cancel"
-              onClick={() => setConfirm(false)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn-destructive"
-              id="confirm-ok"
-              disabled={saving}
-              onClick={() => {
-                setSaving(true);
-                void client
-                  .request("agents.delete", { id: agentId })
-                  .then(() => {
-                    toast(`${agent.name} foi excluído.`);
-                    onClose();
-                  })
-                  .catch((e) => {
-                    setSaving(false);
-                    toast(errorMessage(e));
-                  });
-              }}
-            >
-              Excluir agente
-            </button>
-          </div>
-        </div>
-      </Dialog>
     </>
   );
 }

@@ -1,9 +1,9 @@
 import type { MarketplaceItem } from "@boto/protocol";
 import { useState } from "react";
+import { useConfirm } from "../dialogs/ConfirmDialog";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { errorMessage } from "../lib/errors";
 import { useDaemon } from "../shell/daemon";
-import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/icons";
 import { Sheet } from "../ui/Sheet";
 import { useToast } from "../ui/Toast";
@@ -24,7 +24,7 @@ export function MarketplaceDetail({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installed, setInstalled] = useState(item.installed);
-  const [confirm, setConfirm] = useState(false);
+  const confirm = useConfirm();
   const skills = useDaemonQuery(
     client,
     "marketplace.list",
@@ -80,7 +80,6 @@ export function MarketplaceDetail({
       setError(errorMessage(e));
     } finally {
       setPending(false);
-      setConfirm(false);
     }
   }
 
@@ -167,7 +166,15 @@ export function MarketplaceDetail({
                     type="button"
                     className="btn btn-destructive"
                     disabled={pending || (item.kind === "plugin" && !skills.data)}
-                    onClick={() => setConfirm(true)}
+                    onClick={() =>
+                      void confirm({
+                        title: `Remover ${item.name}?`,
+                        description: "Este item deixará de ficar disponível para os agentes.",
+                        action: "Remover",
+                        pendingAction: "Removendo…",
+                        onConfirm: remove,
+                      })
+                    }
                   >
                     Remover
                   </button>
@@ -213,46 +220,6 @@ export function MarketplaceDetail({
           </div>
         </div>
       </Sheet>
-      <Dialog
-        open={confirm}
-        onClose={() => {
-          if (!pending) setConfirm(false);
-        }}
-        id="confirm"
-        aria-labelledby="confirm-title"
-        aria-describedby="confirm-desc"
-      >
-        <div className="dialog-body">
-          <div className="dialog-header">
-            <h2 className="dialog-title" id="confirm-title">
-              Remover {item.name}?
-            </h2>
-            <p className="dialog-description" id="confirm-desc">
-              Este item deixará de ficar disponível para os agentes.
-            </p>
-          </div>
-          <div className="dialog-footer">
-            <button
-              type="button"
-              className="btn btn-outline"
-              id="confirm-cancel"
-              disabled={pending}
-              onClick={() => setConfirm(false)}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn btn-destructive"
-              id="confirm-ok"
-              disabled={pending}
-              onClick={() => void remove()}
-            >
-              {pending ? "Removendo…" : "Remover"}
-            </button>
-          </div>
-        </div>
-      </Dialog>
     </>
   );
 }

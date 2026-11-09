@@ -1,8 +1,8 @@
 import type { Routine } from "@boto/protocol";
 import { useRef, useState } from "react";
+import { useConfirm } from "../dialogs/ConfirmDialog";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { errorMessage } from "../lib/errors";
-import { ConfirmDialog } from "../routines/ConfirmDialog";
 import { formatNextRun, formatSchedule } from "../routines/format";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
@@ -22,7 +22,7 @@ export function RoutinesView() {
       events: { "routine.updated": true, "routine.deleted": true },
     },
   );
-  const [deleting, setDeleting] = useState<Routine | null>(null);
+  const confirm = useConfirm();
   const [pending, setPending] = useState<Set<string>>(new Set());
   const locks = useRef(new Set<string>());
   async function act(routine: Routine, action: "run" | "toggle" | "delete") {
@@ -37,7 +37,6 @@ export function RoutinesView() {
         await client.request("routines.update", { id: routine.id, enabled: !routine.enabled });
       } else {
         await client.request("routines.delete", { id: routine.id });
-        setDeleting(null);
         toast("Rotina excluída");
       }
       query.reload();
@@ -132,7 +131,19 @@ export function RoutinesView() {
                   routine.enabled ? "circle-pause" : "play",
                   () => void act(routine, "toggle"),
                 )}
-              {actionButton(routine, "Excluir rotina", "trash", () => setDeleting(routine))}
+              {actionButton(
+                routine,
+                "Excluir rotina",
+                "trash",
+                () =>
+                  void confirm({
+                    title: `Excluir a rotina “${routine.name}”?`,
+                    description:
+                      "A rotina para de rodar e sai da lista. As tarefas que ela já criou continuam no histórico.",
+                    action: "Excluir rotina",
+                    onConfirm: () => act(routine, "delete"),
+                  }),
+              )}
             </div>
           </li>
         ))}
@@ -184,14 +195,6 @@ export function RoutinesView() {
           <div id="rt-once">{content(true)}</div>
         </section>
       </div>
-      {deleting && (
-        <ConfirmDialog
-          name={deleting.name}
-          pending={pending.has(deleting.id)}
-          onClose={() => setDeleting(null)}
-          onConfirm={() => void act(deleting, "delete")}
-        />
-      )}
     </section>
   );
 }

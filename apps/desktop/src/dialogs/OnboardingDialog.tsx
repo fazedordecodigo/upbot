@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useEffect, useState } from "react";
 import { errorMessage } from "../lib/errors";
+import { dayGreeting } from "../lib/greeting";
 import { isMac } from "../lib/platform";
 import { setThemePreference } from "../lib/theme";
 import { useDaemon } from "../shell/daemon";
@@ -31,7 +32,7 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [about, setAbout] = useState("");
-  const [mode, setMode] = useState<Mode>("now");
+  const [mode, setMode] = useState<Mode>("approval");
   const [privateTask, setPrivateTask] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [loaded, setLoaded] = useState(false);
@@ -61,8 +62,7 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
       active = false;
     };
   }, [client, open, connected]);
-  const hour = new Date().getHours();
-  const greeting = `${hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite"}${name.trim() ? `, ${name.trim()}` : ""}.`;
+  const greeting = `${dayGreeting(new Date().getHours())}${name.trim() ? `, ${name.trim()}` : ""}.`;
   const chooseTheme = (value: "dark" | "light") => {
     setTheme(value);
     setThemePreference(value);

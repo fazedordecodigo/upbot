@@ -40,13 +40,19 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     }
     expect(ready).toBe(true);
     const page = await browser.newPage();
+    // 03:00 must greet like Home does ("Boa noite"), not "Bom dia".
+    await page.clock.install({ time: new Date(2026, 10, 9, 3, 0) });
     await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
     await page.locator("#onboarding[open]").waitFor();
     await page.locator("#ob-next:not([disabled])").click();
     await page.locator("#ob-name").fill("Iara");
     await page.locator("#ob-about").fill("Prefiro respostas curtas.");
     expect(await page.locator("#ob-about-count").textContent()).toBe("25/600");
+    expect(await page.locator("#ob-mini-greeting").textContent()).toBe("Boa noite, Iara.");
     await page.locator("#ob-next").click();
+    expect(await page.locator('[data-ob-mode="aprovacao"]').getAttribute("aria-checked")).toBe(
+      "true",
+    );
     await page.locator('[data-ob-mode="agendar"]').click();
     await page.keyboard.press("ArrowDown");
     expect(await page.locator('[data-ob-mode="aprovacao"]').getAttribute("aria-checked")).toBe(
@@ -74,8 +80,25 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     expect(await page.locator("#onboarding").getAttribute("open")).toBeNull();
     await page.keyboard.press("Escape");
     await page.locator("#shortcuts[open]").waitFor({ state: "hidden" });
+    expect(await page.locator("#greeting").textContent()).toContain("Boa noite");
     await page.keyboard.press("Control+Shift+o");
     expect(await page.locator("#main").getAttribute("data-view")).toBe("new");
+    await page.locator("#send-label").waitFor();
+    await page.waitForFunction(
+      () => document.querySelector("#approval-switch")?.getAttribute("aria-checked") === "true",
+    );
+    await client.request("profile.update", {
+      defaults: { delegationMode: "scheduled", requireApproval: false },
+    });
+    await page.locator(".sb").getByText("Início", { exact: true }).click();
+    await page.keyboard.press("Control+Shift+o");
+    await page.waitForFunction(
+      () => document.querySelector("#when-label")?.textContent === "Daqui a 1 hora",
+    );
+    expect(await page.locator("#approval-switch").getAttribute("aria-checked")).toBe("false");
+    await client.request("profile.update", {
+      defaults: { delegationMode: "approval", requireApproval: true },
+    });
     await client.request("onboarding.reset", {});
     await page.locator("#onboarding[open]").waitFor();
     await page.locator('[data-ob-go="2"]').click();
@@ -124,6 +147,26 @@ test("onboarding persists real profile, handles errors, and exposes working shor
             },
             "Confirmar",
           ),
+          h(
+            "button",
+            {
+              id: "ask-pending",
+              onClick: async () => {
+                const answer = await confirm({
+                  title: "Remover item?",
+                  description: "Este item deixará de ficar disponível.",
+                  action: "Remover",
+                  pendingAction: "Removendo…",
+                  onConfirm: () =>
+                    new Promise<void>((resolve, reject) => {
+                      Object.assign(window, { settleConfirm: { resolve, reject } });
+                    }),
+                });
+                setResult(`pending:${answer}`);
+              },
+            },
+            "Pendente",
+          ),
           h("output", { id: "confirm-result" }, result),
         );
       }
@@ -146,6 +189,25 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     expect(await page.locator(".toast").textContent()).toContain("Agente excluído.");
     await page.locator('.toast button[aria-label="Fechar"]').click();
     expect(await page.locator(".toast").count()).toBe(0);
+    type Settle = { settleConfirm: { resolve: () => void; reject: (e: Error) => void } };
+    for (const outcome of ["resolve", "reject"] as const) {
+      await page.locator("#ask-pending").click();
+      await page.locator("#confirm-ok").click();
+      expect(await page.locator("#confirm-ok").textContent()).toBe("Removendo…");
+      expect(await page.locator("#confirm-ok").isDisabled()).toBe(true);
+      expect(await page.locator("#confirm-cancel").isDisabled()).toBe(true);
+      await page.keyboard.press("Escape");
+      expect(await page.locator("#confirm[open]").count()).toBe(1);
+      await page.evaluate((outcome) => {
+        const { settleConfirm } = window as unknown as Settle;
+        if (outcome === "resolve") settleConfirm.resolve();
+        else settleConfirm.reject(new Error("falhou"));
+      }, outcome);
+      await page.locator("#confirm").waitFor({ state: "detached" });
+      expect(await page.locator("#confirm-result").textContent()).toBe(
+        `pending:${outcome === "resolve"}`,
+      );
+    }
   } finally {
     await browser.close();
     client.close();

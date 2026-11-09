@@ -10,7 +10,13 @@ import {
 import { Dialog } from "../ui/Dialog";
 import "./ConfirmDialog.css";
 
-export type ConfirmOptions = { title: string; description: string; action: string };
+export type ConfirmOptions = {
+  title: string;
+  description: string;
+  action: string;
+  pendingAction?: string;
+  onConfirm?: () => Promise<unknown>;
+};
 type Request = ConfirmOptions & { resolve: (confirmed: boolean) => void };
 const ConfirmContext = createContext<((options: ConfirmOptions) => Promise<boolean>) | null>(null);
 
@@ -22,10 +28,16 @@ export function useConfirm() {
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [request, setRequest] = useState<Request | null>(null);
+  const [pending, setPending] = useState(false);
   const current = useRef<Request | null>(null);
+  const running = useRef(false);
   const confirm = useCallback(
     (options: ConfirmOptions) =>
       new Promise<boolean>((resolve) => {
+        if (running.current) {
+          resolve(false);
+          return;
+        }
         current.current?.resolve(false);
         const next = { ...options, resolve };
         current.current = next;
@@ -37,6 +49,26 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     current.current?.resolve(confirmed);
     current.current = null;
     setRequest(null);
+  };
+  const accept = async () => {
+    const active = current.current;
+    if (!active || running.current) return;
+    if (!active.onConfirm) {
+      settle(true);
+      return;
+    }
+    running.current = true;
+    setPending(true);
+    let confirmed = true;
+    try {
+      await active.onConfirm();
+    } catch {
+      confirmed = false;
+    } finally {
+      running.current = false;
+      setPending(false);
+    }
+    if (current.current === active) settle(confirmed);
   };
   useEffect(
     () => () => {
@@ -50,18 +82,21 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       {request && (
         <Dialog
           open={request !== null}
-          onClose={() => settle(false)}
+          onClose={() => {
+            if (!running.current) settle(false);
+          }}
           id="confirm"
           aria-labelledby="confirm-title"
           aria-describedby="confirm-desc"
+          aria-busy={pending}
         >
           <div className="dialog-body">
             <div className="dialog-header">
               <h2 className="dialog-title" id="confirm-title">
-                {request?.title}
+                {request.title}
               </h2>
               <p className="dialog-description" id="confirm-desc">
-                {request?.description}
+                {request.description}
               </p>
             </div>
             <div className="dialog-footer">
@@ -69,6 +104,8 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 type="button"
                 className="btn btn-outline"
                 id="confirm-cancel"
+                data-action="close-dialog"
+                disabled={pending}
                 onClick={() => settle(false)}
               >
                 Cancelar
@@ -77,9 +114,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 type="button"
                 className="btn btn-destructive"
                 id="confirm-ok"
-                onClick={() => settle(true)}
+                disabled={pending}
+                onClick={() => void accept()}
               >
-                {request?.action}
+                {pending ? (request.pendingAction ?? request.action) : request.action}
               </button>
             </div>
           </div>
