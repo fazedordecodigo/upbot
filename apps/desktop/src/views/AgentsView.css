@@ -2,6 +2,7 @@
 .ag-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--boto-space-4); margin-bottom: var(--boto-space-8); }
 .ag-stat { padding: var(--boto-space-5); border: calc(var(--boto-space-1) / 4) solid var(--boto-color-border); border-radius: var(--boto-radius-lg); background: var(--boto-color-card); }
 .ag-stat-value { font-family: var(--boto-font-display); font-size: var(--boto-font-size-3xl); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ag-stat-value[data-unknown="true"] { font-size: var(--boto-font-size-xl); }
 .ag-stat-label, .ag-card-role, .ag-empty, .ag-facts dt { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
 .ag-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--boto-space-3); margin-bottom: var(--boto-space-4); }
 .ag-filter { max-width: 100%; }
@@ -39,6 +40,7 @@
 .ap-row-name { font-size: var(--boto-font-size-sm); font-weight: var(--boto-font-weight-medium); }
 .agent-panel .field, .agent-new .field { display: grid; gap: var(--boto-space-2); }
 .agent-panel .field-help, .agent-new .field-help, .agent-panel .ap-row-help, .agent-new .ap-row-help, .agent-new .label-opt { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
+.agent-new .ap-row-help { font-weight: var(--boto-font-weight-medium); }
 .agent-panel .field-error, .agent-new .field-error, .ap-delete { color: var(--boto-color-destructive); font-size: var(--boto-font-size-sm); }
 @keyframes agent-panel-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
 @media (max-width: 1023px) { .ag-toolbar { align-items: flex-start; } }

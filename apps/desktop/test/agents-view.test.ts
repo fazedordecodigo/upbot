@@ -19,6 +19,7 @@ let browser: Browser;
 let page: Page;
 let vite: ReturnType<typeof Bun.spawn> | undefined;
 let state: string;
+const deletedIds: string[] = [];
 const token = `agents-view-${crypto.randomUUID()}`;
 
 async function waitUntil(predicate: () => Promise<boolean>) {
@@ -54,6 +55,12 @@ beforeAll(async () => {
   await waitUntil(ready);
   browser = await chromium.launch({ channel: "chrome", headless: true });
   page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => {
+      const message = JSON.parse(String(payload));
+      if (message.method === "agents.delete") deletedIds.push(message.params.id);
+    });
+  });
   await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
   await page.getByRole("button", { name: "Agentes", exact: true }).click();
 }, 60000);
@@ -81,6 +88,16 @@ test("real agents can be created, delegated to, configured, filtered and deleted
   await page.getByText("Nenhum agente ainda. Crie o primeiro para delegar tarefas.").waitFor();
   await page.locator("#new-agent").click();
   expect((await page.locator("#agent-new").boundingBox())?.width).toBe(760);
+  expect(
+    await page
+      .locator("#an-approval-help")
+      .evaluate((element) => getComputedStyle(element).fontWeight),
+  ).toBe("500");
+  expect(
+    await page
+      .locator("#agent-new .label-opt")
+      .evaluate((element) => getComputedStyle(element).fontWeight),
+  ).toBe("500");
   await page.locator("#an-create").click();
   expect(await page.locator("#an-name-error").textContent()).toBe("Dê um nome ao agente.");
   await page.locator("#an-name").fill("Financeiro");
@@ -126,10 +143,104 @@ test("real agents can be created, delegated to, configured, filtered and deleted
     "true",
   );
   await page.getByRole("button", { name: "Abrir painel" }).click();
+  expect(await page.locator("#confirm").count()).toBe(0);
   await page.locator(".ap-delete").click();
+  await page.locator("#confirm[open]").waitFor();
+  expect(await page.locator("#confirm").count()).toBe(1);
+  expect(await page.locator("#view-agents #confirm").count()).toBe(0);
+  expect(await page.locator("#confirm-title").textContent()).toBe("Excluir Financeiro?");
+  expect(await page.locator("#confirm-desc").textContent()).toBe(
+    "O agente sai do quadro e a fila dele é cancelada. A pasta de trabalho fica no computador.",
+  );
+  await page.locator("#confirm-cancel").click();
+  await page.locator("#confirm").waitFor({ state: "detached" });
+  expect(deletedIds).toEqual([]);
+  expect((await rpc.request("agents.list", {})).map((item) => item.id)).toContain(agent.id);
+  await page.locator(".ap-delete").click();
+  await page.locator("#confirm[open]").waitFor();
   await page.locator("#confirm-ok").click();
   await page.getByText("Nenhum agente ainda. Crie o primeiro para delegar tarefas.").waitFor();
   expect((await rpc.request("agents.list", {})).length).toBe(0);
+  expect(deletedIds).toEqual([agent.id]);
+}, 60000);
+
+test("unknown overview numbers are honest during loading and RPC failure, then recover", async () => {
+  const pendingPage = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let mode: "delay" | "fail" | "live" = "delay";
+  let release: (() => void) | undefined;
+  await pendingPage.routeWebSocket(`ws://127.0.0.1:${daemon.port}/ws*`, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((payload) => {
+      const message = JSON.parse(String(payload));
+      if (message.method !== "agents.overview" || mode === "live") {
+        server.send(payload);
+      } else if (mode === "delay") {
+        release = () => server.send(payload);
+      } else {
+        socket.send(
+          JSON.stringify({ id: message.id, error: { code: "internal", message: "QA failure" } }),
+        );
+      }
+    });
+  });
+  async function openAgents() {
+    await pendingPage.getByRole("button", { name: "Abrir menu" }).click();
+    await pendingPage.getByRole("button", { name: "Agentes", exact: true }).click();
+  }
+  async function expectUnknown() {
+    expect(await pendingPage.locator(".ag-stat-value").allTextContents()).toEqual([
+      "a definir",
+      "a definir",
+      "a definir",
+      "a definir",
+    ]);
+    expect(await pendingPage.locator(".ag-filter-count").count()).toBe(0);
+    expect(
+      await pendingPage
+        .locator(".ag-stat-value")
+        .evaluateAll((elements) =>
+          elements.every((element) => element.scrollWidth <= element.clientWidth),
+        ),
+    ).toBe(true);
+  }
+  try {
+    await pendingPage.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await openAgents();
+    await pendingPage.getByText("Carregando agentes…").waitFor();
+    await waitUntil(async () => !!release);
+    await expectUnknown();
+    mode = "live";
+    release?.();
+    await pendingPage
+      .getByText("Nenhum agente ainda. Crie o primeiro para delegar tarefas.")
+      .waitFor();
+    expect(await pendingPage.locator(".ag-stat-value").allTextContents()).toEqual([
+      "0",
+      "0",
+      "0",
+      "0",
+    ]);
+    expect(await pendingPage.locator(".ag-filter-count").allTextContents()).toEqual([
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+    ]);
+    mode = "fail";
+    await pendingPage.reload();
+    await openAgents();
+    await pendingPage.getByText("Não foi possível carregar os agentes.").waitFor();
+    await expectUnknown();
+    mode = "live";
+    await pendingPage.getByRole("button", { name: "Tentar de novo" }).click();
+    await pendingPage
+      .getByText("Nenhum agente ainda. Crie o primeiro para delegar tarefas.")
+      .waitFor();
+    expect(await pendingPage.locator(".ag-stat-value").first().textContent()).toBe("0");
+  } finally {
+    await pendingPage.close();
+  }
 }, 60000);
 
 test("status helpers distinguish paused and failed agents", async () => {

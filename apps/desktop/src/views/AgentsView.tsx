@@ -23,6 +23,7 @@ export function AgentsView() {
   const toast = useToast();
   const overview = useDaemonQuery(client, "agents.overview", {});
   const { setData } = overview;
+  const summary = overview.error ? undefined : overview.data?.summary;
   useEffect(() => client.on("agents.overviewChanged", setData), [client, setData]);
   const machines = useDaemonQuery(
     client,
@@ -80,7 +81,9 @@ export function AgentsView() {
             ] as const
           ).map(([key, label]) => (
             <div className="od-stat ag-stat" key={key}>
-              <span className="ag-stat-value">{overview.data?.summary[key] ?? "—"}</span>
+              <span className="ag-stat-value" data-unknown={summary?.[key] === undefined}>
+                {summary?.[key] ?? "a definir"}
+              </span>
               <span className="ag-stat-label">{label}</span>
             </div>
           ))}
@@ -128,13 +131,13 @@ export function AgentsView() {
                   }}
                 >
                   {label}
-                  <span className="ag-filter-count">
-                    {overview.data
-                      ? key === "all"
-                        ? overview.data.summary.agents
-                        : overview.data.agents.filter((row) => row.situation === key).length
-                      : "—"}
-                  </span>
+                  {summary && overview.data && (
+                    <span className="ag-filter-count">
+                      {key === "all"
+                        ? summary.agents
+                        : overview.data.agents.filter((row) => row.situation === key).length}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
