@@ -486,7 +486,10 @@ acp
     sessions[sessionId] = { prompts: [] };
     saveSessions(sessions);
     sessionMcp.set(sessionId, (ctx.params as { mcpServers?: McpSpec[] }).mcpServers ?? []);
-    return { sessionId, configOptions: configOptions() } as never;
+    return {
+      sessionId,
+      configOptions: process.env.FAKE_ACP_NO_CONFIG === "1" ? undefined : configOptions(),
+    } as never;
   })
   .onRequest("session/load", async (ctx) => {
     const params = ctx.params as { sessionId: string; cwd?: string; mcpServers?: McpSpec[] };
@@ -504,7 +507,9 @@ acp
       "session/update",
       chunk(params.sessionId, "agent_message_chunk", "[replayed history]"),
     );
-    return { configOptions: configOptions() } as never;
+    return {
+      configOptions: process.env.FAKE_ACP_NO_CONFIG === "1" ? undefined : configOptions(),
+    } as never;
   })
   .onRequest("session/set_config_option", async (ctx) => {
     const params = ctx.params as { configId: string; value: string };

@@ -1,5 +1,5 @@
 import type { Agent, AgentOverview, Machine } from "@boto/protocol";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { DesktopClient, frameDataUrl } from "../lib/desktop";
 import { mono } from "../lib/ui";
 import { useDaemon } from "../shell/daemon";
@@ -108,17 +108,13 @@ export function TaskRows({ overview }: { overview: AgentOverview }) {
 export function MachineThumb({ machine }: { machine: Machine }) {
   const { client } = useDaemon();
   const [src, setSrc] = useState<string>();
-  const lastFetch = useRef(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new thumbnail timestamp invalidates the cached frame.
   useEffect(() => {
     let live = true;
-    if (machine.status !== "ready") {
-      setSrc(undefined);
-      return;
-    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    setSrc(undefined);
+    if (machine.status !== "ready") return;
     const desktop = new DesktopClient(client);
     const load = () => {
-      lastFetch.current = Date.now();
       void desktop
         .thumbnail(machine.id)
         .then((frame) => {
@@ -126,20 +122,24 @@ export function MachineThumb({ machine }: { machine: Machine }) {
         })
         .catch(() => {
           if (live) setSrc(undefined);
+        })
+        .finally(() => {
+          if (live) timer = setTimeout(load, 10000);
         });
     };
-    const timer = setTimeout(load, Math.max(0, 10000 - (Date.now() - lastFetch.current)));
+    load();
     return () => {
       live = false;
       clearTimeout(timer);
     };
-  }, [client, machine.id, machine.status, machine.thumbnailAt]);
+  }, [client, machine.id, machine.status]);
   return (
     <figure className="ag-thumb">
       {src ? (
         <img
-          className="od-media od-media-cover"
+          className="od-media"
           src={src}
+          onError={() => setSrc(undefined)}
           alt={`Tela da máquina ${machine.name}`}
         />
       ) : (
