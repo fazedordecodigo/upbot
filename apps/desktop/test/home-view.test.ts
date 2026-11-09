@@ -57,9 +57,12 @@ test("home exposes a real daemon query error and retries after repair", async ()
       "false",
     );
     await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
-    const error = page.locator("#view-home [role=alert]").filter({ hasText: "profile.name" });
+    const error = page
+      .locator("#view-home [role=alert]")
+      .filter({ hasText: "Não consegui carregar os dados." });
     await error.waitFor();
     expect(await error.innerText()).toContain("Tentar de novo");
+    expect(await error.innerText()).not.toContain("profile.name");
     db.query("UPDATE settings SET value = ? WHERE key = ?").run(
       JSON.stringify("Emerson"),
       "profile.name",
