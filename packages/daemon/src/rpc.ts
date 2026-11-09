@@ -468,7 +468,7 @@ export class Rpc {
       }
       case "marketplace.uninstall": {
         const p = params as MethodParsedParams<typeof method>;
-        const result = this.extras.marketplace.uninstall(p.source, p.id);
+        const result = await this.extras.marketplace.uninstall(p.source, p.id);
         for (const id of result.agents) {
           this.queue.removeAllForAgent(id);
           this.runtimes.agentDeleted(id);

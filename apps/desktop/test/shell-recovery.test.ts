@@ -90,6 +90,8 @@ test("main shell boots, navigates and refreshes history after daemon restart wit
     expect(await page.locator("#app").count()).toBe(1);
     await page.locator('#sidebar [data-action="new-task"]').click();
     await page.locator('#main[data-view="new"]').waitFor();
+    await page.locator("#main h1").waitFor();
+    await page.waitForFunction(() => document.activeElement === document.querySelector("#main h1"));
     expect(await page.locator('#sidebar [data-nav="new"]').getAttribute("aria-current")).toBe(
       "page",
     );
@@ -97,6 +99,6 @@ test("main shell boots, navigates and refreshes history after daemon restart wit
     await page.close();
     proxy.stop(true);
     await stopDaemon(daemon, rpc);
-    removeDir(root);
+    await removeDir(root);
   }
 }, 60_000);

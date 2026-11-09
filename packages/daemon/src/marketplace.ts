@@ -120,20 +120,32 @@ export class Marketplace {
     );
   }
 
-  private installed(item: IndexItem, source: string): boolean {
-    if (item.kind === "plugin")
+  private installed(item: IndexItem, source: string, index: IndexItem[]): boolean {
+    const installation = this.db
+      .query("SELECT active FROM marketplace_installations WHERE source = ? AND item_id = ?")
+      .get(source, item.id) as { active: number } | null;
+    if (installation?.active === 0) return false;
+    if (item.kind === "plugin") {
+      const artifacts = this.db
+        .query(
+          "SELECT name, registry_id FROM marketplace_artifacts WHERE source = ? AND item_id = ? AND kind = 'skill'",
+        )
+        .all(source, item.id) as { name: string; registry_id: string | null }[];
       return (
-        !!this.db
-          .query("SELECT 1 FROM marketplace_installations WHERE source = ? AND item_id = ?")
-          .get(source, item.id) &&
-        (
-          this.db
-            .query(
-              "SELECT name FROM marketplace_artifacts WHERE source = ? AND item_id = ? AND kind = 'skill'",
-            )
-            .all(source, item.id) as { name: string }[]
-        ).every((artifact) => this.skills.get(artifact.name) !== null)
+        !!item.skills?.length &&
+        item.skills.every((id) => {
+          const skill = index.find((entry) => entry.kind === "skill" && entry.id === id);
+          if (!skill) return false;
+          const name = skillSlug(skill.name ?? skill.id);
+          const artifact = artifacts.find(
+            (entry) => entry.registry_id === id || (!entry.registry_id && entry.name === name),
+          );
+          return installation
+            ? !!artifact && this.skills.get(artifact.name) !== null
+            : this.skills.get(name) !== null;
+        })
       );
+    }
     if (item.kind === "skill") return this.skills.get(item.name ?? item.id) !== null;
     return this.agents.list().some((a) => a.name === (item.name ?? item.id));
   }
@@ -197,7 +209,7 @@ export class Marketplace {
             secrets: [],
             includes: i.kind === "skill" ? [] : (i.skills ?? []),
             source,
-            installed: this.installed(i, source),
+            installed: this.installed(i, source, all),
           });
         }
       } catch (e) {
@@ -252,6 +264,7 @@ export class Marketplace {
     name: string,
     raw: string,
     created: boolean,
+    registryId: string | null = null,
   ) {
     const hash = fingerprint(raw);
     const previous = this.db
@@ -261,7 +274,7 @@ export class Marketplace {
       .get(source, owner, kind, name) as Pick<Artifact, "hash" | "created"> | null;
     this.db
       .query(
-        "INSERT OR REPLACE INTO marketplace_artifacts (source, item_id, kind, name, hash, created) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO marketplace_artifacts (source, item_id, kind, name, hash, created, registry_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         source,
@@ -270,10 +283,35 @@ export class Marketplace {
         name,
         hash,
         created || (previous?.created && previous.hash === hash) ? 1 : 0,
+        registryId,
       );
   }
 
-  uninstall(source: string, id: string) {
+  async uninstall(source: string, id: string) {
+    if (source === BUILTIN_APPS_SOURCE) {
+      const apps = this.apps.list().filter((app) => app.catalogId === id);
+      for (const app of apps) await this.apps.delete(app.id);
+      return {
+        ok: true as const,
+        removed: apps.map((app) => app.id),
+        preserved: [],
+        agents: [] as string[],
+      };
+    }
+    const installation = this.db
+      .query("SELECT 1 FROM marketplace_installations WHERE source = ? AND item_id = ?")
+      .get(source, id);
+    if (!installation) {
+      const item = await this.get(id, source).catch((error) => {
+        if (error instanceof RpcError && error.code === "not_found") return null;
+        throw error;
+      });
+      if (item?.installed)
+        throw new RpcError(
+          "bad_request",
+          "installation ownership is unknown; existing files have been preserved",
+        );
+    }
     const artifacts = this.db
       .query(
         "SELECT kind, name, hash, created FROM marketplace_artifacts WHERE source = ? AND item_id = ?",
@@ -305,7 +343,7 @@ export class Marketplace {
         .query("DELETE FROM marketplace_artifacts WHERE source = ? AND item_id = ?")
         .run(source, id);
       this.db
-        .query("DELETE FROM marketplace_installations WHERE source = ? AND item_id = ?")
+        .query("UPDATE marketplace_installations SET active = 0 WHERE source = ? AND item_id = ?")
         .run(source, id);
     })();
     return { ok: true as const, removed, preserved, agents };
@@ -321,18 +359,41 @@ export class Marketplace {
     }
     const name = skillSlug(meta.name ?? item.name ?? item.id);
     const existing = this.skills.get(name);
-    const skill =
-      existing ??
-      this.skills.save(
-        {
-          name,
-          description: meta.description ?? item.description ?? "",
-          body: m ? (m[2] ?? "") : text,
-          author: `marketplace:${item.author || "unknown"}`,
-        },
-        "create",
+    const previous = this.db
+      .query(
+        "SELECT hash, created FROM marketplace_artifacts WHERE source = ? AND item_id = ? AND kind = 'skill' AND name = ?",
+      )
+      .get(source, owner, name) as Pick<Artifact, "hash" | "created"> | null;
+    const owned = !!existing && !!previous?.created && fingerprint(existing.raw) === previous.hash;
+    const content = {
+      name,
+      description: meta.description ?? item.description ?? "",
+      body: m ? (m[2] ?? "") : text,
+      author: `marketplace:${item.author || "unknown"}`,
+    };
+    const changed =
+      existing &&
+      (existing.body.trimEnd() !== content.body.trimEnd() ||
+        existing.description !== content.description ||
+        existing.author !== content.author);
+    if (changed && previous && !owned)
+      throw new RpcError(
+        "bad_request",
+        `skill "${name}" has local or unowned content; preserved without changes`,
       );
-    this.remember(source, owner, "skill", skill.name, this.skills.get(skill.name)!.raw, !existing);
+    const skill =
+      !existing || (changed && owned)
+        ? this.skills.save(content, existing ? "revise" : "create")
+        : existing;
+    this.remember(
+      source,
+      owner,
+      "skill",
+      skill.name,
+      this.skills.get(skill.name)!.raw,
+      !existing || owned,
+      item.id,
+    );
     return skill;
   }
 
@@ -360,7 +421,9 @@ export class Marketplace {
     if (!item) throw new RpcError("not_found", `no item "${id}" in ${source}`);
     const finish = <T>(result: T): T => {
       this.db
-        .query("INSERT OR IGNORE INTO marketplace_installations (source, item_id) VALUES (?, ?)")
+        .query(
+          "INSERT INTO marketplace_installations (source, item_id, active) VALUES (?, ?, 1) ON CONFLICT (source, item_id) DO UPDATE SET active = 1",
+        )
         .run(source, id);
       return result;
     };

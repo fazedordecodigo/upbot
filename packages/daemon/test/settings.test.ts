@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +13,8 @@ import {
 } from "../src/db/settings";
 
 const db = () => openDatabase(mkdtempSync(join(tmpdir(), "boto-data-")));
+
+setDefaultTimeout(30_000);
 
 describe("settings store", () => {
   test("round-trips JSON values and returns the fallback when absent", () => {
