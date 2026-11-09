@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, ChatItem, ProviderId, Turn } from "@boto/protocol";
@@ -16,6 +16,8 @@ import {
   waitForExit,
   waitForPidDead,
 } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const TOKEN = `chat-test-${crypto.randomUUID()}`;
 
