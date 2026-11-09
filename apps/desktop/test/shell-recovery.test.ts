@@ -89,8 +89,10 @@ test("main shell boots, navigates and refreshes history after daemon restart wit
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(started);
     expect(await page.locator("#app").count()).toBe(1);
     await page.locator('#sidebar [data-action="new-task"]').click();
-    await page.locator("#main h1").filter({ hasText: "Nova tarefa" }).waitFor();
-    expect(await page.locator("#main").innerText()).toContain("Nova tarefa");
+    await page.locator('#main[data-view="new"]').waitFor();
+    expect(await page.locator('#sidebar [data-nav="new"]').getAttribute("aria-current")).toBe(
+      "page",
+    );
   } finally {
     await page.close();
     proxy.stop(true);
