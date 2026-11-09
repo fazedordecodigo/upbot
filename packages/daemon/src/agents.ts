@@ -2,6 +2,8 @@ import type { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, AgentsCreateParams, AgentsUpdateParams } from "@boto/protocol";
+import { z } from "zod";
+import { getSetting } from "./db/settings";
 
 type Row = {
   id: string;
@@ -20,10 +22,11 @@ type Row = {
   max_instances: number | null;
 };
 
-function rowToAgent(r: Row): Agent {
+function rowToAgent(r: Row, isDefault: boolean): Agent {
   return {
     id: r.id,
     name: r.name,
+    isDefault,
     instructions: r.instructions,
     provider: r.provider as Agent["provider"],
     config: r.config_json ? (JSON.parse(r.config_json) as Record<string, string>) : {},
@@ -47,14 +50,20 @@ export class AgentStore {
     const rows = this.db
       .query("SELECT * FROM agents WHERE deleted_at IS NULL ORDER BY created_at ASC")
       .all() as Row[];
-    return rows.map(rowToAgent);
+    const defaultId = getSetting(this.db, "default_bot_id", z.string().nullable(), null);
+    return rows.map((row) => rowToAgent(row, row.id === defaultId));
   }
 
   get(id: string): Agent | null {
     const row = this.db
       .query("SELECT * FROM agents WHERE id = ? AND deleted_at IS NULL")
       .get(id) as Row | null;
-    return row ? rowToAgent(row) : null;
+    return row
+      ? rowToAgent(
+          row,
+          row.id === getSetting(this.db, "default_bot_id", z.string().nullable(), null),
+        )
+      : null;
   }
 
   create(params: AgentsCreateParams): Agent {

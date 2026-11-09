@@ -36,17 +36,24 @@ export function seedDefaultBot(db: Database, store: AgentStore): void {
       "UpBot",
       DEFAULT_BOT_INSTRUCTIONS.replace("You are Boto", "You are UpBot"),
     );
+    if (!hasSetting(db, "default_bot_id")) {
+      const seeded = db
+        .query("SELECT id FROM agents WHERE name = ? AND instructions = ? AND deleted_at IS NULL")
+        .all(DEFAULT_BOT_NAME, DEFAULT_BOT_INSTRUCTIONS) as { id: string }[];
+      if (seeded.length === 1) setSetting(db, "default_bot_id", seeded[0]!.id);
+    }
   }
   if (process.env.BOTO_DEFAULT_BOT === "off") return;
   if (hasSetting(db, "default_bot_seeded")) return;
   const any = db.query("SELECT 1 FROM agents LIMIT 1").get();
   if (!any) {
-    store.create({
+    const bot = store.create({
       name: DEFAULT_BOT_NAME,
       provider: "claude",
       instructions: DEFAULT_BOT_INSTRUCTIONS,
       avatar: { emoji: "🤖", color: "#0ea5e9" },
     });
+    setSetting(db, "default_bot_id", bot.id);
   }
   setSetting(db, "default_bot_seeded", 1);
 }
