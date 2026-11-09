@@ -367,12 +367,19 @@ export class Rpc {
       case "marketplace.list":
         return {
           sources: this.extras.marketplace.sources(),
-          ...(await this.extras.marketplace.list()),
+          ...(await this.extras.marketplace.list(params as MethodParsedParams<typeof method>)),
         };
+      case "marketplace.get": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.marketplace.get(p.id, p.source);
+      }
       case "marketplace.install": {
         const p = params as MethodParsedParams<typeof method>;
         const r = await asBadRequest(() =>
-          this.extras.marketplace.install(p.source, p.id, p.provider),
+          this.extras.marketplace.install(p.source, p.id, p.provider, {
+            secrets: p.secrets ?? {},
+            permissions: p.permissions,
+          }),
         );
         if (r.skills.length) this.broadcast("skills.changed", {});
         if (r.agent) {

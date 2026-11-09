@@ -2,9 +2,18 @@ import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { type Agent, AgentAvatar, type MarketplaceItem, ProviderId } from "@boto/protocol";
+import {
+  type Agent,
+  AgentAvatar,
+  type ConnectedApp,
+  type MarketplaceFilters,
+  type MarketplaceItem,
+  MarketplaceRegistryEntry,
+  ProviderId,
+} from "@boto/protocol";
 import { z } from "zod";
 import type { AgentStore } from "./agents";
+import { APP_CATALOG, APP_MARKETPLACE, type AppsService } from "./apps";
 import { getSetting, setSetting } from "./db/settings";
 import { RpcError } from "./runtime/agent-runtime";
 import type { SkillLibrary } from "./skills";
@@ -33,7 +42,8 @@ export class MarketplaceFetchError extends Error {
   }
 }
 
-type IndexItem = Omit<MarketplaceItem, "source" | "installed">;
+type IndexItem = z.infer<typeof MarketplaceRegistryEntry>;
+export const BUILTIN_APPS_SOURCE = "builtin:apps";
 type Template = {
   name: string;
   instructions: string;
@@ -61,6 +71,7 @@ export class Marketplace {
     private db: Database,
     private skills: SkillLibrary,
     private agents: AgentStore,
+    private apps: AppsService,
   ) {}
 
   sources(): string[] {
@@ -89,29 +100,74 @@ export class Marketplace {
   }
 
   private async index(source: string): Promise<IndexItem[]> {
-    const raw = JSON.parse((await fetchBytes(source)).toString("utf8")) as { items?: IndexItem[] };
+    const raw = JSON.parse((await fetchBytes(source)).toString("utf8")) as { items?: unknown[] };
     if (!Array.isArray(raw.items))
       throw new MarketplaceFetchError("invalid_index", `${source} is not a marketplace index`);
-    return raw.items.filter(
-      (i) =>
-        typeof i.id === "string" &&
-        (i.kind === "skill" || i.kind === "agent") &&
-        typeof i.url === "string" &&
-        /^[0-9a-f]{64}$/.test(String(i.sha256)),
+    const items = raw.items.flatMap((rawItem) => {
+      const result = MarketplaceRegistryEntry.safeParse(rawItem);
+      return result.success ? [result.data] : [];
+    });
+    return items.filter(
+      (item) =>
+        item.kind !== "plugin" ||
+        item.skills?.every((id) =>
+          items.some((skill) => skill.id === id && skill.kind === "skill"),
+        ),
     );
   }
 
-  private installed(item: IndexItem): boolean {
-    if (item.kind === "skill") return this.skills.get(item.name) !== null;
-    return this.agents.list().some((a) => a.name === item.name);
+  private installed(item: IndexItem, all: IndexItem[]): boolean {
+    if (item.kind === "plugin")
+      return (item.skills ?? []).every((id) => {
+        const skill = all.find((s) => s.id === id && s.kind === "skill");
+        return skill !== undefined && this.installed(skill, all);
+      });
+    if (item.kind === "skill") return this.skills.get(item.name ?? item.id) !== null;
+    return this.agents.list().some((a) => a.name === (item.name ?? item.id));
   }
 
-  async list(): Promise<{ items: MarketplaceItem[]; errors: { source: string; error: string }[] }> {
+  private builtinItems(): MarketplaceItem[] {
+    const connected = this.apps.list();
+    return APP_CATALOG.filter(
+      (entry) => entry.id !== "custom-stdio" && entry.id !== "custom-http",
+    ).map((entry) => {
+      const metadata = APP_MARKETPLACE[entry.id];
+      return {
+        id: entry.id,
+        name: entry.name,
+        description: entry.description,
+        kind: metadata?.kind ?? "app",
+        category: metadata?.category ?? "Outros",
+        featured: metadata?.featured ?? false,
+        icon: metadata?.icon ?? null,
+        author: metadata?.author ?? entry.name,
+        homepage: entry.docsUrl,
+        catalogId: entry.id,
+        secrets: entry.secrets,
+        includes: [],
+        source: BUILTIN_APPS_SOURCE,
+        installed: connected.some((app) => app.catalogId === entry.id),
+        version:
+          entry.command
+            ?.map((arg) => arg.match(/@(\d+\.\d+\.\d+(?:[-+][\w.-]+)?)$/)?.[1])
+            .find(Boolean) ?? "",
+        url: "",
+        sha256: "",
+      };
+    });
+  }
+
+  async list(filters: MarketplaceFilters = {}): Promise<{
+    items: MarketplaceItem[];
+    errors: { source: string; error: string }[];
+    categories: { name: string; count: number }[];
+  }> {
     const items: MarketplaceItem[] = [];
     const errors: { source: string; error: string }[] = [];
     for (const source of this.sources()) {
       try {
-        for (const i of await this.index(source)) {
+        const all = await this.index(source);
+        for (const i of all) {
           items.push({
             id: i.id,
             kind: i.kind,
@@ -121,15 +177,52 @@ export class Marketplace {
             version: String(i.version ?? ""),
             url: i.url,
             sha256: i.sha256,
+            category: i.category,
+            featured: i.featured,
+            icon: i.icon,
+            homepage: i.homepage,
+            catalogId: null,
+            secrets: [],
+            includes: i.kind === "skill" ? [] : (i.skills ?? []),
             source,
-            installed: this.installed(i),
+            installed: this.installed(i, all),
           });
         }
       } catch (e) {
         errors.push({ source, error: (e as Error).message });
       }
     }
-    return { items, errors };
+    items.push(...this.builtinItems());
+    const byKind = items.filter((item) => !filters.kind || item.kind === filters.kind);
+    const counts = new Map<string, number>();
+    for (const item of byKind) counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
+    const normalize = (value: string) =>
+      value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+    const query = normalize(filters.query ?? "");
+    return {
+      items: byKind.filter(
+        (item) =>
+          (!filters.category || item.category === filters.category) &&
+          [item.name, item.description, item.category, item.author].some((value) =>
+            normalize(value).includes(query),
+          ),
+      ),
+      errors,
+      categories: [...counts]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    };
+  }
+
+  async get(id: string, source?: string): Promise<MarketplaceItem> {
+    const item = (await this.list()).items.find(
+      (item) => item.id === id && (!source || item.source === source),
+    );
+    if (!item) throw new RpcError("not_found", "marketplace item not found");
+    return item;
   }
 
   private async download(source: string, item: IndexItem): Promise<string> {
@@ -150,7 +243,7 @@ export class Marketplace {
     }
     return this.skills.save(
       {
-        name: meta.name ?? item.name,
+        name: meta.name ?? item.name ?? item.id,
         description: meta.description ?? item.description ?? "",
         body: m ? (m[2] ?? "") : text,
         author: `marketplace:${item.author || "unknown"}`,
@@ -163,14 +256,35 @@ export class Marketplace {
     source: string,
     id: string,
     provider?: string,
-  ): Promise<{ skills: string[]; agent: Agent | null }> {
+    options: Pick<Parameters<AppsService["connect"]>[0], "permissions" | "secrets"> = {
+      secrets: {},
+    },
+  ): Promise<{ skills: string[]; agent: Agent | null; app: ConnectedApp | null }> {
+    if (source === BUILTIN_APPS_SOURCE) {
+      const item = this.builtinItems().find((item) => item.id === id);
+      if (!item?.catalogId) throw new RpcError("not_found", "marketplace app not found");
+      return {
+        skills: [],
+        agent: null,
+        app: this.apps.connect({ catalogId: item.catalogId, ...options }),
+      };
+    }
     if (!this.sources().includes(source))
       throw new RpcError("bad_request", "unknown marketplace source");
     const all = await this.index(source);
     const item = all.find((i) => i.id === id);
     if (!item) throw new RpcError("not_found", `no item "${id}" in ${source}`);
     if (item.kind === "skill")
-      return { skills: [(await this.installSkill(source, item)).name], agent: null };
+      return { skills: [(await this.installSkill(source, item)).name], agent: null, app: null };
+    if (item.kind === "plugin") {
+      const skills: string[] = [];
+      for (const id of item.skills ?? []) {
+        const skill = all.find((entry) => entry.kind === "skill" && entry.id === id);
+        if (!skill) throw new RpcError("bad_request", "plugin skill not found");
+        skills.push((await this.installSkill(source, skill)).name);
+      }
+      return { skills, agent: null, app: null };
+    }
     const t = JSON.parse(await this.download(source, item)) as Template;
     if (typeof t.name !== "string" || typeof t.instructions !== "string") {
       throw new RpcError("bad_request", "invalid agent template");
@@ -189,6 +303,6 @@ export class Marketplace {
       provider: prov.data,
       avatar: avatar.success ? avatar.data : null,
     });
-    return { skills, agent };
+    return { skills, agent, app: null };
   }
 }

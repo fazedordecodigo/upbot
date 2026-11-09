@@ -26,7 +26,15 @@ fetched from raw.githubusercontent.com (`BOTO_MARKETPLACE_URL` overrides; user s
 `settings.marketplace_sources`, http(s)/file URLs). `src/marketplace.ts` verifies each file's
 sha256 before installing; skills go to the skills library (author `marketplace:<author>`),
 agent templates create an agent (chosen provider) and install their listed skills. RPC
-`marketplace.list/install/setSources`; UI `MarketplaceView`. Regenerate the index with
+`marketplace.list/get/install/setSources`; UI `MarketplaceView`. The catalog includes
+built-in apps/MCP servers from `APP_CATALOG` (`builtin:apps`), checksum-verified skills
+and agent templates, and plugins bundling skill IDs from the same registry. App installs
+use `AppsService.connect`, including its secret and sensitive-permission validation.
+Registry metadata supports pt-BR category labels, featured, icon and homepage; agent/plugin
+`skills` populate `includes`. Listing accepts kind/category/query filters (accent-insensitive
+search); category counts are computed after the kind filter but before category/query filters.
+`marketplace.get` selects the first source when an ID is ambiguous and no source is supplied.
+Regenerate the index with
 `bun scripts/marketplace-index.ts`. Tests: `test/marketplace.e2e.test.ts`.
 Saved UpBot/BobAgent registry URLs migrate to Boto and are deduplicated after conversion,
 preserving first-occurrence order. `BOTO_MARKETPLACE_URL` also overrides saved current/legacy

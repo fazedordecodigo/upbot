@@ -264,7 +264,7 @@ async function main() {
       apps,
       approvals,
       pages,
-      marketplace: new Marketplace(db, skills, store),
+      marketplace: new Marketplace(db, skills, store, apps),
       mobile,
       team,
       hosts,

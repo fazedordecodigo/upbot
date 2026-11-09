@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  AppSecretSpec,
+  marketplaceMethods,
   providersCatalogMethods,
   providersCreateParams,
   toolPermissionMethods,
@@ -508,22 +510,6 @@ export const MobileStatus = z.object({
 });
 export type MobileStatus = z.infer<typeof MobileStatus>;
 
-// ---- Marketplace ----
-
-export const MarketplaceItem = z.object({
-  id: z.string(),
-  kind: z.enum(["skill", "agent"]),
-  name: z.string(),
-  description: z.string(),
-  author: z.string(),
-  version: z.string(),
-  url: z.string(),
-  sha256: z.string(),
-  source: z.string(),
-  installed: z.boolean(),
-});
-export type MarketplaceItem = z.infer<typeof MarketplaceItem>;
-
 // ---- Messaging gateways ----
 
 export const GatewayStatus = z.enum(["connecting", "connected", "error", "stopped"]);
@@ -696,13 +682,6 @@ export const Approval = z.object({
 });
 export type Approval = z.infer<typeof Approval>;
 
-export const AppSecretSpec = z.object({
-  key: z.string(),
-  label: z.string(),
-  hint: z.string(),
-  /** "Header: template" with {value}; null = passed to the server as an env var. */
-  header: z.string().nullable(),
-});
 export const AppCatalogEntry = z.object({
   id: z.string(),
   name: z.string(),
@@ -889,6 +868,7 @@ export const ChannelsReassignParams = z
 export const methodMap = {
   ...providersCatalogMethods,
   ...toolPermissionMethods,
+  ...marketplaceMethods(Agent, ConnectedApp, AppPermissions),
   "agents.list": { params: AgentsListParams, result: AgentsListResult },
   "agents.create": {
     params: providersCreateParams(AgentsCreateParams),
@@ -994,20 +974,6 @@ export const methodMap = {
   "mobile.revoke": {
     params: z.object({ id: z.string() }).strict(),
     result: z.object({ ok: z.literal(true) }),
-  },
-  "marketplace.list": {
-    params: z.object({}).strict(),
-    result: z.object({
-      sources: z.array(z.string()),
-      items: z.array(MarketplaceItem),
-      errors: z.array(z.object({ source: z.string(), error: z.string() })),
-    }),
-  },
-  "marketplace.install": {
-    params: z
-      .object({ source: z.string(), id: z.string(), provider: ProviderId.optional() })
-      .strict(),
-    result: z.object({ skills: z.array(z.string()), agent: Agent.nullable() }),
   },
   "marketplace.setSources": {
     params: z.object({ urls: z.array(z.string().max(2000)).max(20) }).strict(),
