@@ -99,6 +99,7 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     await page.getByText("Prefiro respostas curtas.", { exact: true }).first().waitFor();
     await page.getByRole("button", { name: "Editar memória", exact: true }).click();
     expect(await page.locator("#st-tab-memory").getAttribute("aria-selected")).toBe("true");
+    await page.locator("#sidebar [data-history]").getByText(task.title, { exact: true }).click();
     await page.reload();
     await page.locator("#timeline").waitFor();
 
