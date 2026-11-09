@@ -67,6 +67,7 @@ TOKEN="$(bun -e 'console.log(crypto.randomUUID())')"
 ACP="$(bun -e 'console.log(JSON.stringify([process.execPath, process.cwd() + "/packages/daemon/test/fixtures/fake-acp-agent.ts"]))')"
 { printf '%s\n' "$TOKEN"; cat; } | \
   BOTO_PROVIDER_COMMAND_DEVIN="$ACP" \
+  FAKE_ACP_STATE_DIR="$STATE/fake-acp" \
   BOTO_MARKETPLACE_URL="file://$ROOT/marketplace/index.json" \
   bun packages/daemon/src/main.ts --data-dir "$STATE/data" --agents-root "$STATE/agents"
 ```
