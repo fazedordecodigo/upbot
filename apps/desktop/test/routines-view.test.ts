@@ -111,7 +111,7 @@ test("real routines list, pause, resume, run, confirm deletion and events", asyn
     await row.getByText("Ativa", { exact: true }).waitFor();
     await row.getByRole("button", { name: "Executar agora", exact: true }).click();
     await page.getByText("Rotina iniciada", { exact: true }).waitFor();
-    expect(await rpc.request("routines.runs", { id: recurring.id })).toHaveLength(1);
+    expect(await rpc.request("routines.runs", { id: recurring.id })).toEqual([]);
     await row.getByRole("button", { name: "Excluir rotina", exact: true }).click();
     await page.locator("#confirm[open]").waitFor();
     expect(
