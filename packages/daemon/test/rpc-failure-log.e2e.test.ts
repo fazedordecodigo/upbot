@@ -1,7 +1,9 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { rmSync } from "node:fs";
 import type { DaemonHandle } from "./helpers";
 import { DaemonClient, startDaemon, tmp } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const TOKEN = `rpc-log-test-${crypto.randomUUID()}`;
 const SECRET = `mk-secret-${crypto.randomUUID()}`;

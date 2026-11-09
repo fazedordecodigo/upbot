@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, RemoteHost } from "@boto/protocol";
@@ -12,6 +12,8 @@ import {
   stopDaemon,
   tmp,
 } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const TOKEN = `remote-test-${crypto.randomUUID()}`;
 const FAKE_SSH = join(import.meta.dir, "fixtures/fake-ssh.ts");

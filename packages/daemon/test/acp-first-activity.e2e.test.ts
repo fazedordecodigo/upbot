@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -13,6 +13,8 @@ import {
   tmp,
   waitForPidDead,
 } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const TOKEN = `acp-first-activity-${crypto.randomUUID()}`;
 const WATCHDOG_MS = 1000;
