@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { Approval, ApprovalDecision, ApprovalRule } from "@boto/protocol";
+import type { AppPermissionKind, Approval, ApprovalDecision, ApprovalRule } from "@boto/protocol";
 import { classifyAppTool, isSensitivePermission } from "@boto/protocol";
 import { z } from "zod";
 import type { AppsService } from "./apps";
@@ -83,7 +83,20 @@ const rulesSchema = z.array(
   }),
 );
 
+/** A tool call an ask policy may force through the approval flow. */
+export type AskQuery = {
+  agentId: string;
+  turnId: string | null;
+  tool: string;
+  isAppTool: boolean;
+  /** App permission kind of the call; null for built-in bridge tools. */
+  permission: AppPermissionKind | null;
+};
+/** Returns true to require approval. Policies only add asks; they never allow a call. */
+export type AskPolicy = (q: AskQuery) => boolean;
+
 export class ApprovalService {
+  private askPolicies: AskPolicy[] = [];
   private pending = new Map<string, Approval>();
   private waiters = new Map<string, Waiter>();
   private recent: Approval[] = [];
@@ -325,6 +338,10 @@ export class ApprovalService {
     }
   }
 
+  addAskPolicy(policy: AskPolicy): void {
+    this.askPolicies.push(policy);
+  }
+
   /** "ask" | "allow" for a tool call, after rules and defaults. */
   decide(agentId: string, tool: string, isAppTool: boolean): "ask" | "allow" {
     const hits = this.rules().filter(
@@ -334,17 +351,21 @@ export class ApprovalService {
     );
     if (hits.some((r) => r.action === "ask")) return "ask";
     const app = isAppTool ? this.apps.appForTool(tool) : undefined;
-    if (app) {
-      const kind = classifyAppTool(tool);
-      const turn = this.runtimes().currentTurn(agentId);
+    const kind = app ? classifyAppTool(tool) : null;
+    const turn = this.runtimes().currentTurn(agentId);
+    const query = { agentId, turnId: turn?.id ?? null, tool, isAppTool, permission: kind };
+    const forced = this.askPolicies.some((policy) => policy(query));
+    if (app && kind) {
       if (
         !isSensitivePermission(kind) &&
         turn &&
         this.grants.get(`${agentId}:${turn.id}`)?.has(`${app.id}:${kind}`)
       )
         return "allow";
+      if (forced) return "ask";
       return app.permissions[kind] === "allow" ? "allow" : "ask";
     }
+    if (forced) return "ask";
     if (hits.some((r) => r.action === "allow" && r.pattern !== "*")) return "allow";
     return "allow";
   }

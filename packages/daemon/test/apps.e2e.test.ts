@@ -60,11 +60,13 @@ describe("connected apps (MCP) e2e", () => {
       name: "A",
       provider: "devin",
       instructions: "",
+      requireApproval: false,
     });
     b = await c.request("agents.create", {
       name: "B",
       provider: "devin",
       instructions: "",
+      requireApproval: false,
     });
   });
 

@@ -271,4 +271,8 @@ export const migrations: string[] = [
     interrupted_at INTEGER
   );
   CREATE INDEX approval_records_status ON approval_records(status, created_at)`,
+  // 23: agents cockpit — role ("O que ele faz"), per-agent approval policy, parallel instances
+  `ALTER TABLE agents ADD COLUMN role TEXT NOT NULL DEFAULT '';
+  ALTER TABLE agents ADD COLUMN require_approval INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE agents ADD COLUMN max_instances INTEGER`,
 ];

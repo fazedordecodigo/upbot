@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { AgentStore } from "./agents";
+import { AgentsOverviewService, agentApprovalPolicy } from "./agents-overview";
 import { ApprovalService } from "./approvals";
 import { AppsService } from "./apps";
 import { Bridge } from "./bridge";
@@ -155,6 +156,7 @@ async function main() {
   }
 
   let approvalsRef: ApprovalService | null = null;
+  let overviewRef: AgentsOverviewService | null = null;
   const db = openDatabase(dataDir);
   dbRef = db;
   const chat = new ChatStore(db);
@@ -176,6 +178,7 @@ async function main() {
       } catch {}
     }
     mobile.onEvent(event, data);
+    overviewRef?.onEvent(event);
     if (event === "turn.ended") {
       const turn = data as import("@boto/protocol").Turn;
       queueMicrotask(() => {
@@ -233,6 +236,15 @@ async function main() {
   const pages = new PageLibrary(db, workspaceRoot, broadcast);
   bridge.pages = pages;
   approvalsRef = approvals;
+  approvals.addAskPolicy(agentApprovalPolicy(store));
+  const overview = new AgentsOverviewService(
+    store,
+    queue,
+    () => runtimes,
+    () => approvalsRef,
+    broadcast,
+  );
+  overviewRef = overview;
   bridge.connectors = new Connectors(vault);
   bridge.computer = computer;
   const mobile = new MobileServer(db);
@@ -265,6 +277,7 @@ async function main() {
       team,
       hosts,
       subagents,
+      overview,
     },
   );
 

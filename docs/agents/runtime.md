@@ -84,3 +84,17 @@ and a system file such as `/etc/gemini-cli/settings.json`. `general.defaultAppro
 to `default` (prompts) and also accepts auto_edit or plan. Under `--acp`, the session still started
 in `default` when the user settings set `auto_edit` or `yolo`. Settings cannot select yolo; only
 `--yolo` or `--approval-mode` can.
+
+## Agents cockpit (instances, approval, overview)
+
+`Agent` carries `role` (<=140, "O que ele faz"), `requireApproval` (default true) and
+`maxInstances` (null = "a definir"; the scheduler then runs 1). `src/runtime/scheduler.ts`
+owns the capacity/pull policy: the primary runtime pulls first, extra ephemeral instances
+(no session resume/store, no usage/compaction) start while queued work and capacity remain,
+pull the next item when their turn ends and are disposed once idle. `agent.status` is the
+aggregate of every instance. With several turns of one agent running, `currentTurn` is
+null (bridge calls can't be attributed), so task-scoped grants never apply then.
+`requireApproval` registers an `ApprovalService.addAskPolicy` that forces asks for every
+non-read app tool and `page_publish`; ask policies only add asks.
+`src/agents-overview.ts` serves `agents.overview` and the debounced `agents.overviewChanged`.
+Test: `test/agents-cockpit.e2e.test.ts`.
