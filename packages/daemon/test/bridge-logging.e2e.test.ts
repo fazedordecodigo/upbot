@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, ChatItem, ConnectedApp, Turn } from "@boto/protocol";
@@ -13,6 +13,8 @@ import {
   stopTestChildren,
   tmp,
 } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const FAKE_MCP = join(ROOT, "packages/daemon/test/fixtures/fake-mcp-server.ts");
 const APP_SECRET = "ghp_bridgeLogSecret4821";

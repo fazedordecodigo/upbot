@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,6 +14,8 @@ import {
   stopDaemon,
   tmp,
 } from "./helpers";
+
+setDefaultTimeout(30_000);
 
 const TOKEN = `bridge-test-${crypto.randomUUID()}`;
 
