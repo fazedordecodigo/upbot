@@ -94,10 +94,7 @@ export class ChatStore {
   ): boolean {
     const task = this.taskForTurn(turnId);
     if (!turnId && agentId && createdAt !== undefined) {
-      if (taskId)
-        return !!this.db
-          .query("SELECT 1 FROM tasks WHERE id = ? AND agent_id = ?")
-          .get(taskId, agentId);
+      if (taskId) return false;
       return this.privateApprovalTasks(agentId, createdAt).length === 0;
     }
     return taskId ? task === taskId : !this.isPrivateTask(task);
@@ -124,13 +121,6 @@ export class ChatStore {
       taskId = item?.task_id ?? null;
     }
     if (this.isPrivateTask(taskId)) return [taskId!];
-    if (
-      event === "approval.updated" &&
-      !value.turnId &&
-      typeof value.agentId === "string" &&
-      typeof value.createdAt === "number"
-    )
-      return this.privateApprovalTasks(value.agentId, value.createdAt);
     return [];
   }
 
