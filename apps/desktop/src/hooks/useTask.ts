@@ -17,7 +17,6 @@ const empty = () => ({
   loading: true,
   error: false,
   hasMore: false,
-  approvalTimes: {} as Record<string, number>,
 });
 
 export function useTask(client: DaemonClient, taskId?: string) {
@@ -139,11 +138,6 @@ export function useTask(client: DaemonClient, taskId?: string) {
         publish();
       }),
       client.on("approval.updated", (approval) => {
-        if (approval.status !== "pending")
-          setState((s) => ({
-            ...s,
-            approvalTimes: { ...s.approvalTimes, [approval.id]: Date.now() },
-          }));
         eventApprovals = merge(eventApprovals, [approval]);
         approvals = merge(approvals, [approval]);
         publish();

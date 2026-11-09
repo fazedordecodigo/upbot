@@ -16,8 +16,9 @@ import type { Vault } from "./vault";
 // gateways, group chats) expire after BOTO_APPROVAL_BACKGROUND_TTL_MS (default 10 min),
 // others after BOTO_APPROVAL_TTL_MS (default 60 min). The same queue carries secure secret
 // requests (value goes straight to the vault) and browser take-over requests.
-// Pending approvals are mirrored in approval_records (audit fields only). The blocked call
-// dies with the daemon, so a restart marks leftovers "interrupted": never resumable.
+// Approvals are mirrored in approval_records (audit fields only): pending ones until decided,
+// then the decision and its time (resolved_at) so task timelines survive restarts. The blocked
+// call dies with the daemon, so a restart marks pending leftovers "interrupted": never resumable.
 
 type Broadcast = (event: string, data: unknown) => void;
 type Waiter = {
@@ -46,6 +47,8 @@ export class GateRejection extends Error {
 }
 
 const MAX_INTERRUPTED = 50;
+const MAX_DECIDED = 500;
+const recordStatus = z.enum(["approved", "denied", "expired", "done", "interrupted"]);
 
 const recordSchema = z.object({
   kind: z.enum(["tool", "secret", "takeover"]),
@@ -65,6 +68,7 @@ type RecordRow = {
   data_json: string;
   created_at: number;
   interrupted_at: number | null;
+  resolved_at: number | null;
 };
 
 /** Title rebuilt from stored fields: bot-written titles are not persisted. */
@@ -206,9 +210,13 @@ export class ApprovalService {
     }
   }
 
-  private unpersist(id: string): void {
+  private persistDecision(a: Approval): void {
     try {
-      this.db.query("DELETE FROM approval_records WHERE id = ? AND status = 'pending'").run(id);
+      this.db
+        .query(
+          "UPDATE approval_records SET status = ?, resolved_at = ? WHERE id = ? AND status = 'pending'",
+        )
+        .run(a.status, a.resolvedAt ?? Date.now(), a.id);
     } catch (error) {
       console.error("[botod] approval.record_write_failed", errorDiagnostics(error));
     }
@@ -216,8 +224,10 @@ export class ApprovalService {
 
   private fromRecord(r: RecordRow): Approval | null {
     let parsed: z.infer<typeof recordSchema>;
+    let status: z.infer<typeof recordStatus>;
     try {
       parsed = recordSchema.parse(JSON.parse(r.data_json));
+      status = recordStatus.parse(r.status);
     } catch {
       return null;
     }
@@ -234,10 +244,11 @@ export class ApprovalService {
       ...(parsed.appName ? { appName: parsed.appName } : {}),
       ...(parsed.permission ? { permission: parsed.permission } : {}),
       background: parsed.background,
-      status: "interrupted",
+      status,
       createdAt: r.created_at,
       expiresAt: parsed.expiresAt,
       ...(r.interrupted_at !== null ? { interruptedAt: r.interrupted_at } : {}),
+      ...(r.resolved_at !== null ? { resolvedAt: r.resolved_at } : {}),
     };
   }
 
@@ -258,7 +269,12 @@ export class ApprovalService {
           "UPDATE approval_records SET status = 'interrupted', interrupted_at = ? WHERE id = ? AND status = 'pending'",
         )
         .run(now, r.id);
-      const a = this.fromRecord({ ...r, status: "interrupted", interrupted_at: now });
+      const a = this.fromRecord({
+        ...r,
+        status: "interrupted",
+        interrupted_at: now,
+        resolved_at: null,
+      });
       this.insertAudit(
         "approval.interrupted",
         {
@@ -296,6 +312,11 @@ export class ApprovalService {
           "DELETE FROM approval_records WHERE status = 'interrupted' AND id NOT IN (SELECT id FROM approval_records WHERE status = 'interrupted' ORDER BY interrupted_at DESC, created_at DESC LIMIT ?)",
         )
         .run(MAX_INTERRUPTED);
+      this.db
+        .query(
+          "DELETE FROM approval_records WHERE status NOT IN ('pending', 'interrupted') AND id NOT IN (SELECT id FROM approval_records WHERE status NOT IN ('pending', 'interrupted') ORDER BY resolved_at DESC, created_at DESC LIMIT ?)",
+        )
+        .run(MAX_DECIDED);
     } catch (error) {
       console.error("[botod] approval.record_write_failed", errorDiagnostics(error));
     }
@@ -310,14 +331,15 @@ export class ApprovalService {
     this.suspended = true;
   }
 
-  private interrupted(agentId?: string): Approval[] {
+  /** Interrupted and decided approvals kept in approval_records (audit fields only). */
+  private stored(agentId?: string): Approval[] {
     try {
       const rows = (
         agentId
           ? this.db
-              .query("SELECT * FROM approval_records WHERE status = 'interrupted' AND agent_id = ?")
+              .query("SELECT * FROM approval_records WHERE status != 'pending' AND agent_id = ?")
               .all(agentId)
-          : this.db.query("SELECT * FROM approval_records WHERE status = 'interrupted'").all()
+          : this.db.query("SELECT * FROM approval_records WHERE status != 'pending'").all()
       ) as RecordRow[];
       return rows.map((r) => this.fromRecord(r)).filter((a): a is Approval => a !== null);
     } catch (error) {
@@ -371,8 +393,10 @@ export class ApprovalService {
   }
 
   list(agentId?: string): Approval[] {
-    const all = [...this.pending.values(), ...this.recent, ...this.interrupted(agentId)];
-    return all
+    const all = new Map<string, Approval>();
+    for (const a of this.stored(agentId)) all.set(a.id, a);
+    for (const a of [...this.recent, ...this.pending.values()]) all.set(a.id, a);
+    return [...all.values()]
       .filter((a) => !agentId || a.agentId === agentId)
       .sort((a, b) => b.createdAt - a.createdAt);
   }
@@ -428,8 +452,8 @@ export class ApprovalService {
     const a = this.pending.get(id);
     if (!a) return null;
     this.pending.delete(id);
-    this.unpersist(id);
-    const done = { ...a, status };
+    const done: Approval = { ...a, status, resolvedAt: Date.now() };
+    this.persistDecision(done);
     this.recent = [done, ...this.recent].slice(0, 50);
     this.audit(
       "approval.decided",

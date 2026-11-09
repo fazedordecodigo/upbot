@@ -65,8 +65,12 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
       secrets: {},
       command: ["bun", join(ROOT, "packages/daemon/test/fixtures/fake-mcp-server.ts")],
     });
+    await client.request("profile.update", { about: "Prefiro respostas curtas." });
     const task = await client.request("tasks.create", { agentId: agent.id, text: "tool" });
-    const page = await browser.newPage();
+    const video = process.env.BOTO_TASK_VIDEO;
+    const page = await browser.newPage(
+      video ? { recordVideo: { dir: video, size: { width: 1440, height: 900 } } } : {},
+    );
     page.setDefaultTimeout(10000);
     await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}&task=${task.id}`);
     await page
@@ -91,15 +95,30 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     await page.locator("#instruct-input").fill("echo: oi");
     await page.locator("#instruct-input").press("Enter");
     await page
-      .locator(".task-message")
+      .locator(".task-message > p")
       .filter({ hasText: /^\s*oi$/ })
       .waitFor();
-    expect(await page.locator("#timeline").innerText()).toMatch(/Permitido · \d{2}:\d{2}/);
+    expect(await page.locator("#timeline").innerText()).toMatch(
+      /Permitido nesta sessão · \d{2}:\d{2}/,
+    );
     await page.locator("#instruct-input").fill("mcp:notes-create_note {}");
     await page.locator("#instruct-input").press("Enter");
     await page.getByRole("button", { name: "Aprovar", exact: true }).click();
     await page.getByText("tool-ok:note-created", { exact: true }).waitFor();
     expect(await page.locator("#timeline").innerText()).toMatch(/Aprovada · \d{2}:\d{2}/);
+    await page.reload();
+    const approval = page.locator(".task-card").filter({ hasText: "Aprovada" });
+    await approval.waitFor();
+    expect(await approval.locator("h3").innerText()).toBe("Código quer criar uma nota em Notes.");
+    expect(await approval.innerText()).toMatch(/Aprovada · \d{2}:\d{2}/);
+    expect(await page.locator("#timeline").innerText()).not.toContain("indisponível");
+    const memory = page.getByRole("button", { name: "Usou 1 item da memória · Perfil" }).first();
+    await memory.click();
+    await page.getByText("Prefiro respostas curtas.", { exact: true }).first().waitFor();
+    await page.getByRole("button", { name: "Editar memória", exact: true }).click();
+    expect(await page.locator("#st-tab-memory").getAttribute("aria-selected")).toBe("true");
+    await page.reload();
+    await page.locator("#timeline").waitFor();
 
     const slow = await client.request("tasks.instruct", { id: task.id, text: "slow" });
     await client.waitForEventWhere("turn.started", (turn) => turn.queueId === slow.queueId);
@@ -118,6 +137,11 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     await page.locator("#ctl-pause").click();
     await client.waitForEventWhere("turn.ended", (turn) => turn.queueId === next.queueId);
 
+    const finished = await client.request("tasks.create", { agentId: agent.id, text: "echo: ok" });
+    await client.waitForEventWhere(
+      "task.updated",
+      (value) => value.id === finished.id && value.situation === "done",
+    );
     const fixture = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     await fixture.goto("http://localhost:1420");
     await fixture.setContent(
@@ -197,6 +221,16 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     expect(await page.locator("#split").getAttribute("aria-valuenow")).toBe("30");
     expect(await page.evaluate(() => localStorage.getItem("boto.task-split"))).toBe("30");
     await page.keyboard.press("Enter");
+    const bar = await page.locator("#split").boundingBox();
+    const body = await page.locator(".task-body").boundingBox();
+    if (!bar || !body) throw new Error("split missing");
+    await page.mouse.move(bar.x + bar.width / 2, bar.y + bar.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(body.x + body.width * 0.5537, bar.y + bar.height / 2, { steps: 4 });
+    await page.mouse.up();
+    expect(await page.locator("#split").getAttribute("aria-valuenow")).toBe("55");
+    await page.locator("#split").dblclick();
+    expect(await page.locator("#split").getAttribute("aria-valuenow")).toBe("42");
     await client.request("desktop.takeover", { machineId: machine.id });
     await page.locator("#ctl-takeover").click();
     await page
@@ -285,6 +319,18 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     expect(
       (await client.request("desktop.machines", {})).find((m) => m.id === machine.id)?.controller,
     ).toBe("agent");
+    const taskUrl = `http://localhost:1420/#port=${daemon.port}&token=${token}&task=`;
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(taskUrl + finished.id);
+    await page.reload();
+    await page.locator("#task-meta").getByText("Concluída", { exact: true }).waitFor();
+    await page.locator("#task-desk .live-frame").waitFor();
+    await page.waitForFunction(
+      () => !document.querySelector<HTMLButtonElement>("#ctl-takeover")?.disabled,
+    );
+    await page.goto(taskUrl + task.id);
+    await page.reload();
+    await page.locator("#task-desk .live-frame").waitFor();
     await page.locator("#ctl-stop").click();
     await page.setViewportSize({ width: 1440, height: 900 });
     const stopDialog = await page.locator("#confirm-stop").boundingBox();
@@ -292,6 +338,10 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     await page.getByRole("button", { name: "Encerrar tarefa", exact: true }).click();
     await page.locator("#task-meta").getByText("Encerrada", { exact: true }).waitFor();
     expect(await page.locator("#instruct-input").isDisabled()).toBe(true);
+    expect(await page.locator("#ctl-takeover").isDisabled()).toBe(true);
+    expect(await page.locator("#ctl-takeover").getAttribute("title")).toBe(
+      "Esta tarefa foi encerrada",
+    );
     await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}&task=missing`);
     await page.reload();
     await page.getByRole("button", { name: "Tentar de novo" }).waitFor();
