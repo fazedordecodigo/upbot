@@ -337,6 +337,8 @@ export class MobileServer {
         return Response.json({ error: "method not allowed" }, { status: 403, headers });
       }
       const params = (body.params ?? {}) as Record<string, unknown>;
+      if ("taskId" in params)
+        return Response.json({ error: "task scope not allowed" }, { status: 403, headers });
       if (method === "chat.send" && "attachments" in params) {
         return Response.json(
           { error: "attachments are not supported from mobile" },

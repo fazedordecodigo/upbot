@@ -80,13 +80,16 @@ export class AgentsOverviewService {
   overview(): AgentsOverviewResult {
     const runtimes = this.runtimes();
     const statuses = runtimes.statuses();
-    const pending = (this.approvals()?.list() ?? []).filter((a) => a.status === "pending");
+    const pending = (this.approvals()?.list() ?? []).filter(
+      (a) => a.status === "pending" && (!a.turnId || !this.queue.isPrivateTurn(a.turnId)),
+    );
     const agents = this.agents.list().map((agent): AgentOverview => {
       const mine = pending.filter((a) => a.agentId === agent.id);
       const approvalTurns = new Set(mine.map((a) => a.turnId).filter(Boolean));
       const running: AgentTaskRef[] = [];
       const waiting: AgentTaskRef[] = [];
       for (const t of runtimes.activeTurns(agent.id)) {
+        if (this.queue.isPrivateTurn(t.id)) continue;
         const ref = this.refForTurn(t.id, t.startedAt);
         (t.awaiting || approvalTurns.has(t.id) ? waiting : running).push(ref);
       }

@@ -1,4 +1,11 @@
-import type { Approval, ChatItem, PendingPermission, Task, Turn } from "@boto/protocol";
+import type {
+  Approval,
+  ChatItem,
+  DaemonEventMap,
+  PendingPermission,
+  Task,
+  Turn,
+} from "@boto/protocol";
 import { useEffect, useRef, useState } from "react";
 import type { DaemonClient } from "../lib/daemon";
 import { errorFields, logError } from "../lib/log";
@@ -26,6 +33,8 @@ export function useTask(client: DaemonClient, taskId?: string) {
   const actions = useRef({ reload: () => {}, older: () => {} });
   useEffect(() => {
     let alive = true;
+    let subscribed = false;
+    let taskAgentId: string | undefined;
     let version = 0;
     let items: ChatItem[] = [];
     let turns: Turn[] = [];
@@ -44,7 +53,9 @@ export function useTask(client: DaemonClient, taskId?: string) {
           ...s,
           items: [...items].sort((a, b) => a.seq - b.seq),
           turns,
-          approvals: approvals.filter((a) => turns.some((t) => t.id === a.turnId)),
+          approvals: approvals.filter((a) =>
+            a.turnId ? turns.some((t) => t.id === a.turnId) : a.agentId === taskAgentId,
+          ),
         }));
     };
     setState({ ...empty(), scope: taskId });
@@ -62,17 +73,21 @@ export function useTask(client: DaemonClient, taskId?: string) {
       paging = older;
       try {
         await client.connect();
+        if (!alive) return;
+        subscribed = true;
+        await client.request("tasks.subscribe", { id: taskId, watch: true });
         const [task, history, list, agents, permissions] = await Promise.all([
           client.request("tasks.get", { id: taskId }),
           client.request("tasks.history", {
             id: taskId,
             ...(older && items.length ? { before: Math.min(...items.map((i) => i.seq)) } : {}),
           }),
-          client.request("approvals.list", {}),
+          client.request("approvals.list", { taskId }),
           client.request("agents.list", {}),
-          client.request("permissions.list", {}),
+          client.request("permissions.list", { taskId }),
         ]);
         if (!alive || current !== version) return;
+        taskAgentId = task.agentId;
         items = older ? merge(history.items, items) : merge(history.items, eventItems);
         turns = older ? merge(history.turns, turns) : merge(history.turns, eventTurns);
         approvals = merge(list, eventApprovals);
@@ -122,21 +137,35 @@ export function useTask(client: DaemonClient, taskId?: string) {
         publish();
       }
     };
+    const listen = <E extends keyof DaemonEventMap>(
+      event: E,
+      callback: (value: DaemonEventMap[E]) => void,
+    ) => {
+      const offPublic = client.on(event, callback);
+      const offPrivate = client.on("task.event", (message) => {
+        if (message.taskId === taskId && message.event === event)
+          callback(message.data as DaemonEventMap[E]);
+      });
+      return () => {
+        offPublic();
+        offPrivate();
+      };
+    };
     const offs = [
       client.onDisconnect(() => {
         version++;
         setState((s) => ({ ...s, permissionsReady: false }));
       }),
       client.onReconnect(() => void load()),
-      client.on("task.updated", (task) => {
+      listen("task.updated", (task) => {
         if (task.id === taskId) {
           eventTask = task;
           setState((s) => ({ ...s, task }));
         }
       }),
-      client.on("item.created", upsert),
-      client.on("item.updated", upsert),
-      client.on("item.delta", ({ itemId, text }) => {
+      listen("item.created", upsert),
+      listen("item.updated", upsert),
+      listen("item.delta", ({ itemId, text }) => {
         items = items.map((i) =>
           i.id === itemId && "text" in i ? { ...i, text: i.text + text } : i,
         );
@@ -144,9 +173,9 @@ export function useTask(client: DaemonClient, taskId?: string) {
         if (changed) eventItems = merge(eventItems, [changed]);
         publish();
       }),
-      client.on("turn.started", turn),
-      client.on("turn.ended", turn),
-      client.on("permission.requested", (permission) => {
+      listen("turn.started", turn),
+      listen("turn.ended", turn),
+      listen("permission.requested", (permission) => {
         eventPermissions.set(permission.requestId, permission);
         setState((s) => ({
           ...s,
@@ -156,7 +185,7 @@ export function useTask(client: DaemonClient, taskId?: string) {
           ],
         }));
       }),
-      client.on("permission.resolved", ({ requestId, optionId }) => {
+      listen("permission.resolved", ({ requestId, optionId }) => {
         eventPermissions.set(requestId, null);
         setState((s) => ({
           ...s,
@@ -171,7 +200,7 @@ export function useTask(client: DaemonClient, taskId?: string) {
         if (changed) eventItems = merge(eventItems, [changed]);
         publish();
       }),
-      client.on("approval.updated", (approval) => {
+      listen("approval.updated", (approval) => {
         eventApprovals = merge(eventApprovals, [approval]);
         approvals = merge(approvals, [approval]);
         publish();
@@ -181,6 +210,10 @@ export function useTask(client: DaemonClient, taskId?: string) {
     return () => {
       alive = false;
       for (const off of offs) off();
+      if (subscribed)
+        void client.request("tasks.subscribe", { id: taskId, watch: false }).catch((error) => {
+          logError("task.unsubscribe_failed", errorFields(error));
+        });
     };
   }, [client, taskId]);
   return {
