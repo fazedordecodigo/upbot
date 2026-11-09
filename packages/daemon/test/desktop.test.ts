@@ -175,7 +175,12 @@ describe("DesktopService (in-process, fake host stream)", () => {
       ),
     );
     expect(desktop.list().find((m) => m.id === m1.id)?.status).toBe("stopped");
+    // a busy agent keeps its stream alive after the last viewer leaves
     const m2 = desktop.list().find((m) => m.name === "codigo-02")!;
+    desktop.onAgentStatus({ agentId: "a2", status: "running" });
+    desktop.subscribe(m2.id, "c1");
+    await until(() => desktop.list().find((m) => m.id === m2.id)?.status === "ready");
+    desktop.unsubscribe(m2.id, "c1");
     expect(desktop.list().find((m) => m.id === m2.id)?.status).toBe("ready");
     desktop.onAgentStatus({ agentId: "a2", status: "idle" });
     await until(() => desktop.list().find((m) => m.id === m2.id)?.status === "stopped");

@@ -100,7 +100,9 @@ export class DesktopService {
     for (const st of this.states.values()) {
       const wasSubscribed = st.subscribers.delete(connId);
       if (st.owner === connId) this.setController(st, "agent", null);
-      if (wasSubscribed) this.applyStreamMode(st);
+      if (!wasSubscribed) continue;
+      if (!st.subscribers.size && !st.agentActive) this.closeChild(st);
+      else this.applyStreamMode(st);
     }
   }
 

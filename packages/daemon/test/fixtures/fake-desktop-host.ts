@@ -78,11 +78,17 @@ rl.on("line", (raw) => {
         return send({ type: "error", id, code: "not_controller" });
       }
       const events = Array.isArray(m.events) ? m.events : [];
-      for (const e of events as Record<string, unknown>[])
+      let kind = "move";
+      for (const e of events as Record<string, unknown>[]) {
         if (typeof e.x === "number" && typeof e.y === "number") pointer = { x: e.x, y: e.y };
+        if (e.type === "click" || e.type === "mouse_down" || e.type === "mouse_up") kind = "click";
+        else if (e.type === "type") kind = "type";
+        else if (e.type === "key" || e.type === "key_down" || e.type === "key_up") kind = "key";
+      }
       log({ agentId, event: "input", source, events });
       if (source === "agent") {
-        send({ type: "cursor", x: pointer.x, y: pointer.y, kind: "click" });
+        // mirrors the real host: the cursor kind follows the last input event
+        send({ type: "cursor", x: pointer.x, y: pointer.y, kind });
         send({ type: "done", id, text: `pointer at (${pointer.x}, ${pointer.y})` });
       }
       break;

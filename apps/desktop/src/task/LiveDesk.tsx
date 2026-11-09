@@ -29,6 +29,7 @@ export function LiveDesk({
   const [waves, setWaves] = useState<{ id: number; x: number; y: number }[]>([]);
   const [decoded, setDecoded] = useState(false);
   const lastAnnouncement = useRef(0);
+  const lastClick = useRef<typeof cursor>(null);
   useEffect(() => {
     const el = surface.current;
     if (!el) return;
@@ -43,11 +44,13 @@ export function LiveDesk({
   }, [frameUrl]);
   useEffect(() => {
     if (!cursor) return;
-    if (cursor.kind === "click")
+    if (cursor.kind === "click" && lastClick.current !== cursor) {
+      lastClick.current = cursor;
       setWaves((value) => [
         ...value.slice(-3),
         { id: Date.now() + Math.random(), x: cursor.x, y: cursor.y },
       ]);
+    }
     if (Date.now() - lastAnnouncement.current < 1500) return;
     lastAnnouncement.current = Date.now();
     setAnnouncement(
