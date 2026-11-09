@@ -285,9 +285,13 @@ export class AgentRuntime {
     );
   }
 
-  private hooks(tag: object): ProviderHooks {
+  private hooks(tag: object, scope: string | null): ProviderHooks {
     return {
-      onResumeFailed: () => this.store.clearAgentSession(this.agent.id),
+      onResumeFailed: () => {
+        if (this.opts.ephemeral) return;
+        if (scope) this.tasks()?.setSession(scope, null);
+        else this.store.clearAgentSession(this.agent.id);
+      },
       onUpdate: (u) => this.onUpdate(u),
       requestPermission: (req) => this.onPermissionRequest(req),
       onExit: (err) => {
@@ -426,7 +430,7 @@ export class AgentRuntime {
       const session = await driver.start({
         cwd: remote?.cwd ?? this.agent.workspacePath,
         resumeSessionId,
-        hooks: this.hooks(tag),
+        hooks: this.hooks(tag, scope),
         mcpServers: remote ? servers.map((s) => remote.mcp(s)) : servers,
         ...(remote ? { remote } : { extraDirs: this.sharedDirs() }),
       });

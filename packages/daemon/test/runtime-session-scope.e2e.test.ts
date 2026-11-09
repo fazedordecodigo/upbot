@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   DaemonClient,
@@ -11,7 +12,7 @@ import {
   tmp,
 } from "./helpers";
 
-test("chat retains its native provider session across tasks and a daemon restart", async () => {
+test("chat retains its native provider session when task resume fails after daemon restart", async () => {
   const dirs = [tmp("scope-data-"), tmp("scope-agents-"), tmp("scope-provider-")];
   const token = crypto.randomUUID();
   const env = {
@@ -47,10 +48,20 @@ test("chat retains its native provider session across tasks and a daemon restart
     await send("echo:back to chat");
     expect(session().session_id).toBe(initial);
     await stopDaemon(daemon, client, dirs[2]!);
+    const sessionsPath = join(dirs[2]!, "sessions.json");
+    const sessions = JSON.parse(readFileSync(sessionsPath, "utf8"));
+    const persisted = new Database(join(dirs[0]!, "boto.db"), { readonly: true });
+    const taskRow = persisted.query("SELECT session_id FROM tasks WHERE id = ?").get(task.id) as {
+      session_id: string;
+    };
+    persisted.close();
+    delete sessions[taskRow.session_id];
+    writeFileSync(sessionsPath, JSON.stringify(sessions));
     daemon = await startDaemon(dirs[0]!, dirs[1]!, token, env);
     client = await DaemonClient.connect(daemon.port, token);
     await client.request("tasks.instruct", { id: task.id, text: "echo:task resumed" });
     await client.waitForEventWhere("turn.ended", (turn) => turn.taskId === task.id, 15_000);
+    expect(session().session_id).toBe(initial);
     await send("echo:chat after restart");
     expect(session().session_id).toBe(initial);
     const loads = readLog(dirs[2]!).filter((row) => row.method === "session/load");
