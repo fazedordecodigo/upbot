@@ -165,7 +165,12 @@ export function Sidebar({
               <Icon name="settings" />
               <span className="od-fill">Configurações</span>
             </DropdownItem>
-            <DropdownItem onClick={() => go("settings")}>
+            <DropdownItem
+              onClick={() => {
+                close();
+                navigate("settings", { tab: "memory" });
+              }}
+            >
               <Icon name="user-check" />
               <span className="od-fill">Você e a memória</span>
             </DropdownItem>
