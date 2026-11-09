@@ -251,6 +251,8 @@ export class RoutineService {
   update(p: MethodParsedParams<"routines.update">): Routine {
     const r = this.row(p.id);
     if (!r) throw new RpcError("not_found", "routine not found");
+    if (p.runAt != null && p.runAt < Date.now())
+      throw new RpcError("bad_request", "runAt is in the past");
     if (p.schedule && p.runAt != null)
       throw new RpcError("bad_request", "schedule and runAt are mutually exclusive");
     const schedule =
@@ -314,7 +316,8 @@ export class RoutineService {
           t.started_at AS turn_started_at, t.ended_at AS turn_ended_at
          FROM routine_runs r LEFT JOIN queue q ON q.id = r.queue_id
          LEFT JOIN turns t ON t.id = (SELECT id FROM turns WHERE queue_id = r.queue_id ORDER BY started_at DESC, rowid DESC LIMIT 1)
-         WHERE r.routine_id = ? ORDER BY r.created_at DESC, r.rowid DESC LIMIT 50`,
+         WHERE r.routine_id = ? AND (r.task_id IS NULL OR r.task_id NOT IN (SELECT id FROM tasks WHERE private = 1))
+         ORDER BY r.created_at DESC, r.rowid DESC LIMIT 50`,
       )
       .all(id) as RunRow[];
     return rows.map(toRun);

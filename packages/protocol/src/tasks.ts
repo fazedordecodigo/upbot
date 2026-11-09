@@ -83,7 +83,7 @@ export const TasksListParams = z
     agentId: z.string().optional(),
     limit: z.number().int().min(1).max(200).optional(),
     cursor: z.string().max(200).optional(),
-    /** Live views only: adds private tasks that are not done. Never lists done private tasks. */
+    /** Retained for older clients; private tasks require task-scoped access. */
     includePrivate: z.boolean().optional(),
   })
   .strict();

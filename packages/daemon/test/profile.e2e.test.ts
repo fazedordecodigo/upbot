@@ -21,7 +21,7 @@ import {
 const defaults: ProfileDefaults = {
   private: false,
   requireApproval: true,
-  delegationMode: "approval",
+  delegationMode: "now",
   toolMode: "both",
 };
 
