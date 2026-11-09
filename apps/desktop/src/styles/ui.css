@@ -81,4 +81,6 @@ dialog::backdrop { background: var(--boto-color-overlay); }
 @media (pointer: coarse) {
   button:not(.switch), .btn, .tabs-trigger { min-height: var(--boto-size-target); }
   .btn-icon { min-width: var(--boto-size-target); }
+  .input, .textarea, select { min-height: var(--boto-size-target); }
+  .switch::before { content: ""; position: absolute; inset: calc((var(--boto-size-target) - 100%) / -2) calc((var(--boto-size-target) - var(--boto-space-10)) / -2); }
 }

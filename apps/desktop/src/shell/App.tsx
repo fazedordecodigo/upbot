@@ -143,6 +143,9 @@ function Shell() {
               if (next !== undefined) {
                 event.preventDefault();
                 resize(next);
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+                resize(272);
               }
             }}
           />

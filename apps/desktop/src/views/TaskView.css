@@ -56,3 +56,4 @@
   .task .tl-inner { padding: var(--boto-space-4); }
   .task .tl-compose { padding: var(--boto-space-3); }
 }
+@media (max-width: 479px) and (pointer: coarse) { .task .task-controls .btn { min-width: var(--boto-size-target); } }

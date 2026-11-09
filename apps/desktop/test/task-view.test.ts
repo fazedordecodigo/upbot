@@ -363,6 +363,15 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     await page.getByRole("button", { name: "Abrir em tela cheia", exact: true }).click();
     await page.locator("#vm-desk").getByText("Você está no controle", { exact: true }).waitFor();
     await capture("1440-vm", 1440, 900);
+    await page.locator("#vm-desk .live-surface").focus();
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => !!document.activeElement?.closest("#vm-dialog"))).toBe(true);
+    await page.keyboard.press("Shift+Tab");
+    expect(
+      await page.evaluate(() => document.activeElement?.classList.contains("live-surface")),
+    ).toBe(true);
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => !!document.activeElement?.closest("#vm-dialog"))).toBe(true);
     await page.keyboard.press("Escape");
     await page.locator("#vm-dialog").waitFor({ state: "hidden" });
     await page.waitForFunction(

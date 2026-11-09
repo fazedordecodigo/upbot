@@ -96,7 +96,7 @@ export function Topbar({
           void client.request("profile.update", { theme }).catch(() => {});
         }}
       >
-        <Icon name={dark ? "moon" : "sun"} />
+        <Icon name="moon" />
       </button>
     </header>
   );
