@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
+import type { Profile } from "@boto/protocol";
 import { type Browser, chromium, type Page } from "playwright-core";
 
 const root = join(import.meta.dir, "../../..");
@@ -77,13 +78,17 @@ test("shell works without daemon: navigation, focus, theme, private mode and pal
     );
     await p.getByRole("button", { name: "Tema escuro" }).click();
     await p.getByRole("switch", { name: "Privada" }).click();
-    expect(await p.getByRole("switch").getAttribute("aria-checked")).toBe("true");
+    await p.getByText("Não foi possível atualizar o modo privado.").waitFor();
+    expect(await p.getByRole("switch").getAttribute("aria-checked")).toBe("false");
+    expect(await p.evaluate(() => localStorage.getItem("boto.private-task"))).toBeNull();
     await p.locator('[data-nav="agents"]').click();
     await current(p, "agents");
     expect(await p.evaluate(() => document.activeElement?.id)).toBe("agents-title");
     await p.keyboard.press("Control+k");
     await p.getByRole("combobox").fill("inexistente");
-    expect(await p.locator("#command-empty").innerText()).toBe("Nenhum resultado.");
+    await until(
+      async () => (await p.locator("#command-empty").innerText()) === "Não foi possível buscar.",
+    );
     expect(await p.getByRole("option").count()).toBe(0);
     await p.getByRole("combobox").fill("rotinas");
     await p.keyboard.press("Enter");
@@ -91,7 +96,7 @@ test("shell works without daemon: navigation, focus, theme, private mode and pal
     await p.keyboard.press("Control+Shift+O");
     await current(p, "new");
     await p.reload();
-    expect(await p.getByRole("switch").getAttribute("aria-checked")).toBe("true");
+    expect(await p.getByRole("switch").getAttribute("aria-checked")).toBe("false");
     expect(await p.locator("html").getAttribute("data-theme")).toBe("light");
   } finally {
     await p.close();
@@ -189,8 +194,16 @@ test("user menu supports keyboard, dialogs restore focus, tooltip is labelled, t
   const p = await page();
   try {
     await p.getByRole("button", { name: "Menu da conta" }).click();
-    expect(await p.getByRole("menuitem").count()).toBe(5);
+    expect(await p.getByRole("menuitem").allTextContents()).toEqual([
+      "Configurações",
+      "Você e a memória",
+      "Alternar tema",
+      "Atalhos de teclado",
+      "Conhecer o Boto",
+      "Guia da marca",
+    ]);
     await p.keyboard.press("End");
+    await p.keyboard.press("ArrowUp");
     await p.keyboard.press("Enter");
     await p.getByRole("dialog", { name: "Apresentação do Boto" }).waitFor();
     await p.keyboard.press("Escape");
@@ -219,6 +232,14 @@ test("user menu supports keyboard, dialogs restore focus, tooltip is labelled, t
 
 test("failed initial refresh recovers on reconnect and reloads real counts", async () => {
   let fail = true;
+  let profile: Profile = {
+    name: "",
+    about: "",
+    onboardingCompletedAt: null,
+    defaults: { private: false, requireApproval: false, delegationMode: "now", toolMode: "both" },
+    theme: null,
+    sidebarWidth: null,
+  };
   let socket: { terminate: () => void } | undefined;
   const server = Bun.serve({
     port: 0,
@@ -231,6 +252,14 @@ test("failed initial refresh recovers on reconnect and reloads real counts", asy
       },
       message(ws, message) {
         const request = JSON.parse(String(message));
+        if (request.method === "profile.update") {
+          profile = {
+            ...profile,
+            ...request.params,
+            defaults: { ...profile.defaults, ...request.params.defaults },
+          };
+          ws.send(JSON.stringify({ event: "profile.changed", data: profile }));
+        }
         if (request.method === "agents.list" && fail)
           ws.send(
             JSON.stringify({
@@ -247,13 +276,21 @@ test("failed initial refresh recovers on reconnect and reloads real counts", asy
                   ? [{ id: "real-agent", name: "Real" }]
                   : request.method === "agents.statuses"
                     ? {}
-                    : [],
+                    : request.method === "profile.get" || request.method === "profile.update"
+                      ? profile
+                      : request.method === "tasks.list"
+                        ? { items: [], nextCursor: null }
+                        : request.method === "tasks.search"
+                          ? { tasks: [], routines: [] }
+                          : [],
             }),
           );
       },
     },
   });
   const p = await browser.newPage();
+  const errors: string[] = [];
+  p.on("pageerror", (error) => errors.push(error.message));
   try {
     await p.goto(`${base}/#port=${server.port}&token=test`);
     await p.locator("#home-title").waitFor();
@@ -261,7 +298,21 @@ test("failed initial refresh recovers on reconnect and reloads real counts", asy
     fail = false;
     socket?.terminate();
     await until(async () => (await p.locator("[data-agent-count]").innerText()) === "1");
-    expect(await p.locator(".sb-history").innerText()).toBe("");
+    await until(
+      async () => (await p.locator(".sb-history").innerText()) === "Nenhuma tarefa ainda.",
+    );
+    await p.getByRole("switch", { name: "Privada" }).click();
+    await until(async () => profile.defaults.private);
+    expect(await p.evaluate(() => localStorage.getItem("boto.private-task"))).toBeNull();
+    await p.reload();
+    await until(async () => (await p.getByRole("switch").getAttribute("aria-checked")) === "true");
+    await p.keyboard.press("Control+k");
+    await p.getByRole("combobox").fill("inexistente");
+    await until(
+      async () =>
+        (await p.locator("#command-empty").innerText()) === "Nenhum resultado para “inexistente”.",
+    );
+    expect(errors).toEqual([]);
   } finally {
     await p.close();
     server.stop(true);
