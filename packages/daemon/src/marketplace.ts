@@ -273,7 +273,17 @@ export class Marketplace {
       );
   }
 
-  uninstall(source: string, id: string) {
+  async uninstall(source: string, id: string) {
+    if (source === BUILTIN_APPS_SOURCE) {
+      const apps = this.apps.list().filter((app) => app.catalogId === id);
+      for (const app of apps) await this.apps.delete(app.id);
+      return {
+        ok: true as const,
+        removed: apps.map((app) => app.id),
+        preserved: [],
+        agents: [] as string[],
+      };
+    }
     const artifacts = this.db
       .query(
         "SELECT kind, name, hash, created FROM marketplace_artifacts WHERE source = ? AND item_id = ?",
