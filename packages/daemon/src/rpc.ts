@@ -19,6 +19,7 @@ import type { MobileServer } from "./mobile";
 import type { PageLibrary } from "./pages";
 import type { ProfileService } from "./profile";
 import { ProviderError } from "./providers/types";
+import type { ProvidersService } from "./providers-service";
 import type { VmCredentials } from "./remote/credentials";
 import type { HostStore } from "./remote/hosts";
 import type { RoutineService } from "./routines";
@@ -30,6 +31,7 @@ import type { SubagentService } from "./subagents";
 import type { TaskService } from "./tasks";
 import type { TeamClient } from "./team";
 import type { TemplateService } from "./templates";
+import type { ToolPermissions } from "./tool-permissions";
 import type { Vault } from "./vault";
 import type { Voice } from "./voice";
 
@@ -85,6 +87,8 @@ export class Rpc {
       vault: Vault;
       templates: TemplateService;
       vmCredentials: VmCredentials;
+      providers: ProvidersService;
+      toolPermissions: ToolPermissions;
       computer: ComputerUse;
       voice: Voice;
       gateways: GatewayService;
@@ -219,10 +223,42 @@ export class Rpc {
         const p = params as MethodParsedParams<typeof method>;
         return this.extras.desktop.input(p.machineId, connId(), p.events);
       }
+      case "tools.permissions.list":
+        return this.extras.toolPermissions.list();
+      case "tools.permissions.set": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.toolPermissions.set(p.toolId, p.level);
+      }
+      case "providers.list":
+        return this.extras.providers.list();
+      case "providers.scan":
+        return this.extras.providers.scan();
+      case "providers.login":
+        return this.extras.providers.login((params as MethodParsedParams<typeof method>).provider);
+      case "providers.setApiKey": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.providers.setApiKey(p.provider, p.value);
+      }
+      case "providers.deleteApiKey":
+        return this.extras.providers.setApiKey(
+          (params as MethodParsedParams<typeof method>).provider,
+        );
+      case "providers.getDefault":
+        return this.extras.providers.getDefault();
+      case "providers.setDefault":
+        return this.extras.providers.setDefault(
+          (params as MethodParsedParams<typeof method>).provider,
+        );
       case "agents.list":
         return this.agents.list();
       case "agents.create": {
-        const agent = this.agents.create(params as MethodParsedParams<typeof method>);
+        const p = params as MethodParsedParams<typeof method>;
+        const provider = p.provider ?? this.extras.providers.getDefault().provider;
+        if (!provider) throw new RpcError("bad_request", "provider is required");
+        const agent = this.agents.create({
+          ...p,
+          provider,
+        });
         queueMicrotask(() => this.broadcast("agent.created", agent));
         return agent;
       }
@@ -404,12 +440,19 @@ export class Rpc {
       case "marketplace.list":
         return {
           sources: this.extras.marketplace.sources(),
-          ...(await this.extras.marketplace.list()),
+          ...(await this.extras.marketplace.list(params as MethodParsedParams<typeof method>)),
         };
+      case "marketplace.get": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.marketplace.get(p.id, p.source);
+      }
       case "marketplace.install": {
         const p = params as MethodParsedParams<typeof method>;
         const r = await asBadRequest(() =>
-          this.extras.marketplace.install(p.source, p.id, p.provider),
+          this.extras.marketplace.install(p.source, p.id, p.provider, {
+            secrets: p.secrets ?? {},
+            permissions: p.permissions,
+          }),
         );
         if (r.skills.length) this.broadcast("skills.changed", {});
         if (r.agent) {

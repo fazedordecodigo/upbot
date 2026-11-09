@@ -26,6 +26,7 @@ import { MobileServer } from "./mobile";
 import { PageLibrary } from "./pages";
 import { botoContext, seedDefaultBot } from "./persona";
 import { ProfileService } from "./profile";
+import { ProvidersService } from "./providers-service";
 import { readyLine } from "./ready";
 import { VmCredentials } from "./remote/credentials";
 import { HostStore } from "./remote/hosts";
@@ -38,6 +39,7 @@ import { SubagentService } from "./subagents";
 import { readTaskDefaults, TaskService } from "./tasks";
 import { TeamClient } from "./team";
 import { TemplateService } from "./templates";
+import { ToolPermissions } from "./tool-permissions";
 import { Vault } from "./vault";
 import { VERSION } from "./version";
 import { Voice } from "./voice";
@@ -246,6 +248,7 @@ async function main() {
   bridge.browser = browser;
   const vault = new Vault(db, dataDir);
   const vmCredentials = new VmCredentials(vault);
+  const providers = new ProvidersService(db, vmCredentials, broadcast);
   hosts.credentialEnv = (provider) => vmCredentials.env(provider);
   const computer = new ComputerUse(db);
   const desktop = new DesktopService(db, hosts, (id) => store.get(id), broadcast, log);
@@ -309,6 +312,8 @@ async function main() {
       vault,
       templates: new TemplateService(db, broadcast),
       vmCredentials,
+      providers,
+      toolPermissions: new ToolPermissions(approvals, apps),
       computer,
       voice,
       gateways,
@@ -316,7 +321,7 @@ async function main() {
       apps,
       approvals,
       pages,
-      marketplace: new Marketplace(db, skills, store),
+      marketplace: new Marketplace(db, skills, store, apps, providers),
       mobile,
       team,
       hosts,

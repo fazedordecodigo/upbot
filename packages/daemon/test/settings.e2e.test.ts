@@ -162,11 +162,12 @@ describe("settings consumers e2e", () => {
       message: expect.stringMatching(/settings\.marketplace_sources/),
     });
     await getClient().request("marketplace.setSources", { urls: [marketIndex] });
-    expect(await getClient().request("marketplace.list", {})).toMatchObject({
+    const marketplace = await getClient().request("marketplace.list", {});
+    expect(marketplace).toMatchObject({
       sources: [marketIndex],
-      items: [],
       errors: [],
     });
+    expect(marketplace.items.every((item) => item.source === "builtin:apps")).toBe(true);
   });
 
   test("rejects invalid persisted profile values with InvalidSettingError and the key over RPC", async () => {

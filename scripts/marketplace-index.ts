@@ -5,9 +5,23 @@ import { join } from "node:path";
 
 const root = join(import.meta.dir, "..", "marketplace");
 const prev = JSON.parse(readFileSync(join(root, "index.json"), "utf8")) as {
-  items: { id: string; kind: string; version: string; sha256: string }[];
+  items: {
+    id: string;
+    kind: string;
+    name: string;
+    description: string;
+    author: string;
+    version: string;
+    sha256?: string;
+    url?: string;
+    category?: string;
+    featured?: boolean;
+    icon?: string | null;
+    homepage?: string | null;
+    skills?: string[];
+  }[];
 };
-const items = [];
+const items: typeof prev.items = [];
 for (const [kind, folder] of [
   ["skill", "skills"],
   ["agent", "agents"],
@@ -36,9 +50,26 @@ for (const [kind, folder] of [
     const sha256 = createHash("sha256").update(raw).digest("hex");
     const old = prev.items.find((x) => x.id === id && x.kind === kind);
     const version = old && old.sha256 !== sha256 ? bump(old.version) : (old?.version ?? "1.0.0");
-    items.push({ id, kind, name, description, author: "Boto", version, url, sha256 });
+    items.push({
+      id,
+      kind,
+      name,
+      description,
+      author: "Boto",
+      version,
+      url,
+      sha256,
+      category: old?.category ?? "Outros",
+      featured: old?.featured ?? false,
+      icon: old?.icon ?? null,
+      homepage: old?.homepage ?? null,
+      ...(kind === "agent"
+        ? { skills: (JSON.parse(text) as { skills?: string[] }).skills ?? [] }
+        : {}),
+    });
   }
 }
+items.push(...prev.items.filter((item) => item.kind === "plugin"));
 writeFileSync(
   join(root, "index.json"),
   `${JSON.stringify({ version: 1, name: "Boto", items }, null, 2)}\n`,

@@ -114,6 +114,53 @@ export const APP_CATALOG: AppCatalogEntry[] = [
   },
 ];
 
+export const APP_MARKETPLACE: Record<
+  string,
+  {
+    kind: "app" | "mcp";
+    category: string;
+    featured: boolean;
+    icon: string;
+    author: string;
+  }
+> = {
+  notion: {
+    kind: "app",
+    category: "Documentação",
+    featured: true,
+    icon: "i-file-text",
+    author: "Notion",
+  },
+  github: {
+    kind: "app",
+    category: "Desenvolvimento",
+    featured: true,
+    icon: "i-git-pull-request",
+    author: "GitHub",
+  },
+  "brave-search": {
+    kind: "mcp",
+    category: "Pesquisa",
+    featured: false,
+    icon: "i-globe",
+    author: "Brave",
+  },
+  airtable: {
+    kind: "app",
+    category: "Produtividade",
+    featured: false,
+    icon: "i-list-checks",
+    author: "Airtable",
+  },
+  stripe: {
+    kind: "app",
+    category: "Finanças",
+    featured: false,
+    icon: "i-app-window",
+    author: "Stripe",
+  },
+};
+
 type Row = {
   permissions_json: string;
   id: string;

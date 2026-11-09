@@ -4,6 +4,10 @@
   "items": [
     {
       "id": "code-review",
+      "category": "Desenvolvimento",
+      "featured": true,
+      "icon": "i-git-pull-request",
+      "homepage": "https://github.com/fazedordecodigo/boto",
       "kind": "skill",
       "name": "code-review",
       "description": "Review a diff or branch for bugs, security issues and maintainability before it is merged",
@@ -14,6 +18,10 @@
     },
     {
       "id": "release-notes",
+      "category": "Documentação",
+      "featured": false,
+      "icon": "i-file-text",
+      "homepage": "https://github.com/fazedordecodigo/boto",
       "kind": "skill",
       "name": "release-notes",
       "description": "Draft user-facing release notes from the commits and merged changes since the last tag",
@@ -24,6 +32,10 @@
     },
     {
       "id": "write-tests",
+      "category": "Desenvolvimento",
+      "featured": true,
+      "icon": "i-list-checks",
+      "homepage": "https://github.com/fazedordecodigo/boto",
       "kind": "skill",
       "name": "write-tests",
       "description": "Add focused automated tests for new or changed behaviour using the project's existing test setup",
@@ -34,6 +46,11 @@
     },
     {
       "id": "docs-writer",
+      "category": "Documentação",
+      "featured": false,
+      "icon": "i-file-text",
+      "homepage": "https://github.com/fazedordecodigo/boto",
+      "skills": ["release-notes"],
       "kind": "agent",
       "name": "Docs Writer",
       "description": "You write and maintain documentation: READMEs, guides, API references and release notes.",
@@ -44,6 +61,11 @@
     },
     {
       "id": "reviewer",
+      "category": "Desenvolvimento",
+      "featured": true,
+      "icon": "i-git-pull-request",
+      "homepage": "https://github.com/fazedordecodigo/boto",
+      "skills": ["code-review"],
       "kind": "agent",
       "name": "Reviewer",
       "description": "You review code changes before they are merged.",
@@ -54,6 +76,11 @@
     },
     {
       "id": "test-engineer",
+      "category": "Desenvolvimento",
+      "featured": false,
+      "icon": "i-list-checks",
+      "homepage": "https://github.com/fazedordecodigo/boto",
+      "skills": ["write-tests"],
       "kind": "agent",
       "name": "Test Engineer",
       "description": "You improve test coverage and reliability.",
@@ -61,6 +88,19 @@
       "version": "1.0.0",
       "url": "agents/test-engineer.json",
       "sha256": "546b55c8b49fd1c4af1a42e395036f25a2429c72b168f14bf207f916398a1233"
+    },
+    {
+      "id": "dev-essentials",
+      "kind": "plugin",
+      "name": "Essenciais de desenvolvimento",
+      "description": "Revisão de código, testes automatizados e notas de versão para entregar mudanças com confiança.",
+      "author": "Boto",
+      "version": "1.0.0",
+      "category": "Desenvolvimento",
+      "featured": true,
+      "icon": "i-file-code",
+      "homepage": "https://github.com/fazedordecodigo/boto",
+      "skills": ["code-review", "write-tests", "release-notes"]
     }
   ]
 }
