@@ -22,7 +22,7 @@ function State({
   if (error)
     return (
       <div role="alert" className="home-muted">
-        {error}{" "}
+        Não consegui carregar os dados.{" "}
         <button type="button" className="btn btn-outline" onClick={reload}>
           Tentar de novo
         </button>
