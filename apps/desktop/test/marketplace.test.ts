@@ -265,6 +265,7 @@ test("source failures are non-blocking, without raw registry errors", async () =
   await rpc.request("marketplace.setSources", { urls: [registry, missing] });
   await page.locator("#mk-tab-skills").click();
   await page.getByText(`Não foi possível carregar ${missing}.`, { exact: true }).waitFor();
+  await until(async () => (await page.locator("#mk-grid .mk-card").count()) === 3);
   expect(await page.locator("#mk-grid .mk-card").count()).toBe(3);
   expect(await page.locator(".mk-notice").innerText()).not.toContain("ENOENT");
   await rpc.request("marketplace.setSources", { urls: [registry] });
