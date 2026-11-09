@@ -34,6 +34,28 @@ async function withStore(run: (db: Database, store: AgentStore) => void) {
 }
 
 describe("default Boto bot", () => {
+  test("identifies the seeded bot after rename and restart without choosing older custom bots", async () => {
+    delete process.env.BOTO_DEFAULT_BOT;
+    await withStore((db, store) => {
+      seedDefaultBot(db, store);
+      const seeded = store.list()[0]!;
+      store.update({ id: seeded.id, name: "My assistant" });
+      const custom = store.create({ name: "Boto", provider: "codex" });
+      db.query("UPDATE agents SET created_at = 0 WHERE id = ?").run(custom.id);
+      seedDefaultBot(db, store);
+      expect(
+        store
+          .list()
+          .filter((agent) => agent.isDefault)
+          .map((agent) => agent.id),
+      ).toEqual([seeded.id]);
+      expect(store.get(seeded.id)?.isDefault).toBe(true);
+      store.softDelete(seeded.id);
+      seedDefaultBot(db, store);
+      expect(store.list().some((agent) => agent.isDefault)).toBe(false);
+    });
+  });
+
   test("updates an unchanged seeded UpBot without modifying custom bots", async () => {
     await withStore((db, store) => {
       const legacy = store.create({
@@ -51,6 +73,8 @@ describe("default Boto bot", () => {
       seedDefaultBot(db, store);
       expect(store.get(legacy.id)?.name).toBe("Boto");
       expect(store.get(legacy.id)?.instructions).toBe(DEFAULT_BOT_INSTRUCTIONS);
+      expect(store.get(legacy.id)?.isDefault).toBe(true);
+      expect(store.get(custom.id)?.isDefault).toBe(false);
       expect(store.get(custom.id)?.name).toBe("UpBot");
       expect(store.get(custom.id)?.instructions).toBe("My customized assistant");
     });
@@ -72,6 +96,7 @@ describe("default Boto bot", () => {
       store.create({ name: "Mine", provider: "codex", instructions: "" });
       seedDefaultBot(db, store);
       expect(store.list().map((a) => a.name)).toEqual(["Mine"]);
+      expect(store.list().some((agent) => agent.isDefault)).toBe(false);
     });
   });
 });

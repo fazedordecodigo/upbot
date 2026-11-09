@@ -86,6 +86,7 @@ export type RoutineTrigger = z.infer<typeof RoutineTrigger>;
 export const Agent = z.object({
   id: z.string(),
   name: z.string().trim().min(1).max(80),
+  isDefault: z.boolean().optional(),
   instructions: z.string(),
   provider: ProviderId,
   config: z.record(z.string(), z.string()),
