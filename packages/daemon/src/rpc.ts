@@ -1,5 +1,6 @@
 import { type MethodName, type MethodParsedParams, methodMap } from "@boto/protocol";
 import type { AgentStore } from "./agents";
+import type { AgentsOverviewService } from "./agents-overview";
 import type { ApprovalService } from "./approvals";
 import type { AppsService } from "./apps";
 import { attachmentsBlock, saveAttachments } from "./attachments";
@@ -15,15 +16,21 @@ import type { Marketplace } from "./marketplace";
 import type { MemoryStore } from "./memories";
 import type { MobileServer } from "./mobile";
 import type { PageLibrary } from "./pages";
+import type { ProfileService } from "./profile";
 import { ProviderError } from "./providers/types";
+import type { ProvidersService } from "./providers-service";
 import type { VmCredentials } from "./remote/credentials";
 import type { HostStore } from "./remote/hosts";
 import type { RoutineService } from "./routines";
 import { asBadRequest, RpcError } from "./runtime/agent-runtime";
 import type { RuntimeManager } from "./runtime/runtime-manager";
+import { instanceCapacity } from "./runtime/scheduler";
 import type { SkillLibrary } from "./skills";
 import type { SubagentService } from "./subagents";
+import type { TaskService } from "./tasks";
 import type { TeamClient } from "./team";
+import type { TemplateService } from "./templates";
+import type { ToolPermissions } from "./tool-permissions";
 import type { Vault } from "./vault";
 import type { Voice } from "./voice";
 
@@ -74,7 +81,10 @@ export class Rpc {
     private browser: BrowserService,
     private extras: {
       vault: Vault;
+      templates: TemplateService;
       vmCredentials: VmCredentials;
+      providers: ProvidersService;
+      toolPermissions: ToolPermissions;
       computer: ComputerUse;
       voice: Voice;
       gateways: GatewayService;
@@ -87,6 +97,9 @@ export class Rpc {
       team: TeamClient;
       hosts: HostStore;
       subagents: SubagentService;
+      tasks: TaskService;
+      profile: ProfileService;
+      overview?: AgentsOverviewService;
     },
   ) {}
 
@@ -156,19 +169,76 @@ export class Rpc {
 
   private async dispatch(method: MethodName, params: unknown): Promise<unknown> {
     switch (method) {
+      case "profile.get":
+        return this.extras.profile.get();
+      case "profile.update":
+        return this.extras.profile.update(params as MethodParsedParams<typeof method>);
+      case "profile.forget":
+        return this.extras.profile.forget();
+      case "onboarding.complete":
+        return this.extras.profile.complete();
+      case "onboarding.reset":
+        return this.extras.profile.reset();
+      case "memories.usage": {
+        const { turnId } = params as MethodParsedParams<typeof method>;
+        if (!this.chat.getTurn(turnId)) throw new RpcError("not_found", "turn not found");
+        return this.memories.usage(turnId);
+      }
+      case "tools.permissions.list":
+        return this.extras.toolPermissions.list();
+      case "tools.permissions.set": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.toolPermissions.set(p.toolId, p.level);
+      }
+      case "providers.list":
+        return this.extras.providers.list();
+      case "providers.scan":
+        return this.extras.providers.scan();
+      case "providers.login":
+        return this.extras.providers.login((params as MethodParsedParams<typeof method>).provider);
+      case "providers.setApiKey": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.providers.setApiKey(p.provider, p.value);
+      }
+      case "providers.deleteApiKey":
+        return this.extras.providers.setApiKey(
+          (params as MethodParsedParams<typeof method>).provider,
+        );
+      case "providers.getDefault":
+        return this.extras.providers.getDefault();
+      case "providers.setDefault":
+        return this.extras.providers.setDefault(
+          (params as MethodParsedParams<typeof method>).provider,
+        );
       case "agents.list":
         return this.agents.list();
       case "agents.create": {
-        const agent = this.agents.create(params as MethodParsedParams<typeof method>);
+        const p = params as MethodParsedParams<typeof method>;
+        const provider = p.provider ?? this.extras.providers.getDefault().provider;
+        if (!provider) throw new RpcError("bad_request", "provider is required");
+        const agent = this.agents.create({
+          ...p,
+          provider,
+        });
         queueMicrotask(() => this.broadcast("agent.created", agent));
         return agent;
       }
       case "agents.update": {
         const p = params as MethodParsedParams<typeof method>;
         const before = this.agents.get(p.id);
+        if (before && p.maxInstances !== undefined) {
+          const active = this.runtimes.activeInstances(p.id);
+          if (instanceCapacity(p.maxInstances) < active)
+            throw new RpcError(
+              "bad_request",
+              `maxInstances cannot be below the ${active} instances in use`,
+            );
+        }
         const agent = this.agents.update(p);
         if (!agent) throw new RpcError("not_found", "agent not found");
         if (before) void this.runtimes.agentUpdated(agent, before.provider !== agent.provider);
+        if (before && before.maxInstances !== agent.maxInstances)
+          queueMicrotask(() => this.runtimes.schedule(agent.id));
         queueMicrotask(() => this.broadcast("agent.updated", agent));
         return agent;
       }
@@ -331,12 +401,19 @@ export class Rpc {
       case "marketplace.list":
         return {
           sources: this.extras.marketplace.sources(),
-          ...(await this.extras.marketplace.list()),
+          ...(await this.extras.marketplace.list(params as MethodParsedParams<typeof method>)),
         };
+      case "marketplace.get": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.marketplace.get(p.id, p.source);
+      }
       case "marketplace.install": {
         const p = params as MethodParsedParams<typeof method>;
         const r = await asBadRequest(() =>
-          this.extras.marketplace.install(p.source, p.id, p.provider),
+          this.extras.marketplace.install(p.source, p.id, p.provider, {
+            secrets: p.secrets ?? {},
+            permissions: p.permissions,
+          }),
         );
         if (r.skills.length) this.broadcast("skills.changed", {});
         if (r.agent) {
@@ -463,6 +540,21 @@ export class Rpc {
         return { ok: true };
       case "routines.list":
         return this.routines.list((params as MethodParsedParams<typeof method>).agentId);
+      case "templates.list":
+        return this.extras.templates.list(
+          (params as MethodParsedParams<typeof method>).includeHidden,
+        );
+      case "templates.create":
+        return this.extras.templates.create(params as MethodParsedParams<typeof method>);
+      case "templates.update":
+        return this.extras.templates.update(params as MethodParsedParams<typeof method>);
+      case "templates.delete":
+        this.extras.templates.delete((params as MethodParsedParams<typeof method>).id);
+        return { ok: true };
+      case "templates.restore":
+        return this.extras.templates.restore((params as MethodParsedParams<typeof method>).id);
+      case "templates.use":
+        return this.extras.templates.use((params as MethodParsedParams<typeof method>).id);
       case "routines.create":
         return this.routines.create(params as MethodParsedParams<typeof method>);
       case "routines.update":
@@ -552,6 +644,38 @@ export class Rpc {
       case "channels.reassign": {
         const p = params as MethodParsedParams<typeof method>;
         return this.channels.reassign(p.channelId, p.ownerId);
+      }
+      case "tasks.create":
+        return this.extras.tasks.create(params as MethodParsedParams<typeof method>);
+      case "tasks.list":
+        return this.extras.tasks.list(params as MethodParsedParams<typeof method>);
+      case "tasks.get":
+        return this.extras.tasks.get((params as MethodParsedParams<typeof method>).id);
+      case "tasks.history":
+        return this.extras.tasks.history(params as MethodParsedParams<typeof method>);
+      case "tasks.instruct": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.tasks.instruct(p.id, p.text);
+      }
+      case "tasks.pause":
+        return this.extras.tasks.pause((params as MethodParsedParams<typeof method>).id);
+      case "tasks.resume":
+        return this.extras.tasks.resume((params as MethodParsedParams<typeof method>).id);
+      case "tasks.stop":
+        return this.extras.tasks.stop((params as MethodParsedParams<typeof method>).id);
+      case "tasks.rename": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.tasks.rename(p.id, p.title);
+      }
+      case "tasks.search": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.tasks.search(p.query, p.limit);
+      }
+      case "tasks.deliveries":
+        return this.extras.tasks.deliveries(params as MethodParsedParams<typeof method>);
+      case "agents.overview": {
+        if (!this.extras.overview) throw new RpcError("internal", "agents overview unavailable");
+        return this.extras.overview.overview();
       }
       default: {
         const _method: never = method;

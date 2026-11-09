@@ -1,7 +1,16 @@
 import type { Database } from "bun:sqlite";
 import { timingSafeEqual } from "node:crypto";
-import type { Routine, RoutineRun, RoutineTrigger } from "@boto/protocol";
+import type {
+  ChatAttachment,
+  MethodParsedParams,
+  Routine,
+  RoutineRun,
+  RoutineTrigger,
+  ToolMode,
+} from "@boto/protocol";
+import { ChatAttachment as AttachmentSchema } from "@boto/protocol";
 import type { AgentStore } from "./agents";
+import { attachmentsBlock, saveAttachments } from "./attachments";
 import { envPositiveNumber } from "./env/vars";
 import type { Broadcast } from "./rpc";
 import { asBadRequest, RpcError } from "./runtime/agent-runtime";
@@ -40,6 +49,12 @@ export function parseSchedule(s: string): (from: number) => number {
 }
 
 type Row = {
+  attachments: string;
+  run_at: number | null;
+  tool_mode: ToolMode;
+  require_approval: number;
+  private: number;
+  template_id: string | null;
   id: string;
   agent_id: string;
   name: string;
@@ -53,6 +68,7 @@ type Row = {
   updated_at: number;
 };
 type RunRow = {
+  task_id: string | null;
   queue_status?: RoutineRun["queueStatus"];
   turn_id?: string | null;
   turn_status?: NonNullable<RoutineRun["turn"]>["status"];
@@ -72,6 +88,7 @@ export type WebhookAuth =
   | { kind: "unauthorized"; known: boolean };
 
 const toRun = (r: RunRow): RoutineRun => ({
+  taskId: r.task_id,
   id: r.id,
   routineId: r.routine_id,
   trigger: r.trigger as RoutineTrigger,
@@ -91,7 +108,28 @@ const toRun = (r: RunRow): RoutineRun => ({
 
 const newToken = () => Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("hex");
 
+export interface RoutineTaskSink {
+  create(p: {
+    agentId: string;
+    prompt: string;
+    title: string;
+    toolMode: ToolMode;
+    requireApproval: boolean;
+    private: boolean;
+    routineId: string;
+    templateId: string | null;
+    trigger: RoutineTrigger;
+    sendPrompt: string;
+    attachments: ChatAttachment[];
+  }): { taskId: string; queueId: string | null };
+}
+
 export class RoutineService {
+  private taskSink: RoutineTaskSink | null = null;
+
+  setTaskSink(sink: RoutineTaskSink): void {
+    this.taskSink = sink;
+  }
   baseUrl = "";
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -104,6 +142,12 @@ export class RoutineService {
 
   private toRoutine(r: Row): Routine {
     return {
+      attachments: AttachmentSchema.array().parse(JSON.parse(r.attachments)),
+      runAt: r.run_at,
+      toolMode: r.tool_mode,
+      requireApproval: r.require_approval === 1,
+      private: r.private === 1,
+      templateId: r.template_id,
       id: r.id,
       agentId: r.agent_id,
       name: r.name,
@@ -151,28 +195,37 @@ export class RoutineService {
     return rows.map((r) => this.toRoutine(r));
   }
 
-  private nextRun(schedule: string | null, enabled: boolean, from = Date.now()): number | null {
-    if (!schedule || !enabled) return null;
+  private nextRun(
+    schedule: string | null,
+    enabled: boolean,
+    from = Date.now(),
+    runAt: number | null = null,
+  ): number | null {
+    if (!enabled) return null;
+    if (runAt !== null) return runAt;
+    if (!schedule) return null;
     return asBadRequest(() => parseSchedule(schedule)(from));
   }
 
-  create(p: {
-    agentId: string;
-    name: string;
-    prompt: string;
-    schedule?: string | null | undefined;
-    webhook?: boolean | undefined;
-    enabled?: boolean | undefined;
-  }): Routine {
-    if (!this.agents.get(p.agentId)) throw new RpcError("not_found", "agent not found");
+  create(p: MethodParsedParams<"routines.create">): Routine {
+    const agent = this.agents.get(p.agentId);
+    if (!agent) throw new RpcError("not_found", "agent not found");
     const id = crypto.randomUUID();
     const now = Date.now();
     const schedule = p.schedule?.trim() || null;
+    const runAt = p.runAt ?? null;
+    if (schedule && runAt !== null)
+      throw new RpcError("bad_request", "schedule and runAt are mutually exclusive");
+    if (runAt !== null && runAt < now) throw new RpcError("bad_request", "runAt is in the past");
+    if (schedule) asBadRequest(() => parseSchedule(schedule));
     const enabled = p.enabled ?? true;
+    const attachments = p.attachments?.length
+      ? saveAttachments(agent.workspacePath, p.attachments)
+      : [];
     this.db
       .query(
-        `INSERT INTO routines (id, agent_id, name, prompt, schedule, webhook_token, enabled, next_run_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO routines (id, agent_id, name, prompt, schedule, webhook_token, enabled, next_run_at, created_at, updated_at, run_at, tool_mode, require_approval, private, template_id, attachments)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -182,24 +235,28 @@ export class RoutineService {
         schedule,
         p.webhook ? newToken() : null,
         enabled ? 1 : 0,
-        this.nextRun(schedule, enabled, now),
+        this.nextRun(schedule, enabled, now, runAt),
         now,
         now,
+        runAt,
+        p.toolMode ?? "both",
+        p.requireApproval ? 1 : 0,
+        p.private ? 1 : 0,
+        p.templateId ?? null,
+        JSON.stringify(attachments),
       );
     return this.emit(id);
   }
 
-  update(p: {
-    id: string;
-    name?: string | undefined;
-    prompt?: string | undefined;
-    schedule?: string | null | undefined;
-    webhook?: boolean | undefined;
-    enabled?: boolean | undefined;
-  }): Routine {
+  update(p: MethodParsedParams<"routines.update">): Routine {
     const r = this.row(p.id);
     if (!r) throw new RpcError("not_found", "routine not found");
-    const schedule = p.schedule === undefined ? r.schedule : p.schedule?.trim() || null;
+    if (p.schedule && p.runAt != null)
+      throw new RpcError("bad_request", "schedule and runAt are mutually exclusive");
+    const schedule =
+      p.runAt != null ? null : p.schedule === undefined ? r.schedule : p.schedule?.trim() || null;
+    const runAt = p.schedule ? null : p.runAt === undefined ? r.run_at : p.runAt;
+    if (schedule) asBadRequest(() => parseSchedule(schedule));
     const enabled = p.enabled ?? r.enabled === 1;
     const token =
       p.webhook === undefined
@@ -208,12 +265,23 @@ export class RoutineService {
           ? (r.webhook_token ?? newToken())
           : null;
     const next =
-      schedule !== r.schedule || enabled !== (r.enabled === 1) || r.next_run_at === null
-        ? this.nextRun(schedule, enabled)
+      schedule !== r.schedule ||
+      runAt !== r.run_at ||
+      enabled !== (r.enabled === 1) ||
+      r.next_run_at === null
+        ? this.nextRun(schedule, enabled, Date.now(), runAt)
         : r.next_run_at;
+    const agent = this.agents.get(r.agent_id);
+    if (!agent) throw new RpcError("not_found", "agent not found");
+    const attachments =
+      p.attachments === undefined
+        ? r.attachments
+        : JSON.stringify(
+            p.attachments.length ? saveAttachments(agent.workspacePath, p.attachments) : [],
+          );
     this.db
       .query(
-        "UPDATE routines SET name = ?, prompt = ?, schedule = ?, webhook_token = ?, enabled = ?, next_run_at = ?, updated_at = ? WHERE id = ?",
+        "UPDATE routines SET name = ?, prompt = ?, schedule = ?, webhook_token = ?, enabled = ?, next_run_at = ?, updated_at = ?, run_at = ?, tool_mode = ?, require_approval = ?, private = ?, attachments = ? WHERE id = ?",
       )
       .run(
         p.name ?? r.name,
@@ -223,6 +291,11 @@ export class RoutineService {
         enabled ? 1 : 0,
         next,
         Date.now(),
+        runAt,
+        p.toolMode ?? r.tool_mode,
+        p.requireApproval === undefined ? r.require_approval : Number(p.requireApproval),
+        p.private === undefined ? r.private : Number(p.private),
+        attachments,
         p.id,
       );
     return this.emit(p.id);
@@ -255,15 +328,32 @@ export class RoutineService {
       ? `\n<webhook_payload>\n${payload.slice(0, PAYLOAD_LIMIT)}${payload.length > PAYLOAD_LIMIT ? "\n[truncated]" : ""}\n</webhook_payload>`
       : "";
     const prompt = `<routine name="${r.name.replace(/[<>"&]/g, "")}" trigger="${trigger}">\n${r.prompt}${body}\n</routine>`;
+    const attachments: ChatAttachment[] = JSON.parse(r.attachments);
     let queueId: string | null = null;
+    let taskId: string | null = null;
     let error: string | null = null;
     try {
-      ({ queueId } = this.runtimes().sendFrom(r.agent_id, r.prompt, {
-        agentId: null,
-        hops: 0,
-        prompt,
-        meta: { routine: { id: r.id, name: r.name, trigger } },
-      }));
+      if (this.taskSink)
+        ({ taskId, queueId } = this.taskSink.create({
+          agentId: r.agent_id,
+          prompt: r.prompt,
+          title: r.name,
+          toolMode: r.tool_mode,
+          requireApproval: r.require_approval === 1,
+          private: r.private === 1,
+          routineId: r.id,
+          templateId: r.template_id,
+          trigger,
+          sendPrompt: prompt,
+          attachments,
+        }));
+      else
+        ({ queueId } = this.runtimes().sendFrom(r.agent_id, r.prompt, {
+          agentId: null,
+          hops: 0,
+          prompt: attachmentsBlock(attachments) + prompt,
+          meta: { routine: { id: r.id, name: r.name, trigger }, attachments },
+        }));
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
@@ -271,9 +361,9 @@ export class RoutineService {
     const now = Date.now();
     this.db
       .query(
-        "INSERT INTO routine_runs (id, routine_id, trigger, queue_id, error, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO routine_runs (id, routine_id, trigger, queue_id, error, created_at, task_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-      .run(runId, id, trigger, queueId, error, now);
+      .run(runId, id, trigger, queueId, error, now, taskId);
     this.db.query("UPDATE routines SET last_run_at = ? WHERE id = ?").run(now, id);
     this.emit(id);
     return toRun(this.db.query("SELECT * FROM routine_runs WHERE id = ?").get(runId) as RunRow);
@@ -298,8 +388,12 @@ export class RoutineService {
     for (const r of due) {
       // missed runs collapse into one; the next run is computed from now
       this.db
-        .query("UPDATE routines SET next_run_at = ? WHERE id = ?")
-        .run(this.nextRun(r.schedule, true, now), r.id);
+        .query("UPDATE routines SET next_run_at = ?, enabled = ? WHERE id = ?")
+        .run(
+          r.run_at !== null ? null : this.nextRun(r.schedule, true, now),
+          r.run_at !== null ? 0 : 1,
+          r.id,
+        );
       this.run(r.id, "schedule");
     }
   }

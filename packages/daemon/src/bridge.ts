@@ -26,6 +26,7 @@ import type { Broadcast } from "./rpc";
 import type { RuntimeManager } from "./runtime/runtime-manager";
 import type { SkillLibrary } from "./skills";
 import type { SubagentService } from "./subagents";
+import { bridgeToolAllowed, isExternalAction, type TaskRuntimeInfo } from "./task-policy";
 import type { Vault } from "./vault";
 
 // Local MCP bridge: each provider session gets a `boto` stdio MCP server
@@ -446,6 +447,12 @@ export const BRIDGE_TOOLS = [
   })),
 ] as const;
 
+/** Tool mode filter plus private tasks never writing memories. */
+function taskToolAllowed(task: TaskRuntimeInfo, tool: string, isApp: boolean): boolean {
+  if (task.private && tool === "remember") return false;
+  return bridgeToolAllowed(task.toolMode, tool, isApp);
+}
+
 /** Command that runs this daemon build in `mcp-bridge` mode. */
 export function bridgeCommand(): { command: string; args: string[] } {
   const compiled = Bun.main.startsWith("/$bunfs/") || Bun.main.startsWith("B:/~BUN/");
@@ -496,6 +503,8 @@ export class Bridge {
   skills: SkillLibrary | null = null;
   broadcast: Broadcast | null = null;
   subagents: SubagentService | null = null;
+  /** All running tasks: per-agent bridge tokens cannot identify the calling instance. */
+  tasksFor: ((agentId: string) => TaskRuntimeInfo[]) | null = null;
 
   constructor(
     private agents: AgentStore,
@@ -539,7 +548,18 @@ export class Bridge {
         console.error("[botod] bridge tools/list failed", { agentId, ...errorDiagnostics(e) });
         return [];
       });
-      return { tools: [...BRIDGE_TOOLS, ...(appTools ?? [])] };
+      const tasks = this.tasksFor?.(agentId) ?? [];
+      const builtIn = BRIDGE_TOOLS.filter((t) =>
+        tasks.every((task) => taskToolAllowed(task, t.name, false)),
+      );
+      return {
+        tools: [
+          ...builtIn,
+          ...(appTools ?? []).filter((t) =>
+            tasks.every((task) => taskToolAllowed(task, t.name, true)),
+          ),
+        ],
+      };
     }
     if (body.method !== "tools/call")
       throw new Error(`unknown bridge method ${String(body.method)}`);
@@ -553,7 +573,21 @@ export class Bridge {
     try {
       name = String(params.name);
       isApp = this.apps?.isAppTool(name) ?? false;
-      await this.approvals?.gate(agentId, name, args, isApp);
+      const tasks = this.tasksFor?.(agentId) ?? [];
+      const task = tasks.find((task) => !taskToolAllowed(task, name, isApp));
+      if (task)
+        throw new GateRejection(
+          "denied",
+          task.private && name === "remember"
+            ? "this is a private task: memories are not saved; do not retry"
+            : `${name} is not available in this task (tool mode: ${task.toolMode}); do not retry it`,
+        );
+      await this.approvals?.gate(agentId, name, args, isApp, {
+        forceAsk:
+          (tasks.some((task) => task.requireApproval) ||
+            this.runtimes().currentTurn(agentId) === null) &&
+          isExternalAction(name, args, isApp),
+      });
       r =
         (isApp ? await this.apps!.call(agentId, name, args) : null) ??
         (await this.call(agentId, name, args));

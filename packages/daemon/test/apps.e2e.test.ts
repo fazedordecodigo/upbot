@@ -60,11 +60,13 @@ describe("connected apps (MCP) e2e", () => {
       name: "A",
       provider: "devin",
       instructions: "",
+      requireApproval: false,
     });
     b = await c.request("agents.create", {
       name: "B",
       provider: "devin",
       instructions: "",
+      requireApproval: false,
     });
   });
 
@@ -80,7 +82,7 @@ describe("connected apps (MCP) e2e", () => {
       expect.arrayContaining(["notion", "github", "brave-search"]),
     );
     await expect(c.request("apps.connect", { catalogId: "notion", secrets: {} })).rejects.toThrow(
-      /Integration token is required/,
+      /Token de integração é obrigatório/,
     );
   });
 

@@ -198,10 +198,12 @@ async function handlePrompt(ctx: Ctx): Promise<{ stopReason: string }> {
     .replace(/^(?:@[\w-]+\s+)+/, "");
   // session context blocks prepended by the daemon are not part of the command
   const stripped = full.replace(
-    /^(?:<(boto_context|agent_instructions|agent_memories|skills_library|conversation_summary|conversation_history|attachments)>[\s\S]*?<\/\1>\s*)+/,
+    /^(?:<(boto_context|user_profile|agent_instructions|agent_memories|skills_library|conversation_summary|conversation_history|attachments|task_context)>[\s\S]*?<\/\1>\s*)+/,
     "",
   );
-  const external = /^<(external_message|team_message)[^>]*>\n([\s\S]*?)\n<\/\1>/.exec(stripped);
+  const external = /^<(external_message|team_message|routine)[^>]*>\n([\s\S]*?)\n<\/\1>/.exec(
+    stripped,
+  );
   const text = external ? external[2]! : stripped;
   const sessions = loadSessions();
   sessions[sessionId] ??= { prompts: [] };
@@ -486,7 +488,10 @@ acp
     sessions[sessionId] = { prompts: [] };
     saveSessions(sessions);
     sessionMcp.set(sessionId, (ctx.params as { mcpServers?: McpSpec[] }).mcpServers ?? []);
-    return { sessionId, configOptions: configOptions() } as never;
+    return {
+      sessionId,
+      configOptions: process.env.FAKE_ACP_NO_CONFIG === "1" ? undefined : configOptions(),
+    } as never;
   })
   .onRequest("session/load", async (ctx) => {
     const params = ctx.params as { sessionId: string; cwd?: string; mcpServers?: McpSpec[] };
@@ -504,7 +509,9 @@ acp
       "session/update",
       chunk(params.sessionId, "agent_message_chunk", "[replayed history]"),
     );
-    return { configOptions: configOptions() } as never;
+    return {
+      configOptions: process.env.FAKE_ACP_NO_CONFIG === "1" ? undefined : configOptions(),
+    } as never;
   })
   .onRequest("session/set_config_option", async (ctx) => {
     const params = ctx.params as { configId: string; value: string };

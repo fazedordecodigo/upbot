@@ -328,12 +328,18 @@ test("secret approval logs and audits a vault read failure without the secret va
   });
 });
 
-type RecordRow = { id: string; status: string; data_json: string; interrupted_at: number | null };
+type RecordRow = {
+  id: string;
+  status: string;
+  data_json: string;
+  interrupted_at: number | null;
+  resolved_at: number | null;
+};
 const records = (db: Database): RecordRow[] =>
   db.query("SELECT * FROM approval_records ORDER BY created_at").all() as RecordRow[];
 
-test("pending approvals persist audit fields only and leave the table once decided", async () => {
-  await withApprovals(async ({ approvals, db }) => {
+test("approvals persist audit fields only and keep their decision and time once decided", async () => {
+  await withApprovals(async ({ approvals, apps, vault, db }) => {
     const gate = approvals.gate("bot", "notes-create_note", { title: "secret-title" }, true);
     const pending = approvals.list()[0]!;
     const stored = records(db);
@@ -349,9 +355,36 @@ test("pending approvals persist audit fields only and leave the table once decid
       expiresAt: pending.expiresAt,
     });
     expect(stored[0]!.data_json).not.toContain("secret-title");
+    const before = Date.now();
     await approvals.respond({ id: pending.id, decision: "approve" });
     await gate;
-    expect(records(db)).toEqual([]);
+    const [decided, ...extra] = records(db);
+    expect(extra).toEqual([]);
+    expect(decided).toMatchObject({ id: pending.id, status: "approved" });
+    expect(decided?.resolved_at).toBeGreaterThanOrEqual(before);
+    expect(decided?.data_json).not.toContain("secret-title");
+
+    const restarted = new ApprovalService(
+      db,
+      vault,
+      () => ({ currentTurn: () => null }) as unknown as RuntimeManager,
+      () => {},
+      apps,
+    );
+    expect(restarted.interruptLeftovers()).toBe(0);
+    expect(restarted.list("bot")).toEqual([
+      expect.objectContaining({
+        id: pending.id,
+        status: "approved",
+        resolvedAt: decided?.resolved_at,
+        tool: "notes-create_note",
+        detail: "",
+      }),
+    ]);
+    expect(restarted.list("other-bot")).toEqual([]);
+    await expect(restarted.respond({ id: pending.id, decision: "deny" })).rejects.toThrow(
+      "no longer pending",
+    );
   });
 });
 

@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { AgentStore } from "./agents";
+import { AgentsOverviewService, agentApprovalPolicy } from "./agents-overview";
 import { ApprovalService } from "./approvals";
 import { AppsService } from "./apps";
 import { Bridge } from "./bridge";
@@ -13,6 +14,7 @@ import { ChatStore, QueueStore } from "./chat-store";
 import { ComputerUse } from "./computer";
 import { Connectors } from "./connectors";
 import { openDatabase } from "./db";
+import { getProfileDefaults } from "./db/settings";
 import { EmailService } from "./email";
 import { mergedPath } from "./env/login-path";
 import { GatewayService } from "./gateways";
@@ -23,15 +25,21 @@ import { MemoryStore } from "./memories";
 import { MobileServer } from "./mobile";
 import { PageLibrary } from "./pages";
 import { botoContext, seedDefaultBot } from "./persona";
+import { ProfileService } from "./profile";
+import { ProvidersService } from "./providers-service";
 import { readyLine } from "./ready";
 import { VmCredentials } from "./remote/credentials";
 import { HostStore } from "./remote/hosts";
 import { RoutineService } from "./routines";
 import { Rpc } from "./rpc";
+import { errorFields } from "./runtime/agent-runtime";
 import { RuntimeManager } from "./runtime/runtime-manager";
 import { SkillLibrary } from "./skills";
 import { SubagentService } from "./subagents";
+import { TaskService } from "./tasks";
 import { TeamClient } from "./team";
+import { TemplateService } from "./templates";
+import { ToolPermissions } from "./tool-permissions";
 import { Vault } from "./vault";
 import { VERSION } from "./version";
 import { Voice } from "./voice";
@@ -155,6 +163,8 @@ async function main() {
   }
 
   let approvalsRef: ApprovalService | null = null;
+  let tasks: TaskService | null = null;
+  let overviewRef: AgentsOverviewService | null = null;
   const db = openDatabase(dataDir);
   dbRef = db;
   const chat = new ChatStore(db);
@@ -176,6 +186,14 @@ async function main() {
       } catch {}
     }
     mobile.onEvent(event, data);
+    if (!event.startsWith("task.")) {
+      try {
+        tasks?.onEvent(event, data);
+      } catch (e) {
+        log(`task event hook failed: event=${event} ${errorFields(e)}`);
+      }
+    }
+    overviewRef?.onEvent(event);
     if (event === "turn.ended") {
       const turn = data as import("@boto/protocol").Turn;
       queueMicrotask(() => {
@@ -201,9 +219,13 @@ async function main() {
     queue,
     broadcast,
     (id) => bridge.serversFor(id),
-    (id) => botoContext(workspaceRoot) + memories.promptBlock(id) + skills.promptBlock(),
+    (id, turnId, fresh) =>
+      (fresh ? botoContext(workspaceRoot) : "") +
+      memories.promptBlock(id, turnId, fresh) +
+      (fresh ? skills.promptBlock((items) => memories.recordUsage(turnId, items)) : ""),
     (id) => hosts.launchFor(id, bridge.port),
     () => [workspaceRoot],
+    (turnId) => memories.usage(turnId),
   );
   const subagents = new SubagentService(db, store, chat, queue, () => runtimes, hosts, broadcast);
   bridge.subagents = subagents;
@@ -218,6 +240,7 @@ async function main() {
   bridge.browser = browser;
   const vault = new Vault(db, dataDir);
   const vmCredentials = new VmCredentials(vault);
+  const providers = new ProvidersService(db, vmCredentials, broadcast);
   hosts.credentialEnv = (provider) => vmCredentials.env(provider);
   const computer = new ComputerUse(db);
   const voice = new Voice(join(dataDir, "voice"), mergedPath);
@@ -233,7 +256,70 @@ async function main() {
   const pages = new PageLibrary(db, workspaceRoot, broadcast);
   bridge.pages = pages;
   approvalsRef = approvals;
+  approvals.addAskPolicy(agentApprovalPolicy(store));
+  const overview = new AgentsOverviewService(
+    store,
+    queue,
+    () => runtimes,
+    () => approvalsRef,
+    broadcast,
+  );
+  overviewRef = overview;
   bridge.connectors = new Connectors(vault);
+  tasks = new TaskService(db, store, chat, queue, () => runtimes, broadcast, {
+    pendingApprovals: () => approvals.list().filter((a) => a.status === "pending"),
+    routines: () => routines.list(),
+    defaults: () => getProfileDefaults(db),
+  });
+  tasks.recover();
+  runtimes.tasks = tasks.hooks();
+  const taskService = tasks;
+  routines.setTaskSink({
+    create(p) {
+      const task = taskService.create(
+        {
+          agentId: p.agentId,
+          text: p.prompt,
+          templateId: p.templateId ?? undefined,
+          toolMode: p.toolMode,
+          requireApproval: p.requireApproval,
+          private: p.private,
+        },
+        {
+          routineId: p.routineId,
+          attachments: p.attachments,
+          title: p.title,
+          source: {
+            prompt: p.sendPrompt,
+            meta: {
+              routine: { id: p.routineId, name: p.title, trigger: p.trigger },
+              attachments: p.attachments,
+            },
+          },
+        },
+      );
+      const row = db
+        .query("SELECT id FROM queue WHERE task_id = ? AND agent_id = ?")
+        .get(task.id, task.agentId) as { id: string } | null;
+      return { taskId: task.id, queueId: row?.id ?? null };
+    },
+  });
+  overview.setTaskResolver((queueId) => {
+    const taskId = queue.row(queueId)?.task_id;
+    if (!taskId) return null;
+    const task = taskService.get(taskId);
+    return { taskId, title: task.title };
+  });
+  bridge.tasksFor = (agentId) =>
+    runtimes.activeTurns(agentId).flatMap((turn) => {
+      const stored = chat.getTurn(turn.id);
+      if (!stored) throw new Error("running turn policy unavailable");
+      const taskId = stored.taskId;
+      if (!taskId) return [];
+      const task = taskService.runtimeInfo(taskId);
+      if (!task || task.agentId !== agentId) throw new Error("running task policy unavailable");
+      return [task];
+    });
   bridge.computer = computer;
   const mobile = new MobileServer(db);
   const team = new TeamClient(db, store, chat, () => runtimes, vault, broadcast);
@@ -252,7 +338,10 @@ async function main() {
     browser,
     {
       vault,
+      templates: new TemplateService(db, broadcast),
       vmCredentials,
+      providers,
+      toolPermissions: new ToolPermissions(approvals, apps),
       computer,
       voice,
       gateways,
@@ -260,11 +349,14 @@ async function main() {
       apps,
       approvals,
       pages,
-      marketplace: new Marketplace(db, skills, store),
+      marketplace: new Marketplace(db, skills, store, apps, providers),
       mobile,
       team,
       hosts,
       subagents,
+      tasks: taskService,
+      profile: new ProfileService(db, memories, broadcast),
+      overview,
     },
   );
 

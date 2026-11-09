@@ -71,6 +71,7 @@ describe("approvals e2e", () => {
       name: "A",
       provider: "devin",
       instructions: "",
+      requireApproval: false,
     });
     app = await c.request("apps.connect", {
       catalogId: "custom-stdio",
@@ -223,6 +224,29 @@ describe("approvals e2e", () => {
       permission: "write",
       agentId: a.id,
     });
+  }, 30000);
+
+  test("agent requireApproval adds asks over allow levels and allow rules, never removes them", async () => {
+    await c.request("apps.update", { id: app.id, permissions: { read: "allow", write: "allow" } });
+    await c.request("approvals.setRules", {
+      rules: [{ id: "w", pattern: "notes-create_note", action: "allow", agentId: a.id }],
+    });
+    await c.request("agents.update", { id: a.id, requireApproval: true });
+    try {
+      const asked = await withApproval("notes-create_note", {}, (ap) =>
+        c.request("approvals.respond", { id: ap.id, decision: "approve" }),
+      );
+      expect(asked.approval).toMatchObject({ permission: "write", agentId: a.id });
+      expect(asked.text).toBe("tool-ok:note-created");
+      expect(await tool(a, "notes-get_note", { text: "r" })).toBe("tool-ok:echo:r");
+      await c.request("apps.update", { id: app.id, permissions: { write: "off" } });
+      expect(await tool(a, "notes-create_note")).toContain("Notes não permite write");
+    } finally {
+      await c.request("agents.update", { id: a.id, requireApproval: false });
+      await c.request("approvals.setRules", { rules: [] });
+      await c.request("apps.update", { id: app.id, permissions: { write: "allow" } });
+    }
+    expect(await tool(a, "notes-create_note")).toBe("tool-ok:note-created");
   }, 30000);
 
   test("sensitive calls cannot be bypassed by rules, always or task decisions", async () => {
@@ -528,6 +552,7 @@ describe("approvals e2e", () => {
       name: "Existing reader",
       provider: "devin",
       instructions: "",
+      requireApproval: false,
     })) as Agent;
     const name = "shared.key";
     await c.request("vault.set", { name, value: "original", agentIds: [reader.id] });

@@ -19,6 +19,7 @@ type TurnRow = {
   error: string | null;
   started_at: number;
   ended_at: number | null;
+  task_id?: string | null;
 };
 
 type ItemRow = {
@@ -30,6 +31,7 @@ type ItemRow = {
   data_json: string;
   created_at: number;
   updated_at: number;
+  task_id?: string | null;
 };
 
 function rowToTurn(r: TurnRow): Turn {
@@ -42,6 +44,7 @@ function rowToTurn(r: TurnRow): Turn {
     error: r.error,
     startedAt: r.started_at,
     endedAt: r.ended_at,
+    ...(r.task_id ? { taskId: r.task_id } : {}),
   };
 }
 
@@ -52,6 +55,7 @@ function rowToItem(r: ItemRow): ChatItem {
     seq: r.seq,
     agentId: r.agent_id,
     turnId: r.turn_id,
+    ...(r.task_id ? { taskId: r.task_id } : {}),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     kind: r.kind,
@@ -68,13 +72,13 @@ export class ChatStore {
       .run(Date.now());
   }
 
-  createTurn(agentId: string, queueId: string | null = null): Turn {
+  createTurn(agentId: string, queueId: string | null = null, taskId: string | null = null): Turn {
     const id = crypto.randomUUID();
     this.db
       .query(
-        "INSERT INTO turns (id, agent_id, status, queue_id, started_at) VALUES (?, ?, 'running', ?, ?)",
+        "INSERT INTO turns (id, agent_id, status, queue_id, started_at, task_id) VALUES (?, ?, 'running', ?, ?, ?)",
       )
-      .run(id, agentId, queueId, Date.now());
+      .run(id, agentId, queueId, Date.now(), taskId);
     return this.getTurn(id)!;
   }
 
@@ -104,14 +108,32 @@ export class ChatStore {
     return rows.map(rowToTurn);
   }
 
-  createItem(agentId: string, turnId: string | null, kind: string, data: object): ChatItem {
+  /**
+   * Items of a turn inherit its task (and that task's private flag); `taskId` attributes an
+   * item without a turn (e.g. a compaction of a task session).
+   */
+  createItem(
+    agentId: string,
+    turnId: string | null,
+    kind: string,
+    data: object,
+    taskId: string | null = null,
+  ): ChatItem {
     const id = crypto.randomUUID();
     const now = Date.now();
+    const task = turnId
+      ? ((
+          this.db.query("SELECT task_id FROM turns WHERE id = ?").get(turnId) as {
+            task_id: string | null;
+          } | null
+        )?.task_id ?? null)
+      : taskId;
     this.db
       .query(
-        "INSERT INTO items (id, agent_id, turn_id, kind, data_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        `INSERT INTO items (id, agent_id, turn_id, kind, data_json, created_at, updated_at, task_id, private)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT private FROM tasks WHERE id = ?), 0))`,
       )
-      .run(id, agentId, turnId, kind, JSON.stringify(data), now, now);
+      .run(id, agentId, turnId, kind, JSON.stringify(data), now, now, task, task);
     return this.getItem(id)!;
   }
 
@@ -182,15 +204,45 @@ export class ChatStore {
     const rows = (
       beforeSeq === undefined
         ? (this.db
-            .query("SELECT * FROM items WHERE agent_id = ? ORDER BY seq DESC LIMIT ?")
+            .query(
+              "SELECT * FROM items WHERE agent_id = ? AND private = 0 ORDER BY seq DESC LIMIT ?",
+            )
             .all(agentId, limit + 1) as ItemRow[])
         : (this.db
-            .query("SELECT * FROM items WHERE agent_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?")
+            .query(
+              "SELECT * FROM items WHERE agent_id = ? AND private = 0 AND seq < ? ORDER BY seq DESC LIMIT ?",
+            )
             .all(agentId, beforeSeq, limit + 1) as ItemRow[])
     ) as ItemRow[];
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit).reverse();
     return { items: page.map(rowToItem), hasMore };
+  }
+
+  /** Items of one task (private ones included: the caller scopes access by task id). */
+  taskHistory(
+    taskId: string,
+    beforeSeq: number | undefined,
+    limit: number,
+  ): { items: ChatItem[]; hasMore: boolean } {
+    const rows = this.db
+      .query("SELECT * FROM items WHERE task_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?")
+      .all(taskId, beforeSeq ?? Number.MAX_SAFE_INTEGER, limit + 1) as ItemRow[];
+    const hasMore = rows.length > limit;
+    return { items: rows.slice(0, limit).reverse().map(rowToItem), hasMore };
+  }
+
+  /** The newest items of one session scope: a task (taskId) or the agent's plain chat (null). */
+  scopedHistory(agentId: string, taskId: string | null, limit: number): ChatItem[] {
+    const rows = this.db
+      .query("SELECT * FROM items WHERE agent_id = ? AND task_id IS ? ORDER BY seq DESC LIMIT ?")
+      .all(agentId, taskId, limit) as ItemRow[];
+    return rows.reverse().map(rowToItem);
+  }
+
+  /** Deletes the items of a task (private tasks, once done). */
+  purgeTaskItems(taskId: string): void {
+    this.db.query("DELETE FROM items WHERE task_id = ?").run(taskId);
   }
 
   clearAgentSession(agentId: string): void {
@@ -275,22 +327,29 @@ export class ChatStore {
     return this.putUsage({ ...this.getUsage(agentId), usedTokens: null, updatedAt: Date.now() });
   }
 
-  getAgentSession(agentId: string): { provider: string; sessionId: string } | null {
+  getAgentSession(
+    agentId: string,
+  ): { provider: string; sessionId: string; taskId: string | null } | null {
     const r = this.db
-      .query("SELECT provider, session_id FROM agent_sessions WHERE agent_id = ?")
-      .get(agentId) as { provider: string; session_id: string } | null;
-    return r ? { provider: r.provider, sessionId: r.session_id } : null;
+      .query("SELECT provider, session_id, task_id FROM agent_sessions WHERE agent_id = ?")
+      .get(agentId) as { provider: string; session_id: string; task_id: string | null } | null;
+    return r ? { provider: r.provider, sessionId: r.session_id, taskId: r.task_id } : null;
   }
 
-  upsertAgentSession(agentId: string, provider: string, sessionId: string): void {
+  upsertAgentSession(
+    agentId: string,
+    provider: string,
+    sessionId: string,
+    taskId: string | null = null,
+  ): void {
     const now = Date.now();
     this.db
       .query(
-        `INSERT INTO agent_sessions (agent_id, provider, session_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(agent_id) DO UPDATE SET provider = excluded.provider, session_id = excluded.session_id, updated_at = excluded.updated_at`,
+        `INSERT INTO agent_sessions (agent_id, provider, session_id, created_at, updated_at, task_id)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(agent_id) DO UPDATE SET provider = excluded.provider, session_id = excluded.session_id, updated_at = excluded.updated_at, task_id = excluded.task_id`,
       )
-      .run(agentId, provider, sessionId, now, now);
+      .run(agentId, provider, sessionId, now, now, taskId);
   }
 }
 
@@ -309,6 +368,7 @@ export type QueueRow = {
   channel_id: string | null;
   prompt: string | null;
   meta_json: string | null;
+  task_id?: string | null;
 };
 
 export type QueueItemLite = {
@@ -317,6 +377,7 @@ export type QueueItemLite = {
   text: string;
   createdAt: number;
   fromAgentId: string | null;
+  taskId?: string;
 };
 
 export type QueueSource = {
@@ -327,6 +388,8 @@ export type QueueSource = {
   prompt?: string;
   /** Extra fields stored on the user_message item (routine, attachments). */
   meta?: Record<string, unknown>;
+  /** Task the entry belongs to: its turn and items are attributed to it. */
+  taskId?: string | null;
 };
 
 const queueRoutineMeta = z.object({
@@ -421,6 +484,7 @@ function rowToQueueItem(r: QueueRow): QueueItemLite {
     text: r.text,
     createdAt: r.created_at,
     fromAgentId: r.from_agent_id,
+    ...(r.task_id ? { taskId: r.task_id } : {}),
   };
 }
 
@@ -432,7 +496,7 @@ export class QueueStore {
     const now = Date.now();
     this.db
       .query(
-        "INSERT INTO queue (id, agent_id, text, status, created_at, from_agent_id, hops, channel_id, prompt, meta_json) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO queue (id, agent_id, text, status, created_at, from_agent_id, hops, channel_id, prompt, meta_json, task_id) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         id,
@@ -444,8 +508,16 @@ export class QueueStore {
         from?.channelId ?? null,
         from?.prompt ?? null,
         from?.meta ? JSON.stringify(from.meta) : null,
+        from?.taskId ?? null,
       );
-    return { id, agentId, text, createdAt: now, fromAgentId: from?.agentId ?? null };
+    return {
+      id,
+      agentId,
+      text,
+      createdAt: now,
+      fromAgentId: from?.agentId ?? null,
+      ...(from?.taskId ? { taskId: from.taskId } : {}),
+    };
   }
 
   queued(agentId: string): QueueItemLite[] {
@@ -455,16 +527,45 @@ export class QueueStore {
     return rows.map(rowToQueueItem);
   }
 
-  peek(agentId: string): QueueRow | null {
+  /**
+   * Oldest queued entry to start, skipping entries of paused (muted) tasks. Entries of
+   * `preferTaskId` (the task owning the live session) go first so instructions follow it.
+   */
+  peek(agentId: string, preferTaskId: string | null = null): QueueRow | null {
     return this.db
       .query(
-        "SELECT * FROM queue WHERE agent_id = ? AND status = 'queued' ORDER BY created_at ASC LIMIT 1",
+        `SELECT * FROM queue WHERE agent_id = ? AND status = 'queued'
+           AND (task_id IS NULL OR task_id NOT IN (SELECT id FROM tasks WHERE situation = 'muted'))
+         ORDER BY CASE WHEN task_id = ? THEN 0 ELSE 1 END, created_at ASC LIMIT 1`,
       )
-      .get(agentId) as QueueRow | null;
+      .get(agentId, preferTaskId) as QueueRow | null;
+  }
+
+  hasQueuedForTask(taskId: string): boolean {
+    return (
+      this.db.query("SELECT 1 FROM queue WHERE task_id = ? AND status = 'queued'").get(taskId) !==
+      null
+    );
+  }
+
+  removeForTask(taskId: string): number {
+    const r = this.db
+      .query("UPDATE queue SET status = 'removed' WHERE task_id = ? AND status = 'queued'")
+      .run(taskId);
+    return r.changes ?? 0;
+  }
+
+  /** Blanks stored texts of a private task once it is done. */
+  purgeTaskTexts(taskId: string): void {
+    this.db.query("UPDATE queue SET text = '', prompt = NULL WHERE task_id = ?").run(taskId);
   }
 
   row(queueId: string): QueueRow | null {
     return this.db.query("SELECT * FROM queue WHERE id = ?").get(queueId) as QueueRow | null;
+  }
+
+  byTurn(turnId: string): QueueRow | null {
+    return this.db.query("SELECT * FROM queue WHERE turn_id = ?").get(turnId) as QueueRow | null;
   }
 
   markStarted(queueId: string, turnId: string): void {

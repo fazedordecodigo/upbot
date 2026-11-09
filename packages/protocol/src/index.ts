@@ -1,4 +1,40 @@
 import { z } from "zod";
+import {
+  AgentCockpitFields,
+  AgentCockpitParams,
+  type AgentsCockpitEventMap,
+  agentsCockpitMethods,
+} from "./agents-cockpit";
+import { MemoryUsage, type Profile, profileMethods } from "./profile";
+import {
+  AppSecretSpec,
+  marketplaceMethods,
+  providersCatalogMethods,
+  providersCreateParams,
+  toolPermissionMethods,
+} from "./providers-catalog";
+import {
+  Task,
+  TaskDelivery,
+  TasksCreateParams,
+  TasksDeliveriesParams,
+  TasksGetParams,
+  TasksHistoryParams,
+  TasksIdParams,
+  TasksInstructParams,
+  TasksInstructResult,
+  TasksListParams,
+  TasksListResult,
+  TasksRenameParams,
+  TasksSearchParams,
+} from "./tasks";
+import { ToolMode, templateMethods } from "./templates";
+
+export * from "./agents-cockpit";
+export * from "./profile";
+export * from "./providers-catalog";
+export * from "./tasks";
+export * from "./templates";
 
 export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   devin: "~/.config/devin/config.json",
@@ -57,6 +93,7 @@ export const Agent = z.object({
   avatar: AgentAvatar.nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
+  ...AgentCockpitFields,
 });
 export type Agent = z.infer<typeof Agent>;
 
@@ -71,6 +108,7 @@ export const AgentsCreateParams = z
     instructions: z.string().optional(),
     provider: ProviderId,
     avatar: AgentAvatar.nullable().optional(),
+    ...AgentCockpitParams,
   })
   .strict();
 export type AgentsCreateParams = z.infer<typeof AgentsCreateParams>;
@@ -83,6 +121,7 @@ export const AgentsUpdateParams = z
     instructions: z.string().optional(),
     provider: ProviderId.optional(),
     avatar: AgentAvatar.nullable().optional(),
+    ...AgentCockpitParams,
   })
   .strict();
 export type AgentsUpdateParams = z.infer<typeof AgentsUpdateParams>;
@@ -116,6 +155,7 @@ export const Turn = z.object({
   error: z.string().nullable(),
   startedAt: z.number(),
   endedAt: z.number().nullable(),
+  taskId: z.string().nullable().optional(),
 });
 export type Turn = z.infer<typeof Turn>;
 
@@ -140,6 +180,7 @@ const ChatItemBase = z.object({
   seq: z.number(),
   agentId: z.string(),
   turnId: z.string().nullable(),
+  taskId: z.string().nullable().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -172,7 +213,11 @@ export const ChatItem = z.discriminatedUnion("kind", [
       .optional(),
     attachments: z.array(ChatAttachment).optional(),
   }),
-  ChatItemBase.extend({ kind: z.literal("agent_message"), text: z.string() }),
+  ChatItemBase.extend({
+    kind: z.literal("agent_message"),
+    text: z.string(),
+    memoryUsage: MemoryUsage.optional(),
+  }),
   ChatItemBase.extend({ kind: z.literal("agent_thought"), text: z.string() }),
   ChatItemBase.extend({
     kind: z.literal("tool_call"),
@@ -263,6 +308,7 @@ export const QueueItem = z.object({
   text: z.string(),
   createdAt: z.number(),
   fromAgentId: z.string().nullable().optional(),
+  taskId: z.string().nullable().optional(),
 });
 export const QueueState = z.object({
   agentId: z.string(),
@@ -501,22 +547,6 @@ export const MobileStatus = z.object({
 });
 export type MobileStatus = z.infer<typeof MobileStatus>;
 
-// ---- Marketplace ----
-
-export const MarketplaceItem = z.object({
-  id: z.string(),
-  kind: z.enum(["skill", "agent"]),
-  name: z.string(),
-  description: z.string(),
-  author: z.string(),
-  version: z.string(),
-  url: z.string(),
-  sha256: z.string(),
-  source: z.string(),
-  installed: z.boolean(),
-});
-export type MarketplaceItem = z.infer<typeof MarketplaceItem>;
-
 // ---- Messaging gateways ----
 
 export const GatewayStatus = z.enum(["connecting", "connected", "error", "stopped"]);
@@ -686,16 +716,11 @@ export const Approval = z.object({
   expiresAt: z.number(),
   /** Set when a daemon restart ended the approval before any decision. */
   interruptedAt: z.number().optional(),
+  /** When the approval was decided, expired or closed (survives daemon restarts). */
+  resolvedAt: z.number().optional(),
 });
 export type Approval = z.infer<typeof Approval>;
 
-export const AppSecretSpec = z.object({
-  key: z.string(),
-  label: z.string(),
-  hint: z.string(),
-  /** "Header: template" with {value}; null = passed to the server as an env var. */
-  header: z.string().nullable(),
-});
 export const AppCatalogEntry = z.object({
   id: z.string(),
   name: z.string(),
@@ -767,6 +792,12 @@ export type BrowserState = z.infer<typeof BrowserState>;
 // ---- Routines ----
 
 export const Routine = z.object({
+  attachments: z.array(ChatAttachment).optional(),
+  runAt: z.number().nullable(),
+  toolMode: ToolMode,
+  requireApproval: z.boolean(),
+  private: z.boolean(),
+  templateId: z.string().nullable(),
   id: z.string(),
   agentId: z.string(),
   name: z.string(),
@@ -783,6 +814,7 @@ export const Routine = z.object({
 });
 export type Routine = z.infer<typeof Routine>;
 export const RoutineRun = z.object({
+  taskId: z.string().nullable(),
   id: z.string(),
   routineId: z.string(),
   trigger: RoutineTrigger,
@@ -880,8 +912,16 @@ export const ChannelsReassignParams = z
 // ---- Typed method map ----
 
 export const methodMap = {
+  ...templateMethods,
+  ...profileMethods,
+  ...providersCatalogMethods,
+  ...toolPermissionMethods,
+  ...marketplaceMethods(Agent, ConnectedApp, AppPermissions),
   "agents.list": { params: AgentsListParams, result: AgentsListResult },
-  "agents.create": { params: AgentsCreateParams, result: AgentsCreateResult },
+  "agents.create": {
+    params: providersCreateParams(AgentsCreateParams),
+    result: AgentsCreateResult,
+  },
   "agents.update": { params: AgentsUpdateParams, result: AgentsUpdateResult },
   "agents.delete": { params: AgentsDeleteParams, result: AgentsDeleteResult },
   "agents.restore": { params: AgentsRestoreParams, result: AgentsRestoreResult },
@@ -982,20 +1022,6 @@ export const methodMap = {
   "mobile.revoke": {
     params: z.object({ id: z.string() }).strict(),
     result: z.object({ ok: z.literal(true) }),
-  },
-  "marketplace.list": {
-    params: z.object({}).strict(),
-    result: z.object({
-      sources: z.array(z.string()),
-      items: z.array(MarketplaceItem),
-      errors: z.array(z.object({ source: z.string(), error: z.string() })),
-    }),
-  },
-  "marketplace.install": {
-    params: z
-      .object({ source: z.string(), id: z.string(), provider: ProviderId.optional() })
-      .strict(),
-    result: z.object({ skills: z.array(z.string()), agent: Agent.nullable() }),
   },
   "marketplace.setSources": {
     params: z.object({ urls: z.array(z.string().max(2000)).max(20) }).strict(),
@@ -1191,7 +1217,13 @@ export const methodMap = {
     params: z
       .object({
         agentId: z.string(),
+        attachments: TasksCreateParams.shape.attachments,
         name: RoutineFields.name,
+        runAt: z.number().nullable().optional(),
+        toolMode: ToolMode.optional(),
+        requireApproval: z.boolean().optional(),
+        private: z.boolean().optional(),
+        templateId: z.string().nullable().optional(),
         prompt: RoutineFields.prompt,
         schedule: RoutineFields.schedule.optional(),
         webhook: RoutineFields.webhook.optional(),
@@ -1204,7 +1236,12 @@ export const methodMap = {
     params: z
       .object({
         id: z.string(),
+        attachments: TasksCreateParams.shape.attachments,
         name: RoutineFields.name.optional(),
+        runAt: z.number().nullable().optional(),
+        toolMode: ToolMode.optional(),
+        requireApproval: z.boolean().optional(),
+        private: z.boolean().optional(),
         prompt: RoutineFields.prompt.optional(),
         schedule: RoutineFields.schedule.optional(),
         webhook: RoutineFields.webhook.optional(),
@@ -1264,6 +1301,21 @@ export const methodMap = {
   "channels.archive": { params: ChannelIdParams, result: Channel },
   "channels.restore": { params: ChannelIdParams, result: Channel },
   "channels.reassign": { params: ChannelsReassignParams, result: Channel },
+  "tasks.create": { params: TasksCreateParams, result: Task },
+  "tasks.list": { params: TasksListParams, result: TasksListResult },
+  "tasks.get": { params: TasksGetParams, result: Task },
+  "tasks.history": { params: TasksHistoryParams, result: ChatHistoryResult },
+  "tasks.instruct": { params: TasksInstructParams, result: TasksInstructResult },
+  "tasks.pause": { params: TasksIdParams, result: Task },
+  "tasks.resume": { params: TasksIdParams, result: Task },
+  "tasks.stop": { params: TasksIdParams, result: Task },
+  "tasks.rename": { params: TasksRenameParams, result: Task },
+  "tasks.search": {
+    params: TasksSearchParams,
+    result: z.object({ tasks: z.array(Task), routines: z.array(Routine) }),
+  },
+  "tasks.deliveries": { params: TasksDeliveriesParams, result: z.array(TaskDelivery) },
+  ...agentsCockpitMethods,
 } as const;
 
 export type MethodName = keyof typeof methodMap;
@@ -1272,7 +1324,10 @@ export type MethodParams<M extends MethodName> = z.input<(typeof methodMap)[M]["
 export type MethodParsedParams<M extends MethodName> = z.infer<(typeof methodMap)[M]["params"]>;
 export type MethodResult<M extends MethodName> = z.infer<(typeof methodMap)[M]["result"]>;
 
-export type DaemonEventMap = {
+export type DaemonEventMap = AgentsCockpitEventMap & {
+  "templates.changed": { id: string };
+  "profile.changed": Profile;
+  "providers.changed": Record<string, never>;
   "agent.created": Agent;
   "agent.updated": Agent;
   "agent.deleted": { id: string };
@@ -1310,4 +1365,7 @@ export type DaemonEventMap = {
   "channel.created": Channel;
   "channel.updated": Channel;
   "channel.message": ChannelMessage;
+  "task.created": Task;
+  "task.updated": Task;
+  "task.delivery": TaskDelivery;
 };
