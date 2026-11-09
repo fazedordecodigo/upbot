@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, ChatItem, RoutineRun } from "@boto/protocol";
@@ -16,6 +16,8 @@ import {
 } from "./helpers";
 
 const TOKEN = `p9-test-${crypto.randomUUID()}`;
+
+setDefaultTimeout(30_000);
 
 describe("schedule parser", () => {
   test("intervals, daily and weekly", () => {
