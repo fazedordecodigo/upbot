@@ -11,7 +11,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await browser?.close();
   await vite?.stop();
-});
+}, 30_000);
 
 test("a task opened in-app remains addressable on reload without global private listings", async () => {
   const page = await browser.newPage();
