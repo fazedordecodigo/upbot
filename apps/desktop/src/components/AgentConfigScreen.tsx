@@ -236,7 +236,7 @@ export function AgentConfigScreen({
       const [memories, nextRoutines, access, nextAgent] = await Promise.all([
         client.request("memories.list", { agentId }),
         client.request("routines.list", { agentId }),
-        client.request("computer.access", {}),
+        client.request("computer.access", { agentId }),
         client
           .request("agents.list", {})
           .then((items) => items.find((item) => item.id === agentId) ?? agentRef.current),
