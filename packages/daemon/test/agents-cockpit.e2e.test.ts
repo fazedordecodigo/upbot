@@ -141,6 +141,27 @@ describe("agents cockpit e2e", () => {
     await c.request("agents.delete", { id: free.id });
   });
 
+  test("task enqueues fill extra instances and overview resolves task titles per agent", async () => {
+    const agent = await create("Task runner", { maxInstances: 2, requireApproval: false });
+    const other = await create("Other task runner");
+    const first = await c.request("tasks.create", { agentId: agent.id, text: "slow" });
+    const second = await c.request("tasks.create", { agentId: agent.id, text: "slow" });
+    try {
+      await c.request("tasks.rename", { id: first.id, title: "First task" });
+      await c.request("tasks.rename", { id: second.id, title: "Second task" });
+      const overview = await until(async () => {
+        const value = await overviewOf(agent.id);
+        return value.running.length === 2 ? value : undefined;
+      });
+      expect(overview.running.map((r) => r.taskId).sort()).toEqual([first.id, second.id].sort());
+      expect(overview.running.map((r) => r.title).sort()).toEqual(["First task", "Second task"]);
+      expect((await overviewOf(other.id)).running).toEqual([]);
+    } finally {
+      await c.request("agents.delete", { id: agent.id });
+      await c.request("agents.delete", { id: other.id });
+    }
+  });
+
   test("overview counts running, waiting and queued work and emits overviewChanged", async () => {
     const runner = await create("Runner", { requireApproval: false });
     const asker = await create("Asker", { requireApproval: false });

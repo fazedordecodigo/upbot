@@ -110,6 +110,8 @@ export class DesktopService {
     return this.machineFor(agentId)?.name;
   }
 
+  taskFor: ((agentId: string) => string | null) | null = null;
+
   list(): Machine[] {
     const out: Machine[] = [];
     for (const p of this.hosts.placements()) {
@@ -182,7 +184,7 @@ export class DesktopService {
       controller: st.controller,
       width: st.width,
       height: st.height,
-      taskId: null,
+      taskId: this.taskFor?.(st.agentId) ?? null,
       thumbnailAt: st.thumbnail?.at ?? null,
     };
   }

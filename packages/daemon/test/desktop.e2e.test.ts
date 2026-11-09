@@ -79,6 +79,9 @@ describe("desktop.* (daemon e2e with a fake host desktop stream)", () => {
     });
     const again = await c.request("desktop.machines", {});
     expect(again.find((m) => m.agentId === a1.id)?.id).toBe(m1.id);
+    const overview = await c.request("agents.overview", {});
+    expect(overview.agents.find((a) => a.agentId === a1.id)?.machines).toEqual([m1.id]);
+    expect(overview.agents.find((a) => a.agentId === a2.id)?.machines).toEqual([m2.id]);
   });
 
   test("subscribe streams frames only to the subscribed connection and machine", async () => {

@@ -76,6 +76,55 @@ describe("tasks e2e", () => {
   }, T);
 
   test(
+    "routine runs create tasks with saved policy and routine prompt metadata",
+    async () => {
+      await c.request("queue.pause", { agentId: b.id });
+      try {
+        const routine = await c.request("routines.create", {
+          agentId: b.id,
+          name: "Routine integration",
+          prompt: "echo:routine",
+          schedule: "daily 08:00",
+          templateId: "research",
+          toolMode: "browser",
+          private: true,
+          requireApproval: true,
+        });
+        const run = await c.request("routines.run", { id: routine.id });
+        expect(run.error).toBeNull();
+        expect(run.taskId).not.toBeNull();
+        expect(run.queueId).not.toBeNull();
+        const task = await c.request("tasks.get", { id: run.taskId! });
+        expect(task).toMatchObject({
+          agentId: b.id,
+          title: routine.name,
+          routineId: routine.id,
+          templateId: "research",
+          toolMode: "browser",
+          private: true,
+          requireApproval: true,
+        });
+        expect((await c.request("routines.runs", { id: routine.id }))[0]).toMatchObject({
+          taskId: task.id,
+          queueId: run.queueId,
+        });
+        await c.request("queue.resume", { agentId: b.id });
+        await waitTask(task.id, (t) => t.situation === "done");
+        const prompt = readLog(stateDir).find(
+          (l) =>
+            l.method === "session/prompt" &&
+            JSON.stringify(l.params).includes('name=\\"Routine integration\\"'),
+        );
+        expect(prompt).toBeDefined();
+        await c.request("routines.delete", { id: routine.id });
+      } finally {
+        await c.request("queue.resume", { agentId: b.id });
+      }
+    },
+    T,
+  );
+
+  test(
     "create -> run -> done in a fresh task session, with events in order and a message delivery",
     async () => {
       const start = c.events.length;

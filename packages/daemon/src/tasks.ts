@@ -1,23 +1,22 @@
 import type { Database } from "bun:sqlite";
 import { existsSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
-import {
-  type Agent,
-  type Approval,
-  type ChatItem,
-  type MethodParsedParams,
-  type Routine,
-  type Task,
+import type {
+  Agent,
+  Approval,
+  ChatItem,
+  MethodParsedParams,
+  Routine,
+  Task,
   TaskDefaults,
-  type TaskDelivery,
-  type TaskOutcome,
-  type TaskSituation,
-  type Turn,
+  TaskDelivery,
+  TaskOutcome,
+  TaskSituation,
+  Turn,
 } from "@boto/protocol";
 import type { AgentStore } from "./agents";
 import { attachmentsBlock, saveAttachments } from "./attachments";
-import type { ChatStore, QueueStore } from "./chat-store";
-import { getSetting, InvalidSettingError } from "./db/settings";
+import type { ChatStore, QueueSource, QueueStore } from "./chat-store";
 import { errorFields, RpcError } from "./runtime/agent-runtime";
 import type { RuntimeManager } from "./runtime/runtime-manager";
 import type { TaskRuntimeHooks, TaskRuntimeInfo } from "./task-policy";
@@ -158,17 +157,6 @@ function decodeCursor(cursor: string): { createdAt: number; id: string } {
   const createdAt = Number(ts);
   if (!id || !Number.isSafeInteger(createdAt)) throw new RpcError("bad_request", "invalid cursor");
   return { createdAt, id };
-}
-
-/** Task defaults from settings.task_defaults (profile); an invalid row falls back to none. */
-export function readTaskDefaults(db: Database): TaskDefaults {
-  try {
-    return getSetting(db, "task_defaults", TaskDefaults, {});
-  } catch (e) {
-    if (!(e instanceof InvalidSettingError)) throw e;
-    console.error(`[botod] task defaults ignored: ${errorFields(e)}`);
-    return {};
-  }
 }
 
 export class TaskService {
@@ -503,7 +491,14 @@ export class TaskService {
 
   // ---- API ----
 
-  create(p: MethodParsedParams<"tasks.create">, extra: { routineId?: string } = {}): Task {
+  create(
+    p: MethodParsedParams<"tasks.create">,
+    extra: {
+      routineId?: string;
+      title?: string;
+      source?: Pick<QueueSource, "prompt" | "meta">;
+    } = {},
+  ): Task {
     const agent = p.agentId ? this.agents.get(p.agentId) : (this.agents.list()[0] ?? null);
     if (!agent) throw new RpcError("not_found", "agent not found");
     const defaults = this.deps.defaults();
@@ -519,7 +514,7 @@ export class TaskService {
       .run(
         id,
         agent.id,
-        taskTitle(p.text),
+        extra.title ?? taskTitle(p.text),
         p.text,
         (p.private ?? defaults.private ?? false) ? 1 : 0,
         p.toolMode ?? defaults.toolMode ?? "both",
@@ -540,6 +535,7 @@ export class TaskService {
         agentId: null,
         hops: 0,
         taskId: id,
+        ...extra.source,
         ...(saved.length
           ? { prompt: attachmentsBlock(saved) + p.text, meta: { attachments: saved } }
           : {}),
@@ -635,7 +631,7 @@ export class TaskService {
     this.setState(id, "run", null, null);
     const task = this.emit(id) ?? this.get(id);
     if (this.queue.hasQueuedForTask(id) || this.runningTurnId(id)) {
-      this.runtimes().drain(r.agent_id);
+      this.runtimes().schedule(r.agent_id);
     } else {
       try {
         this.runtimes().sendFrom(r.agent_id, CONTINUE_TEXT, {

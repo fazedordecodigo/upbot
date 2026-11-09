@@ -104,7 +104,8 @@ tools via `ApprovalService.gate(..., { forceAsk })` (it only adds asks). Files u
 `<workspace>/tasks/<taskId>/` and the final reply become deliveries. Private tasks: items are
 flagged `private` (never in `chat.history`, `tasks.list` history, search or deliveries), the
 bridge refuses `remember`, and once done their items, queued texts and prompt are purged.
-Defaults come from `settings.task_defaults` (`readTaskDefaults`).
+Defaults come from `settings.profile.defaults` (`getProfileDefaults`). Routines create tasks
+with their own saved defaults; runs retain both the task id and the queued entry id.
 
 ## Agents cockpit (instances, approval, overview)
 

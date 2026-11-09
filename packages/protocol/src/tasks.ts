@@ -46,7 +46,7 @@ export const TaskDelivery = z.object({
 });
 export type TaskDelivery = z.infer<typeof TaskDelivery>;
 
-/** Per-task defaults stored in settings.task_defaults (profile settings). */
+/** Task-related defaults from the profile settings. */
 export const TaskDefaults = z.object({
   private: z.boolean().optional(),
   toolMode: TaskToolMode.optional(),

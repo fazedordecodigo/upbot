@@ -14,6 +14,7 @@ import { ChatStore, QueueStore } from "./chat-store";
 import { ComputerUse } from "./computer";
 import { Connectors } from "./connectors";
 import { openDatabase } from "./db";
+import { getProfileDefaults } from "./db/settings";
 import { DesktopService } from "./desktop";
 import { EmailService } from "./email";
 import { mergedPath } from "./env/login-path";
@@ -36,7 +37,7 @@ import { errorFields } from "./runtime/agent-runtime";
 import { RuntimeManager } from "./runtime/runtime-manager";
 import { SkillLibrary } from "./skills";
 import { SubagentService } from "./subagents";
-import { readTaskDefaults, TaskService } from "./tasks";
+import { TaskService } from "./tasks";
 import { TeamClient } from "./team";
 import { TemplateService } from "./templates";
 import { ToolPermissions } from "./tool-permissions";
@@ -283,11 +284,50 @@ async function main() {
   tasks = new TaskService(db, store, chat, queue, () => runtimes, broadcast, {
     pendingApprovals: () => approvals.list().filter((a) => a.status === "pending"),
     routines: () => routines.list(),
-    defaults: () => readTaskDefaults(db),
+    defaults: () => getProfileDefaults(db),
   });
   tasks.recover();
   runtimes.tasks = tasks.hooks();
   const taskService = tasks;
+  routines.setTaskSink({
+    create(p) {
+      const task = taskService.create(
+        {
+          agentId: p.agentId,
+          text: p.prompt,
+          templateId: p.templateId ?? undefined,
+          toolMode: p.toolMode,
+          requireApproval: p.requireApproval,
+          private: p.private,
+        },
+        {
+          routineId: p.routineId,
+          title: p.title,
+          source: {
+            prompt: p.sendPrompt,
+            meta: { routine: { id: p.routineId, name: p.title, trigger: p.trigger } },
+          },
+        },
+      );
+      const row = db
+        .query("SELECT id FROM queue WHERE task_id = ? AND agent_id = ?")
+        .get(task.id, task.agentId) as { id: string } | null;
+      return { taskId: task.id, queueId: row?.id ?? null };
+    },
+  });
+  overview.setTaskResolver((queueId) => {
+    const taskId = queue.row(queueId)?.task_id;
+    if (!taskId) return null;
+    const task = taskService.get(taskId);
+    return { taskId, title: task.title };
+  });
+  overview.addMachineSource((agentId) =>
+    desktop
+      .list()
+      .filter((m) => m.agentId === agentId)
+      .map((m) => m.id),
+  );
+  desktop.taskFor = (agentId) => runtimes.currentTurn(agentId)?.taskId ?? null;
   bridge.taskFor = (agentId) => {
     const taskId = runtimes.currentTaskId(agentId);
     return taskId ? taskService.runtimeInfo(taskId) : null;

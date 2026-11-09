@@ -122,6 +122,42 @@ describe("profile and memory provenance e2e", () => {
     ).toBe(true);
   }, 30000);
 
+  test("profile defaults drive new tasks while explicit task settings win", async () => {
+    const agent = await c.request("agents.create", { name: "Defaults", provider: "devin" });
+    await c.request("queue.pause", { agentId: agent.id });
+    try {
+      await change("profile.update", {
+        defaults: { private: true, toolMode: "browser", requireApproval: true },
+      });
+      const inherited = await c.request("tasks.create", {
+        agentId: agent.id,
+        text: "echo:defaults",
+      });
+      expect(inherited).toMatchObject({
+        private: true,
+        toolMode: "browser",
+        requireApproval: true,
+      });
+      const explicit = await c.request("tasks.create", {
+        agentId: agent.id,
+        text: "echo:override",
+        private: false,
+        toolMode: "terminal",
+        requireApproval: false,
+      });
+      expect(explicit).toMatchObject({
+        private: false,
+        toolMode: "terminal",
+        requireApproval: false,
+      });
+      await c.request("tasks.stop", { id: inherited.id });
+      await c.request("tasks.stop", { id: explicit.id });
+    } finally {
+      await change("profile.update", { defaults });
+      await c.request("agents.delete", { id: agent.id });
+    }
+  }, 30000);
+
   test("enforces 40/600 limits, strict nested partial updates and every preference boundary", async () => {
     const atLimit = await change("profile.update", {
       name: "n".repeat(40),
