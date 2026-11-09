@@ -2,6 +2,7 @@ import { type CSSProperties, useEffect, useState } from "react";
 import { OnboardingDialog } from "../dialogs/OnboardingDialog";
 import { ShortcutsDialog } from "../dialogs/ShortcutsDialog";
 import { useMediaQuery } from "../hooks/useLayerFocus";
+import { readSidebarWidth, setSidebarWidth } from "../lib/sidebar-width";
 import { readStorage, writeStorage } from "../lib/storage";
 import { Sheet } from "../ui/Sheet";
 import { ToastProvider } from "../ui/Toast";
@@ -23,10 +24,12 @@ function Shell() {
   const [collapsed, setCollapsed] = useState(
     () => readStorage("boto.sidebar-collapsed") === "true",
   );
-  const [width, setWidth] = useState(() => {
-    const value = Number(readStorage("boto.sidebar-width"));
-    return value >= 220 && value <= 400 ? value : 272;
-  });
+  const [width, setWidth] = useState(readSidebarWidth);
+  useEffect(() => {
+    const update = () => setWidth(readSidebarWidth());
+    window.addEventListener("boto:sidebar-width", update);
+    return () => window.removeEventListener("boto:sidebar-width", update);
+  }, []);
   const narrow = useMediaQuery("(max-width: 1023px)");
   useNativeIntegration();
   // biome-ignore lint/correctness/useExhaustiveDependencies: close the sheet on every route change.
@@ -55,7 +58,7 @@ function Shell() {
   const resize = (value: number) => {
     const next = Math.min(400, Math.max(220, value));
     setWidth(next);
-    writeStorage("boto.sidebar-width", String(next));
+    setSidebarWidth(next);
   };
   const collapse = (value: boolean) => {
     setCollapsed(value);

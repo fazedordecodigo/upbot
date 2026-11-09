@@ -181,7 +181,7 @@ export function Sidebar({
             <DropdownItem
               onClick={() => {
                 close();
-                navigate("settings", { section: "memory" });
+                navigate("settings", { tab: "memory" });
               }}
             >
               <Icon name="user-check" />
