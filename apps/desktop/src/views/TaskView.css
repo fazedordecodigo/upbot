@@ -5,10 +5,7 @@
 .task .task-meta { display: flex; flex-wrap: wrap; gap: var(--boto-space-3); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); }
 .task .task-meta time { white-space: nowrap; }
 .task .task-controls { flex-wrap: wrap; gap: var(--boto-space-2); }
-.task .status { display: inline-flex; align-items: center; gap: var(--boto-space-1); }
-.task .status[data-tone="run"] { color: var(--boto-color-success); }
-.task .status[data-tone="wait"] { color: var(--boto-color-primary); }
-.task .status[data-tone="muted"], .task .status[data-tone="done"] { color: var(--boto-color-muted-foreground); }
+.task .status { font-size: inherit; }
 .task .task-body { display: flex; flex: 1; min-height: 0; }
 .task .tl { display: flex; flex-direction: column; width: var(--task-split); min-width: 0; }
 .task .tl-scroll { overflow: auto; flex: 1; min-height: 0; }

@@ -16,10 +16,6 @@
 .home button:focus-visible { outline: var(--boto-size-focus-ring) solid var(--boto-color-ring); outline-offset: var(--boto-size-focus-offset); }
 .home .home-meta, .home time { font-size: var(--boto-font-size-xs); }
 .home time { white-space: nowrap; }
-.home .status { display: inline-flex; align-items: center; gap: var(--boto-space-1); font-size: var(--boto-font-size-xs); color: var(--boto-color-muted-foreground); }
-.home .status .od-icon { width: var(--boto-size-icon-status); height: var(--boto-size-icon-status); }
-.home .status[data-tone="run"] { color: var(--boto-color-success); }
-.home .status[data-tone="wait"] { color: var(--boto-color-primary); }
 .home .pc-card { padding: var(--boto-space-5); }
 .home .pc-card .card-title { margin-bottom: var(--boto-space-4); }
 .home .machine-name { font-family: var(--boto-font-mono); }

@@ -1,6 +1,5 @@
 .routines .page-inner > section + section { margin-top: var(--boto-space-8); }
-.routines .status { display: inline-flex; align-items: center; gap: var(--boto-space-1); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
-.routines .status .od-icon { width: var(--boto-size-icon-status); height: var(--boto-size-icon-status); }
+.routines .status { font-size: var(--boto-font-size-sm); }
 .routines .rt-list { display: grid; gap: var(--boto-space-3); list-style: none; padding: 0; margin: 0; }
 .routines .rt-row { display: flex; align-items: center; gap: var(--boto-space-3); padding: var(--boto-space-3) var(--boto-space-4); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-md); background: var(--boto-color-card); }
 .routines .rt-main { flex: 1; min-width: 0; display: grid; gap: var(--boto-space-1); }

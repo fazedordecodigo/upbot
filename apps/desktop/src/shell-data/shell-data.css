@@ -2,9 +2,6 @@
 .sb-group-title, .sb-history-message { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); padding: var(--boto-space-2) var(--boto-space-3); }
 .sb-group-title { font-weight: var(--boto-font-weight-medium); }
 .sb-task { width: 100%; min-width: 0; }
-.status { display: inline-flex; flex-shrink: 0; color: var(--boto-color-muted-foreground); }
-.status[data-tone="run"] { color: var(--boto-color-success); }
-.status[data-tone="wait"] { color: var(--boto-color-primary); }
 .sb .sb-history { min-height: 0; }
 .sidebar > .sb, .sheet > .sb { min-width: 0; height: 100%; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
 .sidebar > .sb { height: calc(100dvh - var(--boto-space-8)); }

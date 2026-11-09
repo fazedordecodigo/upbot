@@ -28,6 +28,11 @@ img { max-width: 100%; }
 .btn-icon.btn-sm { width: var(--boto-size-control-sm); }
 .btn-pill { border-radius: var(--boto-radius-full); }
 .od-icon { width: var(--od-icon-size, var(--boto-space-4)); height: var(--od-icon-size, var(--boto-space-4)); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.status { display: inline-flex; align-items: center; flex-shrink: 0; gap: var(--boto-space-1); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); }
+.status .od-icon { --od-icon-size: var(--boto-size-icon-status); }
+.status[data-tone="run"] { color: var(--boto-color-success); }
+.status[data-tone="wait"] { color: var(--boto-color-primary); }
+.status[data-tone="muted"], .status[data-tone="done"] { color: var(--boto-color-muted-foreground); }
 .card { border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-lg); background: var(--boto-color-card); }
 .card-header, .card-content, .card-footer { padding: var(--boto-space-5); }
 .card-header { display: grid; gap: var(--boto-space-2); }

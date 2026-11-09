@@ -11,10 +11,7 @@
 .ag-card { display: flex; flex-direction: column; gap: var(--boto-space-4); padding: var(--boto-space-5); min-width: 0; }
 .ag-card header, .ap-head-main { display: grid; gap: var(--boto-space-3); min-width: 0; }
 .ag-card-title { font-size: var(--boto-font-size-xl); }
-.agents-view .status, .agent-panel .status { display: inline-flex; align-items: center; gap: var(--boto-space-1); width: fit-content; border-radius: var(--boto-radius-full); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); }
-.agents-view .status .od-icon, .agent-panel .status .od-icon { --od-icon-size: calc(var(--boto-space-3) + var(--boto-space-1) / 4); }
-.agents-view .status[data-tone="run"], .agent-panel .status[data-tone="run"] { color: var(--boto-color-success); }
-.agents-view .status[data-tone="wait"], .agent-panel .status[data-tone="wait"] { color: var(--boto-color-primary); }
+.agents-view .status, .agent-panel .status { width: fit-content; border-radius: var(--boto-radius-full); }
 .ag-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--boto-space-2); margin: 0; }
 .ag-facts dd { margin: 0; font-size: var(--boto-font-size-sm); overflow-wrap: anywhere; }
 .ag-tasks { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--boto-space-2); font-size: var(--boto-font-size-sm); }
