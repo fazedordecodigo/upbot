@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { providersCatalogMethods, providersCreateParams } from "./providers-catalog";
+
+export * from "./providers-catalog";
 
 export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   devin: "~/.config/devin/config.json",
@@ -880,8 +883,12 @@ export const ChannelsReassignParams = z
 // ---- Typed method map ----
 
 export const methodMap = {
+  ...providersCatalogMethods,
   "agents.list": { params: AgentsListParams, result: AgentsListResult },
-  "agents.create": { params: AgentsCreateParams, result: AgentsCreateResult },
+  "agents.create": {
+    params: providersCreateParams(AgentsCreateParams),
+    result: AgentsCreateResult,
+  },
   "agents.update": { params: AgentsUpdateParams, result: AgentsUpdateResult },
   "agents.delete": { params: AgentsDeleteParams, result: AgentsDeleteResult },
   "agents.restore": { params: AgentsRestoreParams, result: AgentsRestoreResult },
@@ -1273,6 +1280,7 @@ export type MethodParsedParams<M extends MethodName> = z.infer<(typeof methodMap
 export type MethodResult<M extends MethodName> = z.infer<(typeof methodMap)[M]["result"]>;
 
 export type DaemonEventMap = {
+  "providers.changed": Record<string, never>;
   "agent.created": Agent;
   "agent.updated": Agent;
   "agent.deleted": { id: string };

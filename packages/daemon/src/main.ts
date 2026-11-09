@@ -23,6 +23,7 @@ import { MemoryStore } from "./memories";
 import { MobileServer } from "./mobile";
 import { PageLibrary } from "./pages";
 import { botoContext, seedDefaultBot } from "./persona";
+import { ProvidersService } from "./providers-service";
 import { readyLine } from "./ready";
 import { VmCredentials } from "./remote/credentials";
 import { HostStore } from "./remote/hosts";
@@ -253,6 +254,7 @@ async function main() {
     {
       vault,
       vmCredentials,
+      providers: new ProvidersService(db, vmCredentials, broadcast),
       computer,
       voice,
       gateways,

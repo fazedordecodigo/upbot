@@ -16,6 +16,7 @@ import type { MemoryStore } from "./memories";
 import type { MobileServer } from "./mobile";
 import type { PageLibrary } from "./pages";
 import { ProviderError } from "./providers/types";
+import type { ProvidersService } from "./providers-service";
 import type { VmCredentials } from "./remote/credentials";
 import type { HostStore } from "./remote/hosts";
 import type { RoutineService } from "./routines";
@@ -75,6 +76,7 @@ export class Rpc {
     private extras: {
       vault: Vault;
       vmCredentials: VmCredentials;
+      providers: ProvidersService;
       computer: ComputerUse;
       voice: Voice;
       gateways: GatewayService;
@@ -156,10 +158,36 @@ export class Rpc {
 
   private async dispatch(method: MethodName, params: unknown): Promise<unknown> {
     switch (method) {
+      case "providers.list":
+        return this.extras.providers.list();
+      case "providers.scan":
+        return this.extras.providers.scan();
+      case "providers.login":
+        return this.extras.providers.login((params as MethodParsedParams<typeof method>).provider);
+      case "providers.setApiKey": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.providers.setApiKey(p.provider, p.value);
+      }
+      case "providers.deleteApiKey":
+        return this.extras.providers.setApiKey(
+          (params as MethodParsedParams<typeof method>).provider,
+        );
+      case "providers.getDefault":
+        return this.extras.providers.getDefault();
+      case "providers.setDefault":
+        return this.extras.providers.setDefault(
+          (params as MethodParsedParams<typeof method>).provider,
+        );
       case "agents.list":
         return this.agents.list();
       case "agents.create": {
-        const agent = this.agents.create(params as MethodParsedParams<typeof method>);
+        const p = params as MethodParsedParams<typeof method>;
+        const provider = p.provider ?? this.extras.providers.getDefault().provider;
+        if (!provider) throw new RpcError("bad_request", "provider is required");
+        const agent = this.agents.create({
+          ...p,
+          provider,
+        });
         queueMicrotask(() => this.broadcast("agent.created", agent));
         return agent;
       }
