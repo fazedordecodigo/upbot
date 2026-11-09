@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, Machine, RemoteHost } from "@boto/protocol";
 import { DaemonClient, startDaemon, stopDaemon, tmp } from "./helpers";
@@ -17,6 +17,7 @@ describe("desktop.* (daemon e2e with a fake host desktop stream)", () => {
   let c2: DaemonClient;
   let sshHome: string;
   let desktopLog: string;
+  let exitFile: string;
   let a1: Agent;
   let a2: Agent;
   let host: RemoteHost;
@@ -35,11 +36,13 @@ describe("desktop.* (daemon e2e with a fake host desktop stream)", () => {
   beforeAll(async () => {
     sshHome = tmp("desk-home-");
     desktopLog = join(tmp("desk-log-"), "desktop.jsonl");
+    exitFile = join(tmp("desk-exit-"), "vm-gone");
     daemon = await startDaemon(tmp("desk-data-"), tmp("desk-agents-"), TOKEN, {
       BOTO_SSH_COMMAND: JSON.stringify(["bun", FAKE_SSH]),
       BOTO_DESKTOP_COMMAND: JSON.stringify(["bun", FAKE_DESKTOP]),
       FAKE_SSH_HOME: sshHome,
       FAKE_DESKTOP_LOG: desktopLog,
+      FAKE_DESKTOP_EXIT_FILE: exitFile,
     });
     c = await DaemonClient.connect(daemon.port, TOKEN);
     c2 = await DaemonClient.connect(daemon.port, TOKEN);
@@ -176,5 +179,54 @@ describe("desktop.* (daemon e2e with a fake host desktop stream)", () => {
     await expect(c.request("desktop.subscribe", { machineId: "nope" })).rejects.toThrow(
       /machine not found/,
     );
+  });
+
+  test("a stream that ends under a viewer comes back once the guest is reachable again", async () => {
+    // a new turn replaces the agent's microVM: the host desktop stream ends while the task
+    // view is still subscribed, so the daemon must attach to the new guest on its own
+    const viewer = await DaemonClient.connect(daemon.port, TOKEN);
+    try {
+      await viewer.request("desktop.subscribe", { machineId: m1.id });
+      await viewer.waitForEventWhere(
+        "desktop.machine",
+        (d) => d.id === m1.id && d.status === "ready",
+        15000,
+      );
+      writeFileSync(exitFile, "");
+      const gone = await viewer.waitForEventWhere(
+        "desktop.machine",
+        (d) => d.id === m1.id && d.status === "stopped",
+        10000,
+      );
+      expect(gone.status).toBe("stopped");
+      rmSync(exitFile, { force: true });
+      const back = await viewer.waitForEventWhere(
+        "desktop.machine",
+        (d) => d.id === m1.id && d.status === "ready",
+        15000,
+      );
+      expect(back).toMatchObject({ id: m1.id, status: "ready", controller: "agent" });
+      await viewer.waitForEventWhere("desktop.frame", (d) => d.machineId === m1.id, 15000);
+      expect(logEntries().filter((e) => e.event === "vm_gone").length).toBe(1);
+      // without a viewer or a running agent the stream stays closed
+      await viewer.request("desktop.unsubscribe", { machineId: m1.id });
+      await viewer.waitForEventWhere(
+        "desktop.machine",
+        (d) => d.id === m1.id && d.status === "stopped",
+        10000,
+      );
+      const mark = viewer.events.length;
+      await Bun.sleep(6000);
+      expect(
+        viewer.events
+          .slice(mark)
+          .filter((e) => e.event === "desktop.machine" && (e.data as Machine).status !== "stopped"),
+      ).toEqual([]);
+      expect(
+        (await viewer.request("desktop.machines", {})).find((m) => m.id === m1.id)?.status,
+      ).toBe("stopped");
+    } finally {
+      viewer.close();
+    }
   });
 });

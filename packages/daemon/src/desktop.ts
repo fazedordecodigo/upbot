@@ -59,6 +59,7 @@ type MachineState = {
   ready: boolean;
   lastFrameSentAt: number;
   lastSpawnAt: number;
+  reconnect: ReturnType<typeof setTimeout> | null;
   pending: Map<string, { resolve: (text: string) => void; reject: (e: Error) => void }>;
   thumbWaiters: ((t: DesktopThumbnail | null) => void)[];
   agentActive: boolean;
@@ -170,6 +171,7 @@ export class DesktopService {
       ready: false,
       lastFrameSentAt: 0,
       lastSpawnAt: 0,
+      reconnect: null,
       pending: new Map(),
       thumbWaiters: [],
       agentActive: false,
@@ -432,7 +434,11 @@ export class DesktopService {
 
   private ensure(st: MachineState) {
     if (st.child) return;
-    if (Date.now() - st.lastSpawnAt < RECONNECT_BACKOFF_MS) return;
+    if (Date.now() - st.lastSpawnAt < RECONNECT_BACKOFF_MS) {
+      this.scheduleReconnect(st);
+      return;
+    }
+    this.clearReconnect(st);
     const cmd = this.command(st);
     if (!cmd) {
       st.status = "error";
@@ -486,11 +492,36 @@ export class DesktopService {
     child.on("close", (code) => {
       if (st.child !== child) return;
       st.child = null;
+      const wasLive = st.ready;
       this.ended(st, code);
+      // A live stream ended under a viewer (the microVM was replaced by a new turn or the SSH
+      // session dropped), or the agent is still working: come back once the host has a
+      // reachable guest again. A reconnect that never found a guest stops here.
+      if (this.wanted(st, wasLive)) this.scheduleReconnect(st);
     });
   }
 
+  private wanted(st: MachineState, wasLive = true): boolean {
+    return st.agentActive || (wasLive && [...st.subscribers].some((c) => this.connections.has(c)));
+  }
+
+  private scheduleReconnect(st: MachineState) {
+    if (st.reconnect) return;
+    const wait = Math.max(0, RECONNECT_BACKOFF_MS - (Date.now() - st.lastSpawnAt));
+    st.reconnect = setTimeout(() => {
+      st.reconnect = null;
+      if (!st.child && this.wanted(st)) this.ensure(st);
+    }, wait);
+  }
+
+  private clearReconnect(st: MachineState) {
+    if (!st.reconnect) return;
+    clearTimeout(st.reconnect);
+    st.reconnect = null;
+  }
+
   private closeChild(st: MachineState) {
+    this.clearReconnect(st);
     const child = st.child;
     if (!child) return;
     st.child = null;
