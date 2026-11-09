@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -95,6 +96,49 @@ test("plugin removal calls provenance-safe daemon uninstall and preserves an ind
     await isolated.close();
     await rpc.request("marketplace.uninstall", { source: plugin.source, id: plugin.id });
     await rpc.request("marketplace.uninstall", { source: shared.source, id: shared.id });
+  }
+}, 30_000);
+
+test("legacy marketplace removal reports an ownership error without deleting user content or claiming success", async () => {
+  const skill = (await rpc.request("marketplace.list", { kind: "skill" })).items[0]!;
+  await rpc.request("skills.save", {
+    name: skill.name,
+    description: "Legacy user skill",
+    body: "preserve legacy content",
+  });
+  const db = new Database(join(state, "data", "boto.db"));
+  db.query("DELETE FROM marketplace_artifacts WHERE source = ? AND item_id = ?").run(
+    skill.source,
+    skill.id,
+  );
+  db.query("DELETE FROM marketplace_installations WHERE source = ? AND item_id = ?").run(
+    skill.source,
+    skill.id,
+  );
+  db.close();
+  const isolated = await browser.newPage();
+  isolated.setDefaultTimeout(5000);
+  try {
+    await isolated.goto(`${base}/#port=${daemon.port}&token=${token}`);
+    await isolated.locator('[data-nav="marketplace"]').click();
+    await isolated.locator("#mk-tab-skills").click();
+    await isolated.locator("#mk-grid .mk-card").filter({ hasText: skill.name }).click();
+    await isolated
+      .locator("#mk-panel")
+      .getByRole("button", { name: "Remover", exact: true })
+      .click();
+    await isolated.locator("#confirm-ok").click();
+    await isolated.locator('#mk-panel [role="alert"]').waitFor();
+    expect(await isolated.locator("#mk-panel .mk-installed").count()).toBe(1);
+    expect((await rpc.request("skills.get", { name: skill.name })).body).toContain(
+      "preserve legacy content",
+    );
+    expect(
+      await rpc.request("marketplace.get", { source: skill.source, id: skill.id }),
+    ).toMatchObject({ installed: true });
+  } finally {
+    await isolated.close();
+    await rpc.request("skills.delete", { name: skill.name });
   }
 }, 30_000);
 
