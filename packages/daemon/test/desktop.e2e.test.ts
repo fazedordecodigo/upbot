@@ -188,6 +188,42 @@ describe("desktop.* (daemon e2e with a fake host desktop stream)", () => {
     );
   });
 
+  test("placement RPC reconnects viewers on a different host and closes local transfers", async () => {
+    const created = await c.request("hosts.create", {
+      name: "second",
+      target: "bob@second.example.com",
+    });
+    await c.request("hosts.install", { id: created.id });
+    copyFileSync(READY_HELPER, join(sshHome, ".boto/bin/boto-host.ts"));
+    await c.request("hosts.check", { id: created.id });
+    const machine = (await c.request("desktop.machines", {})).find((m) => m.agentId === a2.id)!;
+    await c.request("desktop.subscribe", { machineId: machine.id });
+    await c.request("desktop.thumbnail", { machineId: machine.id });
+    const mark = c.events.length;
+    await c.request("placements.set", {
+      agentId: a2.id,
+      hostId: created.id,
+      isolation: "firecracker",
+    });
+    expect(
+      c.events
+        .slice(mark)
+        .some(
+          (event) =>
+            event.event === "desktop.machine" && (event.data as Machine).hostId === created.id,
+        ),
+    ).toBe(true);
+    expect((await c.request("desktop.machines", {})).find((m) => m.id === machine.id)?.hostId).toBe(
+      created.id,
+    );
+    await c.request("desktop.thumbnail", { machineId: machine.id });
+    await c.request("placements.set", { agentId: a2.id, hostId: null, isolation: "none" });
+    expect((await c.request("desktop.machines", {})).some((m) => m.id === machine.id)).toBe(false);
+    await expect(c.request("desktop.thumbnail", { machineId: machine.id })).rejects.toMatchObject({
+      code: "not_found",
+    });
+  });
+
   test("a stream that ends under a viewer comes back once the guest is reachable again", async () => {
     // a new turn replaces the agent's microVM: the host desktop stream ends while the task
     // view is still subscribed, so the daemon must attach to the new guest on its own

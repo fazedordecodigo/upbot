@@ -424,6 +424,7 @@ export class Rpc {
         const p = params as MethodParsedParams<typeof method>;
         if (!this.agents.get(p.agentId)) throw new RpcError("not_found", "agent not found");
         const placed = asBadRequest(() => this.extras.hosts.setPlacement(p));
+        this.extras.desktop.placementChanged(p.agentId);
         await this.runtimes.restartSession(p.agentId);
         queueMicrotask(() => this.broadcast("placement.updated", placed));
         return placed;
