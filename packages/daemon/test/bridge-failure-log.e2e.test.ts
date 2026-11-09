@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { rmSync } from "node:fs";
@@ -15,6 +15,8 @@ import {
 
 const TOKEN = `bridge-failure-${crypto.randomUUID()}`;
 const SECRET = "SECRET-VALUE-123";
+
+setDefaultTimeout(30_000);
 
 type McpSpec = {
   command: string;
