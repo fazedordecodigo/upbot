@@ -10,9 +10,10 @@ import {
 } from "@boto/protocol";
 import { getSetting, setSetting } from "./db/settings";
 import { resolveCommand, spawnEnv } from "./env/login-path";
-import { spawnChild } from "./env/spawn";
+import { spawnChild, waitForChildSpawn } from "./env/spawn";
 import { envOverride } from "./env/vars";
 import { commandFor, LOGIN_COMMANDS } from "./providers/process";
+import { loginTerminalCommand } from "./providers/terminal";
 import type { VmCredentials } from "./remote/credentials";
 import type { Broadcast } from "./rpc";
 import { RpcError } from "./runtime/agent-runtime";
@@ -154,7 +155,12 @@ export class ProvidersService {
       throw new RpcError("bad_request", "provider login unavailable");
     this.running.add(provider);
     try {
-      const child = spawnChild(command[0], command.slice(1), { env: spawnEnv(), stdio: "ignore" });
+      const override = envOverride("BOTO_PROVIDER_TERMINAL_COMMAND");
+      const terminal = override ? [...override, ...command] : loginTerminalCommand(command);
+      const child = spawnChild(terminal[0]!, terminal.slice(1), {
+        env: spawnEnv(),
+        stdio: "ignore",
+      });
       let finished = false;
       const finish = () => {
         if (finished) return;
@@ -164,6 +170,7 @@ export class ProvidersService {
       };
       child.once("error", finish);
       child.once("close", finish);
+      await waitForChildSpawn(child);
       child.unref();
     } catch {
       this.running.delete(provider);

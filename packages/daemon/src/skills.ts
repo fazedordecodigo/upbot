@@ -5,8 +5,10 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  rmdirSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -144,6 +146,18 @@ export class SkillLibrary {
     const slug = skillSlug(name);
     if (!NAME_RE.test(slug) || !existsSync(this.file(slug))) return false;
     rmSync(join(this.root, slug), { recursive: true, force: true });
+    return true;
+  }
+
+  removeUnmodified(name: string, raw: string): boolean {
+    const current = this.get(name);
+    if (!current || current.raw !== raw) return false;
+    unlinkSync(this.file(current.name));
+    try {
+      rmdirSync(join(this.root, current.name));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOTEMPTY") throw error;
+    }
     return true;
   }
 

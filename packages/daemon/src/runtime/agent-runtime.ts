@@ -412,11 +412,12 @@ export class AgentRuntime {
     this.sessionStarting ??= (async () => {
       const scope = this.sessionScope;
       const stored = this.opts.ephemeral ? null : this.store.getAgentSession(this.agent.id);
-      const resumeSessionId =
-        stored && stored.provider === this.agent.provider && stored.taskId === scope
-          ? stored.sessionId
-          : scope
-            ? (this.tasks()?.get(scope)?.sessionId ?? null)
+      const resumeSessionId = this.opts.ephemeral
+        ? null
+        : scope
+          ? (this.tasks()?.get(scope)?.sessionId ?? null)
+          : stored?.provider === this.agent.provider && stored.taskId === null
+            ? stored.sessionId
             : null;
       const driver = getDriver(this.agent.provider);
       const tag = {};
@@ -431,8 +432,8 @@ export class AgentRuntime {
       });
       this.sessionTag = tag;
       if (!this.opts.ephemeral) {
-        this.store.upsertAgentSession(this.agent.id, this.agent.provider, session.sessionId, scope);
         if (scope) this.tasks()?.setSession(scope, session.sessionId);
+        else this.store.upsertAgentSession(this.agent.id, this.agent.provider, session.sessionId);
       }
       return session;
     })();
@@ -672,8 +673,8 @@ export class AgentRuntime {
       this.capture = null;
       if (!summary) throw new Error("the agent returned an empty summary");
       this.dropSession();
-      this.store.clearAgentSession(this.agent.id);
       if (scope) this.tasks()?.setSession(scope, null);
+      else this.store.clearAgentSession(this.agent.id);
       this.broadcast(
         "item.updated",
         this.store.updateItemData(item.id, { reason, status: "completed", summary }),
@@ -699,9 +700,14 @@ export class AgentRuntime {
     if (this.turn || this.compacting || this.sessionStarting || this.disposing) {
       throw new RpcError("busy", "the agent is busy");
     }
+    const scope = this.sessionScope;
     await this.dispose();
-    this.store.clearAgentSession(this.agent.id);
-    this.broadcast("item.created", this.store.createItem(this.agent.id, null, "session_reset", {}));
+    if (scope) this.tasks()?.setSession(scope, null);
+    else this.store.clearAgentSession(this.agent.id);
+    this.broadcast(
+      "item.created",
+      this.store.createItem(this.agent.id, null, "session_reset", {}, scope),
+    );
     this.broadcast("agent.usage", this.store.clearContextUsage(this.agent.id));
     this.drain();
   }

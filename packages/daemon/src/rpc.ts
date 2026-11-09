@@ -465,6 +465,17 @@ export class Rpc {
         }
         return r;
       }
+      case "marketplace.uninstall": {
+        const p = params as MethodParsedParams<typeof method>;
+        const result = this.extras.marketplace.uninstall(p.source, p.id);
+        for (const id of result.agents) {
+          this.queue.removeAllForAgent(id);
+          this.runtimes.agentDeleted(id);
+          queueMicrotask(() => this.broadcast("agent.deleted", { id }));
+        }
+        this.broadcast("skills.changed", {});
+        return result;
+      }
       case "marketplace.setSources":
         this.extras.marketplace.setSources((params as MethodParsedParams<typeof method>).urls);
         return { ok: true };
