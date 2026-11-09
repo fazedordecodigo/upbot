@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
+import type { MethodResult } from "@boto/protocol";
 import { type Browser, chromium, type Page } from "playwright-core";
 
 const root = join(import.meta.dir, "../../..");
@@ -247,13 +248,31 @@ test("failed initial refresh recovers on reconnect and reloads real counts", asy
                   ? [{ id: "real-agent", name: "Real" }]
                   : request.method === "agents.statuses"
                     ? {}
-                    : [],
+                    : request.method === "profile.get"
+                      ? ({
+                          name: "",
+                          about: "",
+                          onboardingCompletedAt: null,
+                          defaults: {
+                            private: false,
+                            requireApproval: true,
+                            delegationMode: "now",
+                            toolMode: "both",
+                          },
+                          theme: null,
+                          sidebarWidth: null,
+                        } satisfies MethodResult<"profile.get">)
+                      : request.method === "tasks.list"
+                        ? ({ items: [], nextCursor: null } satisfies MethodResult<"tasks.list">)
+                        : [],
             }),
           );
       },
     },
   });
   const p = await browser.newPage();
+  const pageErrors: string[] = [];
+  p.on("pageerror", (error) => pageErrors.push(error.message));
   try {
     await p.goto(`${base}/#port=${server.port}&token=test`);
     await p.locator("#home-title").waitFor();
@@ -262,6 +281,8 @@ test("failed initial refresh recovers on reconnect and reloads real counts", asy
     socket?.terminate();
     await until(async () => (await p.locator("[data-agent-count]").innerText()) === "1");
     expect(await p.locator(".sb-history").innerText()).toBe("");
+    await p.getByText("Nada em andamento agora.", { exact: true }).waitFor();
+    expect(pageErrors).toEqual([]);
   } finally {
     await p.close();
     server.stop(true);
