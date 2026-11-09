@@ -1,5 +1,19 @@
 import { z } from "zod";
 import {
+  AgentCockpitFields,
+  AgentCockpitParams,
+  type AgentsCockpitEventMap,
+  agentsCockpitMethods,
+} from "./agents-cockpit";
+import { MemoryUsage, type Profile, profileMethods } from "./profile";
+import {
+  AppSecretSpec,
+  marketplaceMethods,
+  providersCatalogMethods,
+  providersCreateParams,
+  toolPermissionMethods,
+} from "./providers-catalog";
+import {
   Task,
   TaskDelivery,
   TasksCreateParams,
@@ -14,34 +28,15 @@ import {
   TasksRenameParams,
   TasksSearchParams,
 } from "./tasks";
-
-export * from "./tasks";
 import { ToolMode, templateMethods } from "./templates";
-
-export * from "./templates";
-import { MemoryUsage, type Profile, profileMethods } from "./profile";
-
-export * from "./profile";
 import { type DesktopEventMap, desktopMethodMap } from "./vm-desktop";
 
-export * from "./vm-desktop";
-import {
-  AgentCockpitFields,
-  AgentCockpitParams,
-  type AgentsCockpitEventMap,
-  agentsCockpitMethods,
-} from "./agents-cockpit";
-
 export * from "./agents-cockpit";
-import {
-  AppSecretSpec,
-  marketplaceMethods,
-  providersCatalogMethods,
-  providersCreateParams,
-  toolPermissionMethods,
-} from "./providers-catalog";
-
+export * from "./profile";
 export * from "./providers-catalog";
+export * from "./tasks";
+export * from "./templates";
+export * from "./vm-desktop";
 
 export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   devin: "~/.config/devin/config.json",

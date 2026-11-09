@@ -315,6 +315,7 @@ export const migrations: string[] = [
   CREATE INDEX queue_task ON queue(task_id, status);
   CREATE INDEX turns_task ON turns(task_id, started_at);
   CREATE INDEX items_task_seq ON items(task_id, seq)`,
+  // 24: built-in and user templates
   `CREATE TABLE templates (
     id TEXT PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
     prompt TEXT NOT NULL, icon TEXT NOT NULL, tool_mode TEXT NOT NULL,
@@ -328,13 +329,14 @@ export const migrations: string[] = [
   ('research', 'task', 'Comparar planos de hospedagem e recomendar um', 'Pesquisa as fontes oficiais e entrega um relatório com prós e contras.', 'Comparar planos de hospedagem e recomendar um', 'globe', 'browser', 0, NULL, 1, 0, 0),
   ('sales', 'routine', 'Toda segunda, consolidar as vendas da semana numa planilha', 'Baixa os relatórios do painel, junta os dados e salva a planilha no Drive.', 'Toda segunda, consolidar as vendas da semana numa planilha', 'sheet', 'both', 0, 'weekly mon 09:00', 1, 0, 0),
   ('inbox', 'routine', 'Todo dia, resumir o que chegou na minha caixa de entrada', 'Separa o que pede resposta do que pode esperar e escreve um resumo curto.', 'Todo dia, resumir o que chegou na minha caixa de entrada', 'repeat', 'both', 0, 'daily 08:00', 1, 0, 0)`,
+  // 25: routine task defaults and one-shot scheduling
   `ALTER TABLE routines ADD COLUMN run_at INTEGER;
   ALTER TABLE routines ADD COLUMN tool_mode TEXT NOT NULL DEFAULT 'both';
   ALTER TABLE routines ADD COLUMN require_approval INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE routines ADD COLUMN private INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE routines ADD COLUMN template_id TEXT;
   ALTER TABLE routine_runs ADD COLUMN task_id TEXT`,
-  // 23: user-scope profile memory and prompt memory provenance
+  // 26: user-scope profile memory and prompt memory provenance
   `CREATE TABLE memories_next (
     id TEXT PRIMARY KEY,
     agent_id TEXT REFERENCES agents(id),
@@ -358,7 +360,7 @@ export const migrations: string[] = [
     text TEXT NOT NULL,
     PRIMARY KEY(turn_id, memory_id, kind)
   )`,
-  // 23: deterministic machine names (`codigo-01`) for agents placed in a Firecracker microVM
+  // 27: deterministic machine names (`codigo-01`) for agents placed in a Firecracker microVM
   `CREATE TABLE machines (
     id TEXT PRIMARY KEY,
     agent_id TEXT NOT NULL UNIQUE,
@@ -366,7 +368,7 @@ export const migrations: string[] = [
     host_id TEXT,
     created_at INTEGER NOT NULL
   )`,
-  // 23: agents cockpit — role ("O que ele faz"), per-agent approval policy, parallel instances
+  // 28: agents cockpit — role ("O que ele faz"), per-agent approval policy, parallel instances
   `ALTER TABLE agents ADD COLUMN role TEXT NOT NULL DEFAULT '';
   ALTER TABLE agents ADD COLUMN require_approval INTEGER NOT NULL DEFAULT 1;
   ALTER TABLE agents ADD COLUMN max_instances INTEGER`,

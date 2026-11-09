@@ -431,8 +431,8 @@ export class AgentRuntime {
       });
       this.sessionTag = tag;
       if (!this.opts.ephemeral) {
-      this.store.upsertAgentSession(this.agent.id, this.agent.provider, session.sessionId, scope);
-      if (scope) this.tasks()?.setSession(scope, session.sessionId);
+        this.store.upsertAgentSession(this.agent.id, this.agent.provider, session.sessionId, scope);
+        if (scope) this.tasks()?.setSession(scope, session.sessionId);
       }
       return session;
     })();

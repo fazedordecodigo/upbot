@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ToolMode } from "./templates";
 
 // ---- Tasks: a first-class unit of work over an agent session ----
 
@@ -8,7 +9,7 @@ export type TaskSituation = z.infer<typeof TaskSituation>;
 export const TaskOutcome = z.enum(["completed", "stopped", "failed"]);
 export type TaskOutcome = z.infer<typeof TaskOutcome>;
 /** Where the agent may work: both, browser only or terminal (code, scripts, files) only. */
-export const TaskToolMode = z.enum(["both", "browser", "terminal"]);
+export const TaskToolMode = ToolMode;
 export type TaskToolMode = z.infer<typeof TaskToolMode>;
 
 export const Task = z.object({
