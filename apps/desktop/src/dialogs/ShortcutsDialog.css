@@ -1,0 +1,13 @@
+#shortcuts { width: min(calc(100% - var(--boto-space-8)), var(--boto-size-dialog)); max-width: none; padding: var(--boto-space-6); box-shadow: var(--boto-shadow-lg); }
+#shortcuts .dialog-header { display: grid; gap: var(--boto-space-2); }
+.shortcut-list { display: grid; margin: 0; }
+.shortcut-row { gap: var(--boto-space-5); padding-block: var(--boto-space-4); border-bottom: 1px solid var(--boto-color-border); }
+.shortcut-row:first-child { padding-top: 0; }
+.shortcut-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.shortcut-row dt { overflow-wrap: anywhere; }
+.shortcut-row dd { margin: 0; flex: none; }
+.shortcut-row .kbd { display: inline-flex; align-items: center; min-height: var(--boto-space-6); padding: var(--boto-space-1) var(--boto-space-2); background: var(--boto-color-background); }
+@media (max-width: 479px) {
+  .shortcut-row { gap: var(--boto-space-3); }
+  #shortcuts .dialog-footer .btn { min-height: var(--boto-size-target); }
+}
