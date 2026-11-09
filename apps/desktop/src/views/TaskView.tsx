@@ -405,6 +405,9 @@ function TaskSurface() {
                       const decidedAt = a.resolvedAt ?? a.interruptedAt;
                       const described =
                         a.kind === "tool" ? describeApproval(a, data.agentName) : null;
+                      // the daemon titles takeover requests in English for the agent; the
+                      // card speaks to the user and hands the machine over right here
+                      const handover = a.kind === "takeover";
                       return (
                         <article
                           className="task-card"
@@ -412,8 +415,10 @@ function TaskSurface() {
                           key={a.id}
                         >
                           <h3>
-                            <Icon name="shield-check" />
-                            {described?.description ?? a.title}
+                            <Icon name={handover ? "mouse-pointer" : "shield-check"} />
+                            {handover
+                              ? `${data.agentName} precisa que você assuma o controle.`
+                              : (described?.description ?? a.title)}
                           </h3>
                           {described ? (
                             <>
@@ -431,21 +436,34 @@ function TaskSurface() {
                           )}
                           {a.status === "pending" ? (
                             <div className="task-actions">
-                              <button
-                                type="button"
-                                className="btn btn-primary"
-                                disabled={busy}
-                                onClick={() =>
-                                  void act(() =>
-                                    client.request("approvals.respond", {
-                                      id: a.id,
-                                      decision: "approve",
-                                    }),
-                                  )
-                                }
-                              >
-                                Aprovar
-                              </button>
+                              {handover && machine && !takeoverReason ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void act(session.owned ? session.release : session.takeover)
+                                  }
+                                >
+                                  {takeoverLabel}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void act(() =>
+                                      client.request("approvals.respond", {
+                                        id: a.id,
+                                        decision: "approve",
+                                      }),
+                                    )
+                                  }
+                                >
+                                  {handover ? "Marcar como concluída" : "Aprovar"}
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className="btn btn-outline"

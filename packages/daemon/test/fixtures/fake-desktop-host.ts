@@ -3,8 +3,9 @@
 // microVM. First stdin line = {agentId}. Emits tiny JPEG-looking frames at the requested
 // fps, a thumbnail every `thumbEveryMs`, refuses `input` unless the controller is the user
 // and `agent` unless it is the agent, and answers agent actions with cursor + done.
-// Every accepted input batch is appended to $FAKE_DESKTOP_LOG as JSON lines.
-import { appendFileSync, readFileSync } from "node:fs";
+// Every accepted input batch is appended to $FAKE_DESKTOP_LOG as JSON lines. While
+// $FAKE_DESKTOP_EXIT_FILE exists the stream ends like a guest whose microVM went away.
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 const FRAME = process.env.FAKE_DESKTOP_FRAME_FILE
@@ -39,6 +40,13 @@ rl.on("line", (raw) => {
       process.exit(1);
     }
     log({ agentId, event: "connected" });
+    const exitFile = process.env.FAKE_DESKTOP_EXIT_FILE;
+    if (exitFile)
+      setInterval(() => {
+        if (!existsSync(exitFile)) return;
+        log({ agentId, event: "vm_gone" });
+        process.exit(0);
+      }, 50).unref();
     setTimeout(
       () => send({ type: "ready", width: 1280, height: 800, name: `fake-${agentId}` }),
       20,
