@@ -323,7 +323,7 @@ describe("tasks e2e", () => {
       const prompts = readLog(stateDir).filter((l) => l.method === "session/prompt");
       const text = JSON.stringify(prompts.at(-1)?.params);
       expect(text).toContain("<task_context>");
-      expect(text).toContain(join(a.workspacePath, "tasks", task.id));
+      expect(text).toContain(JSON.stringify(join(a.workspacePath, "tasks", task.id)).slice(1, -1));
 
       const list = await c.request("tasks.list", { agentId: a.id });
       expect(list.items.map((t) => t.id)).toContain(task.id);

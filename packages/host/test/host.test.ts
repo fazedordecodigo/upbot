@@ -460,41 +460,44 @@ describe("boto-host", () => {
 });
 
 describe("boto-host desktop", () => {
-  test("moves the pointer without --sync so a move to the current spot cannot stall the stream", () => {
-    const dir = mkdtempSync(join(tmpdir(), "boto-xdo-"));
-    try {
-      const log = join(dir, "calls.log");
-      const fake = join(dir, "xdotool");
-      writeFileSync(
-        fake,
-        `#!/bin/sh
+  test.skipIf(process.platform === "win32")(
+    "moves the pointer without --sync so a move to the current spot cannot stall the stream",
+    () => {
+      const dir = mkdtempSync(join(tmpdir(), "boto-xdo-"));
+      try {
+        const log = join(dir, "calls.log");
+        const fake = join(dir, "xdotool");
+        writeFileSync(
+          fake,
+          `#!/bin/sh
 echo "$@" >> "${log}"
 for arg in "$@"; do [ "$arg" = "--sync" ] && sleep 15; done
 exit 0
 `,
-      );
-      chmodSync(fake, 0o755);
-      const previous = process.env.PATH;
-      process.env.PATH = `${dir}:${previous ?? ""}`;
-      const started = Date.now();
-      try {
-        expect(
-          performDesktopEvents(":0", [
-            { type: "mouse_move", x: 640, y: 400 },
-            { type: "click", x: 640, y: 400, button: 3 },
-          ]),
-        ).toBe("click");
+        );
+        chmodSync(fake, 0o755);
+        const previous = process.env.PATH;
+        process.env.PATH = `${dir}:${previous ?? ""}`;
+        const started = Date.now();
+        try {
+          expect(
+            performDesktopEvents(":0", [
+              { type: "mouse_move", x: 640, y: 400 },
+              { type: "click", x: 640, y: 400, button: 3 },
+            ]),
+          ).toBe("click");
+        } finally {
+          process.env.PATH = previous;
+        }
+        expect(Date.now() - started).toBeLessThan(5000);
+        const calls = readFileSync(log, "utf8").trim().split("\n");
+        expect(calls).toEqual(["mousemove 640 400", "mousemove 640 400", "click 3"]);
+        expect(calls.some((c) => c.includes("--sync"))).toBe(false);
       } finally {
-        process.env.PATH = previous;
+        rmSync(dir, { recursive: true, force: true });
       }
-      expect(Date.now() - started).toBeLessThan(5000);
-      const calls = readFileSync(log, "utf8").trim().split("\n");
-      expect(calls).toEqual(["mousemove 640 400", "mousemove 640 400", "click 3"]);
-      expect(calls.some((c) => c.includes("--sync"))).toBe(false);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
+    },
+  );
   test("encodes one JSON message per line and decodes split or batched chunks", () => {
     const a = encodeDesktopMessage({ type: "frame", seq: 1, data: "AAAA" });
     const b = encodeDesktopMessage({ type: "cursor", x: 1, y: 2, kind: "move" });

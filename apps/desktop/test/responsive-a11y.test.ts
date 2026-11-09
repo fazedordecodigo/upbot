@@ -117,6 +117,7 @@ test("touch screens get 44px hit targets for switches and fields", async () => {
     await page.getByRole("button", { name: "Abrir menu" }).click();
     await page.locator("dialog.sheet").getByRole("button", { name: "Configurações" }).click();
     await page.getByRole("tab", { name: "Você e a memória" }).click();
+    await page.locator("#st-name").waitFor();
     const heights = await page
       .locator(".view:not([hidden]) :is(.input, .textarea, select)")
       .evaluateAll((items) =>

@@ -231,6 +231,7 @@ test(
 test(
   "template params prefill from templates.use and create nothing until Delegar",
   async () => {
+    await rpc.request("profile.update", { defaults: { private: false } });
     for (const schedule of [null, "daily 08:00", "every 2h"]) {
       const template = await rpc.request("templates.create", {
         kind: schedule ? "routine" : "task",

@@ -272,7 +272,7 @@ test("scheduled attachments, policy, profile defaults and template changes survi
     const prompt = readLog(state)
       .filter((entry) => entry.method === "session/prompt")
       .at(-1);
-    expect(JSON.stringify(prompt?.params)).toContain(attachment.path);
+    expect(JSON.stringify(prompt?.params)).toContain(JSON.stringify(attachment.path).slice(1, -1));
     expect(JSON.stringify(prompt?.params)).toContain("<routine");
     expect(JSON.stringify(prompt?.params)).toContain("<task_context>");
     await expect(

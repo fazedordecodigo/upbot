@@ -112,7 +112,9 @@ test("routine attachments survive restart and are reused with routine context on
       .map((entry) => JSON.stringify(entry.params));
     expect(
       prompts.some(
-        (prompt) => prompt.includes(saved.path) && prompt.includes('trigger=\\"schedule\\"'),
+        (prompt) =>
+          prompt.includes(JSON.stringify(saved.path).slice(1, -1)) &&
+          prompt.includes('trigger=\\"schedule\\"'),
       ),
     ).toBe(true);
     expect(readdirSync(join(agent.workspacePath, "attachments"))).toEqual(directories);
