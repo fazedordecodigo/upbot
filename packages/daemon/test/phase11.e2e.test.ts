@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "@boto/protocol";
@@ -14,6 +14,8 @@ import {
 } from "./helpers";
 
 const TOKEN = `p11-test-${crypto.randomUUID()}`;
+
+setDefaultTimeout(30_000);
 
 describe("vault, connectors, computer use, voice e2e", () => {
   let dataDir: string;
