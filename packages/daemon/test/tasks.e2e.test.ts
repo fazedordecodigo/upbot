@@ -639,29 +639,14 @@ describe("tasks e2e", () => {
             isError: true,
           });
         expect(await c.request("memories.list", { agentId: agent.id })).toEqual([]);
-        const sending = bridge("tools/call", {
+        const sending = await bridge("tools/call", {
           name: "send_message",
           arguments: { to: "Beta", text: "must not send" },
         });
-        const scopedApproval = await c.waitForEventWhere(
-          "task.event",
-          (event) =>
-            event.taskId === extra.id &&
-            event.event === "approval.updated" &&
-            (event.data as Approval).status === "pending",
-        );
-        const approval = scopedApproval.data as Approval;
-        expect((await c.request("approvals.list", {})).some((ap) => ap.id === approval.id)).toBe(
-          false,
-        );
-        expect(
-          (await c.request("approvals.list", { taskId: extra.id })).some(
-            (ap) => ap.id === approval.id,
-          ),
-        ).toBe(true);
-        expect(approval.tool).toBe("send_message");
-        await c.request("approvals.respond", { id: approval.id, decision: "deny" });
-        expect(await sending).toMatchObject({ isError: true });
+        expect(sending).toMatchObject({ isError: true });
+        expect(JSON.stringify(sending)).toContain("unambiguous private task context");
+        expect(await c.request("approvals.list", { agentId: agent.id })).toEqual([]);
+        expect(await c.request("approvals.list", { taskId: extra.id })).toEqual([]);
         await c.request("tasks.stop", { id: extra.id });
         await c.waitForEventWhere(
           "task.event",
