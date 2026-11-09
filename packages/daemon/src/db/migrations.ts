@@ -271,4 +271,12 @@ export const migrations: string[] = [
     interrupted_at INTEGER
   );
   CREATE INDEX approval_records_status ON approval_records(status, created_at)`,
+  // 23: deterministic machine names (`codigo-01`) for agents placed in a Firecracker microVM
+  `CREATE TABLE machines (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL UNIQUE,
+    host_id TEXT,
+    created_at INTEGER NOT NULL
+  )`,
 ];

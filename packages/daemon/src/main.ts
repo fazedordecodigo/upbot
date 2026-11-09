@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,6 +13,7 @@ import { ChatStore, QueueStore } from "./chat-store";
 import { ComputerUse } from "./computer";
 import { Connectors } from "./connectors";
 import { openDatabase } from "./db";
+import { DesktopService } from "./desktop";
 import { EmailService } from "./email";
 import { mergedPath } from "./env/login-path";
 import { GatewayService } from "./gateways";
@@ -114,6 +115,7 @@ let serverRef: { stop(): void } | null = null;
 let runtimesRef: { closeAll(): Promise<void> } | null = null;
 let gatewaysRef: { stopAll(): void } | null = null;
 let approvalsSuspendRef: { suspend(): void } | null = null;
+let desktopStopRef: { stop(): void } | null = null;
 
 function shutdown(code: number, reason: string) {
   if (shuttingDown) return;
@@ -121,6 +123,9 @@ function shutdown(code: number, reason: string) {
   log("shutting down", { reason, code });
   try {
     approvalsSuspendRef?.suspend();
+  } catch {}
+  try {
+    desktopStopRef?.stop();
   } catch {}
   try {
     gatewaysRef?.stopAll();
@@ -166,10 +171,14 @@ async function main() {
   mkdirSync(workspaceRoot, { recursive: true });
   const queue = new QueueStore(db);
   const hosts = new HostStore(db);
-  const sockets = new Set<import("bun").ServerWebSocket<unknown>>();
+  const sockets = new Set<import("bun").ServerWebSocket<{ connId: string }>>();
+  let desktopRef: DesktopService | null = null;
+  desktopStopRef = null;
 
   function broadcast(event: string, data: unknown) {
     const msg = JSON.stringify({ event, data });
+    if (event === "agent.status")
+      desktopRef?.onAgentStatus(data as { agentId: string; status: string });
     for (const ws of sockets) {
       try {
         ws.send(msg);
@@ -220,6 +229,11 @@ async function main() {
   const vmCredentials = new VmCredentials(vault);
   hosts.credentialEnv = (provider) => vmCredentials.env(provider);
   const computer = new ComputerUse(db);
+  const desktop = new DesktopService(db, hosts, (id) => store.get(id), broadcast, log);
+  desktopRef = desktop;
+  desktopStopRef = desktop;
+  hosts.machineNameFor = (id) => desktop.machineNameFor(id);
+  computer.remote = (id) => desktop.remoteComputer(id);
   const voice = new Voice(join(dataDir, "voice"), mergedPath);
   bridge.vault = vault;
   const email = new EmailService(db, vault, broadcast);
@@ -230,6 +244,7 @@ async function main() {
   approvals.interruptLeftovers();
   approvalsSuspendRef = approvals;
   bridge.approvals = approvals;
+  desktop.approvals = approvals;
   const pages = new PageLibrary(db, workspaceRoot, broadcast);
   bridge.pages = pages;
   approvalsRef = approvals;
@@ -265,6 +280,7 @@ async function main() {
       team,
       hosts,
       subagents,
+      desktop,
     },
   );
 
@@ -281,7 +297,7 @@ async function main() {
     return null;
   }
 
-  const server = Bun.serve({
+  const server = Bun.serve<{ connId: string }>({
     hostname: "127.0.0.1",
     port: 0,
     fetch(req, srv) {
@@ -294,7 +310,7 @@ async function main() {
           logLimited("auth.rejected", "/ws:401", { route: "/ws", status: 401 });
           return new Response("unauthorized", { status: 401 });
         }
-        if (srv.upgrade(req)) return undefined;
+        if (srv.upgrade(req, { data: { connId: randomUUID() } })) return undefined;
         return new Response("upgrade failed", { status: 400 });
       }
       if (url.pathname === "/bridge") {
@@ -394,14 +410,18 @@ async function main() {
       maxPayloadLength: 48 * 1024 * 1024,
       open(ws) {
         sockets.add(ws);
+        desktop.attach(ws.data.connId, (event, data) => {
+          ws.send(JSON.stringify({ event, data }));
+        });
       },
       close(ws) {
         sockets.delete(ws);
+        desktop.detach(ws.data.connId);
       },
       async message(ws, msg) {
         const text = typeof msg === "string" ? msg : Buffer.from(msg).toString("utf8");
         try {
-          ws.send(await rpc.handle(text));
+          ws.send(await rpc.handle(text, { id: ws.data.connId }));
         } catch (e) {
           log("rpc error", e);
         }

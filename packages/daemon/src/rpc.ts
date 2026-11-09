@@ -8,6 +8,7 @@ import type { ChannelService } from "./channels";
 import type { ChatStore, QueueStore } from "./chat-store";
 import type { ComputerUse } from "./computer";
 import { InvalidSettingError } from "./db/settings";
+import type { DesktopService } from "./desktop";
 import { draftAgent } from "./draft";
 import type { EmailService } from "./email";
 import type { GatewayService } from "./gateways";
@@ -60,6 +61,9 @@ function errorDiagnostics(e: unknown, depth = 0): ErrorDiagnostics {
   return diagnostics;
 }
 
+/** Identity of the WebSocket connection a request came from (desktop streams are per connection). */
+export type RpcConnection = { id: string };
+
 export class Rpc {
   constructor(
     private agents: AgentStore,
@@ -87,11 +91,12 @@ export class Rpc {
       team: TeamClient;
       hosts: HostStore;
       subagents: SubagentService;
+      desktop: DesktopService;
     },
   ) {}
 
   /** Returns the response payload string for one raw incoming message. */
-  async handle(raw: string): Promise<string> {
+  async handle(raw: string, conn?: RpcConnection): Promise<string> {
     let parsed: { id?: unknown; method?: unknown; params?: unknown };
     try {
       parsed = JSON.parse(raw);
@@ -119,7 +124,7 @@ export class Rpc {
     }
     const startedAt = performance.now();
     try {
-      const result = await this.dispatch(method as MethodName, paramsRes.data);
+      const result = await this.dispatch(method as MethodName, paramsRes.data, conn);
       return JSON.stringify({ id, result });
     } catch (e) {
       const durationMs = Math.round(performance.now() - startedAt);
@@ -154,8 +159,42 @@ export class Rpc {
     }
   }
 
-  private async dispatch(method: MethodName, params: unknown): Promise<unknown> {
+  private async dispatch(
+    method: MethodName,
+    params: unknown,
+    conn?: RpcConnection,
+  ): Promise<unknown> {
+    const connId = () => {
+      if (!conn) throw new RpcError("bad_request", "desktop methods need a WebSocket connection");
+      return conn.id;
+    };
     switch (method) {
+      case "desktop.machines":
+        return this.extras.desktop.list();
+      case "desktop.subscribe": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.subscribe(p.machineId, connId());
+      }
+      case "desktop.unsubscribe": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.unsubscribe(p.machineId, connId());
+      }
+      case "desktop.thumbnail": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.thumbnail(p.machineId);
+      }
+      case "desktop.takeover": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.takeover(p.machineId, connId());
+      }
+      case "desktop.release": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.release(p.machineId, connId());
+      }
+      case "desktop.input": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.input(p.machineId, connId(), p.events);
+      }
       case "agents.list":
         return this.agents.list();
       case "agents.create": {

@@ -31,8 +31,8 @@ type HostRow = {
   created_at: number;
 };
 
-const HELPER = "bin/boto-host.ts";
-const BUN_PATH = 'PATH="$HOME/.bun/bin:$PATH"';
+export const HELPER = "bin/boto-host.ts";
+export const BUN_PATH = 'PATH="$HOME/.bun/bin:$PATH"';
 
 /** POSIX single-quote escaping. */
 export const shq = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
@@ -112,6 +112,8 @@ async function sshExec(
 export class HostStore {
   /** Provider login env for microVM sessions (wired to VmCredentials in main.ts). */
   credentialEnv: (provider: string) => Record<string, string> = () => ({});
+  /** Machine name for microVM guests (set by DesktopService); becomes the guest hostname. */
+  machineNameFor: (agentId: string) => string | undefined = () => undefined;
 
   constructor(private db: Database) {}
 
@@ -282,7 +284,13 @@ export class HostStore {
     } | null;
     const credentials =
       p.isolation === "firecracker" && agent ? this.credentialEnv(agent.provider) : {};
-    return remoteLaunch(h, p, bridgePort, credentials);
+    return remoteLaunch(
+      h,
+      p,
+      bridgePort,
+      credentials,
+      p.isolation === "firecracker" ? this.machineNameFor(agentId) : undefined,
+    );
   }
 }
 
@@ -306,6 +314,7 @@ export function remoteLaunch(
   placement: AgentPlacement,
   bridgePort: number,
   credentials: Record<string, string> = {},
+  machineName?: string,
 ): RemoteLaunch {
   const root = host.root!;
   const helper = `${root}/${HELPER}`;
@@ -351,6 +360,7 @@ export function remoteLaunch(
           bridgeSocket: bridgePort ? socket : undefined,
           vcpus: placement.vcpus,
           memMib: placement.memMib,
+          machineName: vm ? machineName : undefined,
         })}\n`,
       );
       return child;
