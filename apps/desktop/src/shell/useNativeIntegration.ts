@@ -31,22 +31,13 @@ export function useNativeIntegration() {
     {},
     { enabled: ready, events: { "approval.updated": true } },
   );
-  const drafts = useDaemonQuery(
-    client,
-    "email.drafts.list",
-    { pendingOnly: true },
-    { enabled: ready, events: { "email.draft.updated": true } },
-  );
   const approvalCount = approvals.data?.filter((item) => item.status === "pending").length;
-  const draftCount = drafts.data?.filter(
-    (item) => item.status === "pending" || item.status === "failed",
-  ).length;
   useEffect(() => {
-    if (approvalCount === undefined || draftCount === undefined) return;
-    void nativeCommand("set_tray_count", { count: approvalCount + draftCount }).catch(
+    if (approvalCount === undefined) return;
+    void nativeCommand("set_tray_count", { count: approvalCount }).catch(
       (error: unknown) => setError(errorMessage(error)),
     );
-  }, [approvalCount, draftCount, setError]);
+  }, [approvalCount, setError]);
   useEffect(() => {
     if (!ready || !("__TAURI_INTERNALS__" in window)) return;
     let disposed = false;
