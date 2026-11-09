@@ -4,10 +4,12 @@
 // fps, a thumbnail every `thumbEveryMs`, refuses `input` unless the controller is the user
 // and `agent` unless it is the agent, and answers agent actions with cursor + done.
 // Every accepted input batch is appended to $FAKE_DESKTOP_LOG as JSON lines.
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
-const FRAME = Buffer.from("/9j/fake-frame").toString("base64");
+const FRAME = process.env.FAKE_DESKTOP_FRAME_FILE
+  ? readFileSync(process.env.FAKE_DESKTOP_FRAME_FILE).toString("base64")
+  : Buffer.from("/9j/fake-frame").toString("base64");
 const send = (m: object) => process.stdout.write(`${JSON.stringify(m)}\n`);
 const log = (entry: object) => {
   if (process.env.FAKE_DESKTOP_LOG)
