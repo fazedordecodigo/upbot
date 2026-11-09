@@ -82,7 +82,7 @@ describe("connected apps (MCP) e2e", () => {
       expect.arrayContaining(["notion", "github", "brave-search"]),
     );
     await expect(c.request("apps.connect", { catalogId: "notion", secrets: {} })).rejects.toThrow(
-      /Integration token is required/,
+      /Token de integração é obrigatório/,
     );
   });
 

@@ -6,7 +6,6 @@ export const marketplaceTabs = [
   { value: "plugins", label: "Plugins", kind: "plugin" },
   { value: "skills", label: "Skills", kind: "skill" },
   { value: "mcp", label: "Servidores MCP", kind: "mcp" },
-  { value: "agents", label: "Agentes", kind: "agent" },
 ] as const;
 
 const brands: Record<string, string> = {
@@ -96,4 +95,12 @@ export function sortMarketplace(items: MarketplaceItem[]) {
   return [...items].sort(
     (a, b) => Number(b.featured) - Number(a.featured) || a.name.localeCompare(b.name, "pt-BR"),
   );
+}
+
+export function marketplaceError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("checksum mismatch"))
+    return "O arquivo baixado não confere com o registro do marketplace. Nada foi instalado.";
+  if (/ é obrigatório$/.test(message)) return `${message}.`;
+  return fallback;
 }

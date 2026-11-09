@@ -305,7 +305,10 @@ describe("marketplace e2e", () => {
   test("builtin installation uses app validation and records permissions without network", async () => {
     await expect(
       c.request("marketplace.install", { source: BUILTIN_APPS_SOURCE, id: "notion" }),
-    ).rejects.toMatchObject({ code: "bad_request", message: expect.stringContaining("required") });
+    ).rejects.toMatchObject({
+      code: "bad_request",
+      message: expect.stringContaining("é obrigatório"),
+    });
     for (const kind of ["send", "pay", "book", "del"] as const) {
       await expect(
         c.request("marketplace.install", {

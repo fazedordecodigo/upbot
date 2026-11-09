@@ -35,15 +35,15 @@ export const APP_CATALOG: AppCatalogEntry[] = [
   {
     id: "notion",
     name: "Notion",
-    description: "Search, read and edit pages and databases.",
+    description: "Busca, lê e edita páginas e bancos de dados.",
     transport: "stdio",
     command: ["npx", "-y", "@notionhq/notion-mcp-server@2.5.2"],
     url: null,
     secrets: [
       {
         key: "NOTION_TOKEN",
-        label: "Integration token",
-        hint: "notion.so/profile/integrations → new internal integration; share pages with it",
+        label: "Token de integração",
+        hint: "notion.so/profile/integrations → crie uma integração interna e compartilhe as páginas com ela",
         header: null,
       },
     ],
@@ -52,14 +52,14 @@ export const APP_CATALOG: AppCatalogEntry[] = [
   {
     id: "github",
     name: "GitHub",
-    description: "Repositories, issues, pull requests and Actions.",
+    description: "Repositórios, issues, pull requests e Actions.",
     transport: "http",
     command: null,
     url: "https://api.githubcopilot.com/mcp/",
     secrets: [
       {
         key: "GITHUB_TOKEN",
-        label: "Personal access token",
+        label: "Token de acesso pessoal",
         hint: "github.com/settings/personal-access-tokens",
         header: "Authorization: Bearer {value}",
       },
@@ -69,26 +69,26 @@ export const APP_CATALOG: AppCatalogEntry[] = [
   {
     id: "brave-search",
     name: "Brave Search",
-    description: "Web, news, image and local search.",
+    description: "Busca na web, em notícias, imagens e locais.",
     transport: "stdio",
     command: ["npx", "-y", "@brave/brave-search-mcp-server@2.1.4"],
     url: null,
     secrets: [
-      { key: "BRAVE_API_KEY", label: "API key", hint: "brave.com/search/api", header: null },
+      { key: "BRAVE_API_KEY", label: "Chave de API", hint: "brave.com/search/api", header: null },
     ],
     docsUrl: "https://github.com/brave/brave-search-mcp-server",
   },
   {
     id: "airtable",
     name: "Airtable",
-    description: "Read and write bases, tables and records.",
+    description: "Lê e grava bases, tabelas e registros.",
     transport: "stdio",
     command: ["npx", "-y", "airtable-mcp-server@1.14.0"],
     url: null,
     secrets: [
       {
         key: "AIRTABLE_API_KEY",
-        label: "Personal access token",
+        label: "Token de acesso pessoal",
         hint: "airtable.com/create/tokens",
         header: null,
       },
@@ -98,15 +98,15 @@ export const APP_CATALOG: AppCatalogEntry[] = [
   {
     id: "stripe",
     name: "Stripe",
-    description: "Customers, payments, invoices and products.",
+    description: "Clientes, pagamentos, faturas e produtos.",
     transport: "stdio",
     command: ["npx", "-y", "@stripe/mcp@0.3.3", "--tools=all"],
     url: null,
     secrets: [
       {
         key: "STRIPE_SECRET_KEY",
-        label: "Secret or restricted key",
-        hint: "dashboard.stripe.com/apikeys (prefer a restricted key)",
+        label: "Chave secreta ou restrita",
+        hint: "dashboard.stripe.com/apikeys (prefira uma chave restrita)",
         header: null,
       },
     ],
@@ -405,7 +405,7 @@ export class AppsService {
     let config: Config;
     if (entry) {
       const missing = entry.secrets.find((s) => !p.secrets[s.key]);
-      if (missing) throw new RpcError("bad_request", `${missing.label} is required`);
+      if (missing) throw new RpcError("bad_request", `${missing.label} é obrigatório`);
       config = {
         name: p.name || entry.name,
         transport: entry.transport,

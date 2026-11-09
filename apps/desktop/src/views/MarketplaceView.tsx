@@ -46,8 +46,6 @@ export function MarketplaceView() {
       events: {
         "apps.changed": true,
         "skills.changed": true,
-        "agent.created": true,
-        "agent.deleted": true,
       },
     },
   );
@@ -150,7 +148,7 @@ export function MarketplaceView() {
           {!loaded && !error && <p role="status">Carregando…</p>}
           {error && (
             <div role="alert">
-              <p>{error}</p>
+              <p>Não foi possível carregar o marketplace.</p>
               <button className="btn btn-outline" type="button" onClick={reload}>
                 Tentar de novo
               </button>
