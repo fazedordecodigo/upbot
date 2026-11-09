@@ -88,14 +88,24 @@ python3 -m http.server 8765 --bind 127.0.0.1
 ```
 
 In another shell, reuse the private token file without printing its contents. Replace
-the state suffix with the directory printed above, and use the port from `BOTO_READY`:
+the state suffix with the directory printed above, and use the port from `BOTO_READY`.
+Launch Chrome through Playwright so the token is read inside the process and the URL
+is delivered over browser IPC, not exposed in an opener's process arguments:
 
 ```sh
 STATE="$HOME/boto-preview.XXXXXX" # replace with the printed directory
 PORT=12345 # replace with the BOTO_READY port
-TOKEN="$(cat "$STATE/token")"
-xdg-open "http://localhost:1420/#port=$PORT&token=$TOKEN" # macOS: use open instead
-unset TOKEN
+PREVIEW_STATE="$STATE" PREVIEW_PORT="$PORT" bun -e '
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { chromium } from "playwright-core";
+const token = readFileSync(join(process.env.PREVIEW_STATE, "token"), "utf8").trim();
+if (!token) throw new Error("Preview token file is empty");
+const browser = await chromium.launch({ channel: "chrome", headless: false });
+const page = await browser.newPage();
+await page.goto("http://localhost:1420/#" + new URLSearchParams({ port: process.env.PREVIEW_PORT, token }));
+await new Promise((resolve) => browser.once("disconnected", resolve));
+'
 ```
 
 Remove the preview state directory after stopping the daemon. Open the reference at
