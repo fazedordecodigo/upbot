@@ -34,6 +34,73 @@ async function withStore(run: (db: Database, store: AgentStore) => void) {
 }
 
 describe("default Boto bot", () => {
+  for (const deletedOldest of [false, true]) {
+    test(`backfills the oldest active legacy bot once (oldest deleted: ${deletedOldest})`, async () => {
+      await withStore((db, store) => {
+        const oldest = store.create({
+          name: "Edited assistant",
+          provider: "claude",
+          instructions: "Edited",
+        });
+        const next = store.create({ name: "Another assistant", provider: "codex" });
+        const namesake = store.create({
+          name: DEFAULT_BOT_NAME,
+          provider: "claude",
+          instructions: DEFAULT_BOT_INSTRUCTIONS,
+        });
+        for (const [index, bot] of [oldest, next, namesake].entries()) {
+          db.query("UPDATE agents SET created_at = ? WHERE id = ?").run(index + 1, bot.id);
+        }
+        if (deletedOldest) store.softDelete(oldest.id);
+        db.query("INSERT INTO settings (key,value) VALUES ('default_bot_seeded','1')").run();
+        seedDefaultBot(db, store);
+        const adopted = deletedOldest ? next : oldest;
+        expect(
+          store
+            .list()
+            .filter((bot) => bot.isDefault)
+            .map((bot) => bot.id),
+        ).toEqual([adopted.id]);
+        expect(db.query("SELECT value FROM settings WHERE key = 'default_bot_id'").get()).toEqual({
+          value: JSON.stringify(adopted.id),
+        });
+        expect(db.query("SELECT instructions FROM agents WHERE id = ?").get(oldest.id)).toEqual({
+          instructions: "Edited",
+        });
+        db.query("UPDATE agents SET created_at = 0 WHERE id = ?").run(namesake.id);
+        seedDefaultBot(db, store);
+        expect(store.get(adopted.id)?.isDefault).toBe(true);
+        store.softDelete(adopted.id);
+        seedDefaultBot(db, store);
+        expect(store.list().some((bot) => bot.isDefault)).toBe(false);
+        expect(store.list()).toHaveLength(deletedOldest ? 1 : 2);
+      });
+    });
+  }
+
+  for (const deletedHistory of [false, true]) {
+    test(`records no legacy default when no active bots exist (deleted history: ${deletedHistory})`, async () => {
+      await withStore((db, store) => {
+        if (deletedHistory)
+          store.softDelete(store.create({ name: "Deleted assistant", provider: "claude" }).id);
+        db.query("INSERT INTO settings (key,value) VALUES ('default_bot_seeded','1')").run();
+        seedDefaultBot(db, store);
+        expect(store.list()).toEqual([]);
+        expect(db.query("SELECT value FROM settings WHERE key = 'default_bot_id'").get()).toEqual({
+          value: "null",
+        });
+        store.create({
+          name: DEFAULT_BOT_NAME,
+          provider: "claude",
+          instructions: DEFAULT_BOT_INSTRUCTIONS,
+        });
+        seedDefaultBot(db, store);
+        expect(store.list().some((bot) => bot.isDefault)).toBe(false);
+        expect(store.list()).toHaveLength(1);
+      });
+    });
+  }
+
   test("identifies the seeded bot after rename and restart without choosing older custom bots", async () => {
     delete process.env.BOTO_DEFAULT_BOT;
     await withStore((db, store) => {
@@ -68,6 +135,7 @@ describe("default Boto bot", () => {
         provider: "claude",
         instructions: "My customized assistant",
       });
+      db.query("UPDATE agents SET created_at = 0 WHERE id = ?").run(legacy.id);
       db.query("INSERT INTO settings (key,value) VALUES ('default_bot_seeded','1')").run();
       seedDefaultBot(db, store);
       seedDefaultBot(db, store);
