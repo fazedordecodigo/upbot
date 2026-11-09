@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Agent, ChatItem, Task } from "@boto/protocol";
+import type { Agent, Approval, ChatItem, Task } from "@boto/protocol";
 import {
   DaemonClient,
   type DaemonHandle,
@@ -45,15 +45,21 @@ describe("tasks e2e", () => {
   const agentTexts = (items: ChatItem[]) =>
     items.filter((i) => i.kind === "agent_message").map((i) => ("text" in i ? i.text : ""));
 
-  /** Text of the first agent_message streamed for a task (works for purged private tasks). */
+  /** Text streamed only to the task's subscribed view. */
   function firstReply(taskId: string): Promise<string> {
     return c
       .waitForEventWhere(
-        "item.created",
-        (i) => i.kind === "agent_message" && i.taskId === taskId,
+        "task.event",
+        (e) =>
+          e.taskId === taskId &&
+          e.event === "item.created" &&
+          (e.data as ChatItem).kind === "agent_message",
         30_000,
       )
-      .then((i) => ("text" in i ? i.text : ""));
+      .then((e) => {
+        const item = e.data as ChatItem;
+        return "text" in item ? item.text : "";
+      });
   }
 
   beforeAll(async () => {
@@ -172,10 +178,7 @@ describe("tasks e2e", () => {
           text: "echo:private removed",
           private: true,
         });
-        const queued = (await c.request("queue.get", { agentId: b.id })).items.find(
-          (i) => i.taskId === hidden.id,
-        );
-        await c.request("queue.remove", { queueId: queued!.id });
+        await c.request("tasks.stop", { id: hidden.id });
         expect(await c.request("tasks.get", { id: hidden.id })).toMatchObject({
           situation: "done",
           outcome: "stopped",
@@ -232,10 +235,7 @@ describe("tasks e2e", () => {
           private: true,
           requireApproval: true,
         });
-        expect((await c.request("routines.runs", { id: routine.id }))[0]).toMatchObject({
-          taskId: task.id,
-          queueId: run.queueId,
-        });
+        expect(await c.request("routines.runs", { id: routine.id })).toEqual([]);
         await c.request("queue.resume", { agentId: b.id });
         await waitTask(task.id, (t) => t.situation === "done");
         const prompt = readLog(stateDir).find(
@@ -444,16 +444,20 @@ describe("tasks e2e", () => {
       expect((await c.request("tasks.list", {})).items.map((t) => t.id)).not.toContain(live.id);
       expect(
         (await c.request("tasks.list", { includePrivate: true })).items.map((t) => t.id),
-      ).toContain(live.id);
+      ).not.toContain(live.id);
       await c.request("tasks.stop", { id: live.id });
 
+      await c.request("queue.pause", { agentId: b.id });
       const task = await c.request("tasks.create", {
         agentId: b.id,
         text: "mcp-list",
         private: true,
         requireApproval: false,
       });
-      const reply = await firstReply(task.id);
+      await c.request("tasks.subscribe", { id: task.id, watch: true });
+      const replying = firstReply(task.id);
+      await c.request("queue.resume", { agentId: b.id });
+      const reply = await replying;
       expect(reply).toContain("send_message");
       expect(reply).not.toContain("remember");
       const done = await waitTask(task.id, (t) => t.situation === "done");
@@ -590,14 +594,18 @@ describe("tasks e2e", () => {
         requireApproval: true,
       });
       try {
+        await c.request("tasks.subscribe", { id: extra.id, watch: true });
         await c.waitForEventWhere(
-          "item.created",
-          (i) => i.taskId === extra.id && i.kind === "agent_message",
+          "task.event",
+          (e) =>
+            e.taskId === extra.id &&
+            e.event === "item.created" &&
+            (e.data as ChatItem).kind === "agent_message",
         );
         const turns = (await c.request("agents.overview", {})).agents.find(
           (a) => a.agentId === agent.id,
         );
-        expect(turns?.running).toHaveLength(2);
+        expect(turns?.running).toHaveLength(1);
         const request = readLog(stateDir).find(
           (r) =>
             r.method === "session/new" && (r.params as { cwd: string }).cwd === agent.workspacePath,
@@ -635,22 +643,30 @@ describe("tasks e2e", () => {
           name: "send_message",
           arguments: { to: "Beta", text: "must not send" },
         });
-        const approval = await c.waitForEventWhere(
-          "approval.updated",
-          (ap) => ap.agentId === agent.id && ap.status === "pending",
+        const scopedApproval = await c.waitForEventWhere(
+          "task.event",
+          (event) =>
+            event.taskId === extra.id &&
+            event.event === "approval.updated" &&
+            (event.data as Approval).status === "pending",
         );
+        const approval = scopedApproval.data as Approval;
+        expect((await c.request("approvals.list", {})).some((ap) => ap.id === approval.id)).toBe(
+          false,
+        );
+        expect(
+          (await c.request("approvals.list", { taskId: extra.id })).some(
+            (ap) => ap.id === approval.id,
+          ),
+        ).toBe(true);
         expect(approval.tool).toBe("send_message");
         await c.request("approvals.respond", { id: approval.id, decision: "deny" });
         expect(await sending).toMatchObject({ isError: true });
         await c.request("tasks.stop", { id: extra.id });
-        const end = Date.now() + 10000;
-        while (
-          (await c.request("agents.overview", {})).agents.find((a) => a.agentId === agent.id)
-            ?.running.length !== 1
-        ) {
-          if (Date.now() > end) throw new Error("extra turn did not stop");
-          await Bun.sleep(50);
-        }
+        await c.waitForEventWhere(
+          "task.event",
+          (event) => event.taskId === extra.id && event.event === "turn.ended",
+        );
         const restored = (await bridge("tools/list")).tools.map((t: { name: string }) => t.name);
         expect(restored).toContain("remember");
         expect(restored).toContain("browser_open");

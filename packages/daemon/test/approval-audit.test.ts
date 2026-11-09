@@ -74,6 +74,20 @@ async function withApprovals(
   }
 }
 
+test("required approval overrides a temporary app grant in the same turn", async () => {
+  await withApprovals(async ({ approvals }) => {
+    let required = false;
+    approvals.addAskPolicy(() => required);
+    const call = approvals.gate("bot", "notes-create_note", {}, true);
+    const pending = approvals.list().find((a) => a.status === "pending")!;
+    await approvals.respond({ id: pending.id, decision: "task" });
+    await call;
+    expect(approvals.decide("bot", "notes-create_note", true)).toBe("allow");
+    required = true;
+    expect(approvals.decide("bot", "notes-create_note", true)).toBe("ask");
+  });
+});
+
 test("approval.decided persists approve, deny and expiry with decision and context", async () => {
   await withApprovals(async ({ approvals, db }) => {
     const g1 = approvals.gate("bot", "notes-create_note", { title: "secret-title" }, true);
