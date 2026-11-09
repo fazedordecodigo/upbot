@@ -19,7 +19,7 @@ function makeBridge(): Bridge {
   } as unknown as AgentStore;
   return new Bridge(
     agents,
-    () => ({ bridgeActivity() {} }) as unknown as RuntimeManager,
+    () => ({ bridgeActivity() {}, currentTurn: () => null }) as unknown as RuntimeManager,
     "/tmp/boto-shared",
   );
 }

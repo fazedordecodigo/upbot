@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Agent, ChatItem, Turn } from "@boto/protocol";
 import { openDatabase } from "../src/db";
+import { getProfileDefaults, InvalidSettingError } from "../src/db/settings";
+import { MemoryStore } from "../src/memories";
+import { ProfileService } from "../src/profile";
 import {
   DaemonClient,
   type DaemonHandle,
@@ -159,12 +162,54 @@ describe("settings consumers e2e", () => {
       message: expect.stringMatching(/settings\.marketplace_sources/),
     });
     await getClient().request("marketplace.setSources", { urls: [marketIndex] });
-    expect(await getClient().request("marketplace.list", {})).toMatchObject({
+    const marketplace = await getClient().request("marketplace.list", {});
+    expect(marketplace).toMatchObject({
       sources: [marketIndex],
-      items: [],
       errors: [],
     });
+    expect(marketplace.items.every((item) => item.source === "builtin:apps")).toBe(true);
   });
+
+  test("rejects invalid persisted profile values with InvalidSettingError and the key over RPC", async () => {
+    const db = openDatabase(dataDir);
+    try {
+      const profile = new ProfileService(db, new MemoryStore(db), () => {});
+      const invalid = {
+        "profile.name": JSON.stringify("n".repeat(41)),
+        "profile.defaults": JSON.stringify({
+          private: false,
+          requireApproval: "yes",
+          delegationMode: "now",
+          toolMode: "both",
+        }),
+        "onboarding.completed_at": "-1",
+        "ui.theme": '"system"',
+        "ui.sidebar_width": "401",
+      };
+      for (const [key, value] of Object.entries(invalid)) {
+        db.query("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(key, value);
+        expect(() => profile.get()).toThrow(InvalidSettingError);
+        if (key === "profile.defaults")
+          expect(() => getProfileDefaults(db)).toThrow(InvalidSettingError);
+        await expect(getClient().request("profile.get", {})).rejects.toMatchObject({
+          code: "internal",
+          message: expect.stringContaining(`settings.${key}`),
+        });
+        db.query("DELETE FROM settings WHERE key = ?").run(key);
+      }
+      db.query(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('profile.name', 'not-json')",
+      ).run();
+      expect(() => profile.get()).toThrow(InvalidSettingError);
+      await expect(getClient().request("profile.get", {})).rejects.toMatchObject({
+        code: "internal",
+        message: expect.stringContaining("settings.profile.name"),
+      });
+      db.query("DELETE FROM settings WHERE key = 'profile.name'").run();
+    } finally {
+      db.close();
+    }
+  }, 30000);
 });
 
 describe("malformed mobile setting e2e", () => {

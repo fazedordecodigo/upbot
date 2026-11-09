@@ -5,6 +5,7 @@ import type {
   AgentUsage,
   ChatItem,
   ConfigOption,
+  MemoryUsage,
   PendingPermission,
   PermissionOption,
   QueueState,
@@ -21,6 +22,7 @@ import {
   type ProviderSession,
   type RemoteLaunch,
 } from "../providers/types";
+import { type TaskRuntimeHooks, toolKindAllowed } from "../task-policy";
 import { buildHandoff } from "./handoff";
 
 const COMPACT_PROMPT = `<compaction_request>
@@ -158,10 +160,25 @@ const TEXT_FLUSH_MS = 150;
 /** Pending streamed bytes that trigger an immediate flush (bounds crash loss). */
 const TEXT_FLUSH_MAX_PENDING_BYTES = 8 * 1024;
 
+/** Hooks the scheduler uses to run several instances of one agent. */
+export type RuntimeOptions = {
+  /** Extra instance: never resumes or stores the agent's provider session, skips usage/compaction. */
+  ephemeral?: boolean;
+  /** Replaces the direct agent.status broadcast (the manager aggregates every instance). */
+  onStatus?: () => void;
+  /** Capacity gate checked before a queued item starts. */
+  mayStart?: () => boolean;
+  /** Called after a turn of this runtime ended. */
+  onTurnFinished?: () => void;
+};
+
 export class AgentRuntime {
   status: AgentStatus = "idle";
   statusError: string | null = null;
   private turn: { id: string; cancelled: boolean; byUser: boolean } | null = null;
+  /** Task owning the live (or next) provider session; null = the agent's plain chat. */
+  private sessionScope: string | null = null;
+  private turnTaskId: string | null = null;
   private session: ProviderSession | null = null;
   private sessionTag: object | null = null;
   private sessionStarting: Promise<ProviderSession> | null = null;
@@ -190,6 +207,7 @@ export class AgentRuntime {
   private compacting = false;
   private capture: string[] | null = null;
   private disposing = false;
+  private turnMemoryUsage: MemoryUsage = { count: 0, kinds: [] };
 
   constructor(
     private agent: Agent,
@@ -198,10 +216,32 @@ export class AgentRuntime {
     private queue: QueueStore,
     private broadcast: Broadcast,
     private mcpServers: (agentId: string) => McpServerSpec[] = () => [],
-    private sessionContext: (agentId: string) => string = () => "",
+    private sessionContext: (agentId: string, turnId: string, fresh: boolean) => string = () => "",
     private remoteFor: (agentId: string) => RemoteLaunch | null = () => null,
     private sharedDirs: () => string[] = () => [],
+    private tasks: () => TaskRuntimeHooks | null = () => null,
+    private memoryUsage: (turnId: string) => MemoryUsage = () => ({ count: 0, kinds: [] }),
+    private opts: RuntimeOptions = {},
   ) {}
+
+  /** Task owning the current provider session (null for the plain chat). */
+  currentTaskId(): string | null {
+    return this.sessionScope;
+  }
+
+  /** The running turn with its start time and whether it waits on a permission answer. */
+  activeTurn(): { id: string; startedAt: number; awaiting: boolean } | null {
+    return this.turn
+      ? { id: this.turn.id, startedAt: this.turnStartedAt, awaiting: this.pending.size > 0 }
+      : null;
+  }
+
+  /** True when this runtime can start the next queued item right now. */
+  canPull(): boolean {
+    return (
+      !this.turn && !this.draining && !this.sessionStarting && !this.disposing && !this.compacting
+    );
+  }
 
   /** Agent-to-agent hop count of the running turn (0 when idle or user-initiated). */
   currentHops(): number {
@@ -209,8 +249,10 @@ export class AgentRuntime {
   }
 
   /** The running turn and whether it was started by background work (not the user). */
-  currentTurn(): { id: string; background: boolean } | null {
-    return this.turn ? { id: this.turn.id, background: this.turnBackground } : null;
+  currentTurn(): { id: string; background: boolean; taskId: string | null } | null {
+    return this.turn
+      ? { id: this.turn.id, background: this.turnBackground, taskId: this.turnTaskId }
+      : null;
   }
 
   currentChannelId(): string | null {
@@ -228,7 +270,8 @@ export class AgentRuntime {
   private setStatus(status: AgentStatus, error: string | null = null) {
     this.status = status;
     this.statusError = error;
-    this.broadcast("agent.status", { agentId: this.agent.id, status, error });
+    if (this.opts.onStatus) this.opts.onStatus();
+    else this.broadcast("agent.status", { agentId: this.agent.id, status, error });
   }
 
   /**
@@ -242,9 +285,13 @@ export class AgentRuntime {
     );
   }
 
-  private hooks(tag: object): ProviderHooks {
+  private hooks(tag: object, scope: string | null): ProviderHooks {
     return {
-      onResumeFailed: () => this.store.clearAgentSession(this.agent.id),
+      onResumeFailed: () => {
+        if (this.opts.ephemeral) return;
+        if (scope) this.tasks()?.setSession(scope, null);
+        else this.store.clearAgentSession(this.agent.id);
+      },
       onUpdate: (u) => this.onUpdate(u),
       requestPermission: (req) => this.onPermissionRequest(req),
       onExit: (err) => {
@@ -306,14 +353,22 @@ export class AgentRuntime {
     if (this.draining || this.turn || this.sessionStarting || this.disposing || this.compacting)
       return;
     if (this.agents.queuePaused(this.agent.id)) return;
-    const next = this.queue.peek(this.agent.id);
+    if (this.opts.mayStart && !this.opts.mayStart()) return;
+    const next = this.queue.peek(this.agent.id, this.sessionScope);
     if (!next) return;
+    const scope = next.task_id ?? null;
+    if (scope !== this.sessionScope) {
+      // each task runs in its own provider session; the plain chat keeps its own too
+      if (this.session) this.dropSession();
+      this.sessionScope = scope;
+    }
     const { meta, rejected } = readQueueMeta(next);
     if (rejected.length)
       console.error(`[botod] queue item ${next.id}: ignored invalid meta ${rejected.join(", ")}`);
     this.draining = true;
     try {
-      const turnRow = this.store.createTurn(this.agent.id, next.id);
+      const turnRow = this.store.createTurn(this.agent.id, next.id, scope);
+      this.turnTaskId = scope;
       this.queue.markStarted(next.id, turnRow.id);
       this.turn = { id: turnRow.id, cancelled: false, byUser: false };
       this.closeTextItem();
@@ -359,9 +414,15 @@ export class AgentRuntime {
   private async ensureSession(): Promise<ProviderSession> {
     if (this.session) return this.session;
     this.sessionStarting ??= (async () => {
-      const stored = this.store.getAgentSession(this.agent.id);
-      const resumeSessionId =
-        stored && stored.provider === this.agent.provider ? stored.sessionId : null;
+      const scope = this.sessionScope;
+      const stored = this.opts.ephemeral ? null : this.store.getAgentSession(this.agent.id);
+      const resumeSessionId = this.opts.ephemeral
+        ? null
+        : scope
+          ? (this.tasks()?.get(scope)?.sessionId ?? null)
+          : stored?.provider === this.agent.provider && stored.taskId === null
+            ? stored.sessionId
+            : null;
       const driver = getDriver(this.agent.provider);
       const tag = {};
       const remote = this.remoteFor(this.agent.id);
@@ -369,17 +430,21 @@ export class AgentRuntime {
       const session = await driver.start({
         cwd: remote?.cwd ?? this.agent.workspacePath,
         resumeSessionId,
-        hooks: this.hooks(tag),
+        hooks: this.hooks(tag, scope),
         mcpServers: remote ? servers.map((s) => remote.mcp(s)) : servers,
         ...(remote ? { remote } : { extraDirs: this.sharedDirs() }),
       });
       this.sessionTag = tag;
-      this.store.upsertAgentSession(this.agent.id, this.agent.provider, session.sessionId);
+      if (!this.opts.ephemeral) {
+        if (scope) this.tasks()?.setSession(scope, session.sessionId);
+        else this.store.upsertAgentSession(this.agent.id, this.agent.provider, session.sessionId);
+      }
       return session;
     })();
     const started = this.sessionStarting;
     try {
       const session = await started;
+      if (this.session === session) return session;
       // if a dispose() replaced us while we were starting, drop this session
       if (this.sessionStarting !== started) {
         this.sessionTag = null;
@@ -454,12 +519,14 @@ export class AgentRuntime {
 
       let promptText = text;
       const instructions = this.agent.instructions.trim();
-      if (!session.resumed && this.sessionPromptCount === 0) {
+      const fresh = !session.resumed && this.sessionPromptCount === 0;
+      if (fresh) {
         if (instructions) {
           promptText = `<agent_instructions>\n${instructions}\n</agent_instructions>\n\n${promptText}`;
         }
-        promptText = this.sessionContext(this.agent.id) + promptText;
-        const all = this.store.history(this.agent.id, undefined, 500).items;
+        if (this.sessionScope)
+          promptText = (this.tasks()?.preamble(this.sessionScope) ?? "") + promptText;
+        const all = this.store.scopedHistory(this.agent.id, this.sessionScope, 500);
         let start = 0;
         let summary: string | null = null;
         for (let k = all.length - 1; k >= 0; k--) {
@@ -484,6 +551,9 @@ export class AgentRuntime {
         const handoff = buildHandoff(prior, summary);
         if (handoff) promptText = handoff + promptText;
       }
+      promptText = this.sessionContext(this.agent.id, turnId, fresh) + promptText;
+      const { count, kinds } = this.memoryUsage(turnId);
+      this.turnMemoryUsage = { count, kinds };
       this.sessionPromptCount += 1;
       const dbgDir = process.env.BOTO_DEBUG_PROMPTS_DIR;
       if (dbgDir) {
@@ -540,11 +610,12 @@ export class AgentRuntime {
     const ended = this.store.endTurn(turn.id, status, stopReason, error);
     this.broadcast("turn.ended", ended);
     if (this.turn === turn) this.turn = null;
+    this.opts.onTurnFinished?.();
     this.closeTextItem();
     if (this.status !== "error") this.setStatus("idle");
     // queue policy: user stop pauses the queue; failed turn auto-pauses it
     if ((status === "cancelled" && turn.byUser) || status === "failed") {
-      const queued = this.queue.queued(this.agent.id).length;
+      const queued = this.queue.queued(this.agent.id, true).length;
       if (queued > 0) {
         this.agents.setQueuePaused(this.agent.id, true);
         this.logRuntime(
@@ -555,7 +626,7 @@ export class AgentRuntime {
         return;
       }
     }
-    if (status === "completed" && this.shouldAutoCompact()) {
+    if (status === "completed" && !this.opts.ephemeral && this.shouldAutoCompact()) {
       this.compact("auto").catch((e) =>
         this.logRuntime("auto-compaction failed", `turn=${turn.id} ${errorFields(e)}`),
       );
@@ -587,11 +658,14 @@ export class AgentRuntime {
       throw new RpcError("bad_request", "nothing to compact yet");
     }
     this.compacting = true;
-    const item = this.store.createItem(this.agent.id, null, "compaction", {
-      reason,
-      status: "running",
-      summary: "",
-    });
+    const scope = this.sessionScope;
+    const item = this.store.createItem(
+      this.agent.id,
+      null,
+      "compaction",
+      { reason, status: "running", summary: "" },
+      scope,
+    );
     this.broadcast("item.created", item);
     try {
       const session = await this.ensureSession();
@@ -603,7 +677,8 @@ export class AgentRuntime {
       this.capture = null;
       if (!summary) throw new Error("the agent returned an empty summary");
       this.dropSession();
-      this.store.clearAgentSession(this.agent.id);
+      if (scope) this.tasks()?.setSession(scope, null);
+      else this.store.clearAgentSession(this.agent.id);
       this.broadcast(
         "item.updated",
         this.store.updateItemData(item.id, { reason, status: "completed", summary }),
@@ -629,18 +704,24 @@ export class AgentRuntime {
     if (this.turn || this.compacting || this.sessionStarting || this.disposing) {
       throw new RpcError("busy", "the agent is busy");
     }
+    const scope = this.sessionScope;
     await this.dispose();
-    this.store.clearAgentSession(this.agent.id);
-    this.broadcast("item.created", this.store.createItem(this.agent.id, null, "session_reset", {}));
+    if (scope) this.tasks()?.setSession(scope, null);
+    else this.store.clearAgentSession(this.agent.id);
+    this.broadcast(
+      "item.created",
+      this.store.createItem(this.agent.id, null, "session_reset", {}, scope),
+    );
     this.broadcast("agent.usage", this.store.clearContextUsage(this.agent.id));
     this.drain();
   }
 
-  cancel(): void {
+  /** `pauseQueue: false` (task pause/stop) leaves the agent's queue running. */
+  cancel(opts: { pauseQueue?: boolean } = {}): void {
     const turn = this.turn;
     if (!turn) return;
     turn.cancelled = true;
-    turn.byUser = true;
+    turn.byUser = opts.pauseQueue ?? true;
     this.cancelAllPending();
     this.session
       ?.cancel()
@@ -764,6 +845,18 @@ export class AgentRuntime {
   }): Promise<{ optionId: string | null }> {
     if (this.compacting) return Promise.resolve({ optionId: null });
     const turn = this.turn;
+    const task = this.turnTaskId && turn ? this.tasks()?.get(this.turnTaskId) : null;
+    if (task && !toolKindAllowed(task.toolMode, req.toolKind)) {
+      // the task's "Onde" forbids this kind of tool: reject, never allow silently
+      this.logRuntime(
+        "permission rejected by task tool mode",
+        `turn=${turn?.id} task=${task.id} mode=${task.toolMode}`,
+      );
+      const reject =
+        req.options.find((o) => o.kind === "reject_once") ??
+        req.options.find((o) => o.kind === "reject_always");
+      return Promise.resolve({ optionId: reject?.optionId ?? null });
+    }
     const requestId = crypto.randomUUID();
     return new Promise((resolve) => {
       const entry: PendingEntry = {
@@ -801,6 +894,7 @@ export class AgentRuntime {
 
   private onUpdate(u: Parameters<ProviderHooks["onUpdate"]>[0]): void {
     if (u.type === "usage") {
+      if (this.opts.ephemeral) return;
       this.broadcast("agent.usage", this.store.applyUsage(this.agent.id, u));
       return;
     }
@@ -887,7 +981,10 @@ export class AgentRuntime {
       this.broadcast("item.delta", { agentId: this.agent.id, itemId: item.id, text });
     } else {
       this.closeTextItem();
-      const item = this.store.createItem(this.agent.id, turn.id, kind, { text });
+      const item = this.store.createItem(this.agent.id, turn.id, kind, {
+        text,
+        ...(kind === "agent_message" ? { memoryUsage: this.turnMemoryUsage } : {}),
+      });
       this.openTextItem = { id: item.id, seq: item.seq, kind, text, pendingBytes: 0 };
       this.broadcast("item.created", item);
     }

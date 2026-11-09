@@ -153,4 +153,49 @@ describe("approvals across daemon restarts", () => {
     expect(ids.filter((id) => id === pending.id)).toHaveLength(1);
     expect(ids).toHaveLength(2);
   });
+
+  test("terminal decision times survive restart without persisting tool arguments or allowing another decision", async () => {
+    const decisions: Approval[] = [];
+    for (const decision of ["approve", "deny"] as const) {
+      const pending = await blockOn("notes-create_note", { title: SENTINEL });
+      const result = await c.request("approvals.respond", { id: pending.id, decision });
+      expect(result.resolvedAt).toBeGreaterThanOrEqual(pending.createdAt);
+      const event = await c.waitForEventWhere(
+        "approval.updated",
+        (a) => a.id === pending.id && a.status !== "pending",
+      );
+      expect(event.resolvedAt).toBe(result.resolvedAt);
+      decisions.push(result);
+      const deadline = Date.now() + 10_000;
+      while (
+        Date.now() < deadline &&
+        !c.events.some(
+          (e) => e.event === "turn.ended" && (e.data as { id: string }).id === pending.turnId,
+        )
+      )
+        await Bun.sleep(20);
+      expect(
+        c.events.some(
+          (e) => e.event === "turn.ended" && (e.data as { id: string }).id === pending.turnId,
+        ),
+      ).toBe(true);
+    }
+    await restart("SIGTERM");
+    const listed = await c.request("approvals.list", { agentId: a.id });
+    for (const result of decisions) {
+      expect(listed.find((item) => item.id === result.id)).toMatchObject({
+        status: result.status,
+        resolvedAt: result.resolvedAt,
+        createdAt: result.createdAt,
+        turnId: result.turnId,
+        detail: "",
+        tool: result.tool,
+      });
+      await expect(
+        c.request("approvals.respond", { id: result.id, decision: "approve" }),
+      ).rejects.toMatchObject({ code: "not_found" });
+    }
+    expect(JSON.stringify(listed)).not.toContain(SENTINEL);
+    expect(JSON.stringify(audit("approval.decided"))).not.toContain(SENTINEL);
+  });
 });

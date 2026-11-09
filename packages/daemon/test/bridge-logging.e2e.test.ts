@@ -85,6 +85,7 @@ describe("bridge failure logging e2e", () => {
       name: "Logger",
       provider: "devin",
       instructions: "",
+      requireApproval: false,
     })) as Agent;
   });
 

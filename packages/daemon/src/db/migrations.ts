@@ -271,4 +271,129 @@ export const migrations: string[] = [
     interrupted_at INTEGER
   );
   CREATE INDEX approval_records_status ON approval_records(status, created_at)`,
+  // 23: tasks (a unit of work over an agent session) and their deliveries. Queue entries,
+  // turns, items and the stored provider session carry the task id; items of private tasks
+  // are flagged so they never reach chat.history, search or deliveries.
+  `CREATE TABLE tasks (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    situation TEXT NOT NULL,
+    outcome TEXT,
+    private INTEGER NOT NULL DEFAULT 0,
+    tool_mode TEXT NOT NULL DEFAULT 'both',
+    require_approval INTEGER NOT NULL DEFAULT 1,
+    session_id TEXT,
+    routine_id TEXT,
+    template_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    ended_at INTEGER
+  );
+  CREATE INDEX tasks_created ON tasks(created_at, id);
+  CREATE INDEX tasks_agent ON tasks(agent_id, situation, created_at);
+  CREATE INDEX tasks_situation ON tasks(situation, created_at);
+  CREATE TABLE task_deliveries (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    path TEXT,
+    url TEXT,
+    mime TEXT,
+    size INTEGER,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX task_deliveries_task ON task_deliveries(task_id, created_at);
+  CREATE INDEX task_deliveries_created ON task_deliveries(created_at);
+  ALTER TABLE queue ADD COLUMN task_id TEXT;
+  ALTER TABLE turns ADD COLUMN task_id TEXT;
+  ALTER TABLE items ADD COLUMN task_id TEXT;
+  ALTER TABLE items ADD COLUMN private INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE agent_sessions ADD COLUMN task_id TEXT;
+  CREATE INDEX queue_task ON queue(task_id, status);
+  CREATE INDEX turns_task ON turns(task_id, started_at);
+  CREATE INDEX items_task_seq ON items(task_id, seq)`,
+  // 24: built-in and user templates
+  `CREATE TABLE templates (
+    id TEXT PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
+    prompt TEXT NOT NULL, icon TEXT NOT NULL, tool_mode TEXT NOT NULL,
+    require_approval INTEGER NOT NULL DEFAULT 0, schedule TEXT, builtin INTEGER NOT NULL DEFAULT 0,
+    hidden_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  );
+  INSERT INTO templates (id, kind, name, description, prompt, icon, tool_mode, require_approval, schedule, builtin, created_at, updated_at) VALUES
+  ('ci', 'task', 'Corrigir o teste que falha no CI e abrir um PR', 'Reproduz a falha no terminal, corrige o código e abre o PR com a descrição da causa.', 'Corrigir o teste que falha no CI e abrir um PR', 'git-pull-request', 'both', 1, NULL, 1, 0, 0),
+  ('email', 'task', 'Resumir a reunião de produto e enviar ao time por e-mail', 'Lê a transcrição, escreve as decisões e os próximos passos e prepara o e-mail.', 'Resumir a reunião de produto e enviar ao time por e-mail', 'mail', 'both', 1, NULL, 1, 0, 0),
+  ('deps', 'task', 'Atualizar as dependências desatualizadas e abrir um PR', 'Lista o que está velho, atualiza, ajusta a configuração e roda os testes.', 'Atualizar as dependências desatualizadas e abrir um PR', 'terminal', 'both', 1, NULL, 1, 0, 0),
+  ('research', 'task', 'Comparar planos de hospedagem e recomendar um', 'Pesquisa as fontes oficiais e entrega um relatório com prós e contras.', 'Comparar planos de hospedagem e recomendar um', 'globe', 'browser', 0, NULL, 1, 0, 0),
+  ('sales', 'routine', 'Toda segunda, consolidar as vendas da semana numa planilha', 'Baixa os relatórios do painel, junta os dados e salva a planilha no Drive.', 'Toda segunda, consolidar as vendas da semana numa planilha', 'sheet', 'both', 0, 'weekly mon 09:00', 1, 0, 0),
+  ('inbox', 'routine', 'Todo dia, resumir o que chegou na minha caixa de entrada', 'Separa o que pede resposta do que pode esperar e escreve um resumo curto.', 'Todo dia, resumir o que chegou na minha caixa de entrada', 'repeat', 'both', 0, 'daily 08:00', 1, 0, 0)`,
+  // 25: routine task defaults and one-shot scheduling
+  `ALTER TABLE routines ADD COLUMN run_at INTEGER;
+  ALTER TABLE routines ADD COLUMN tool_mode TEXT NOT NULL DEFAULT 'both';
+  ALTER TABLE routines ADD COLUMN require_approval INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE routines ADD COLUMN private INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE routines ADD COLUMN template_id TEXT;
+  ALTER TABLE routine_runs ADD COLUMN task_id TEXT`,
+  // 26: user-scope profile memory and prompt memory provenance
+  `CREATE TABLE memories_next (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT REFERENCES agents(id),
+    kind TEXT NOT NULL DEFAULT 'agent' CHECK(kind IN ('profile', 'agent', 'skill')),
+    text TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    deleted_at INTEGER,
+    CHECK((kind = 'profile' AND agent_id IS NULL) OR (kind != 'profile' AND agent_id IS NOT NULL))
+  );
+  INSERT INTO memories_next (id, agent_id, text, created_at, updated_at, deleted_at)
+    SELECT id, agent_id, text, created_at, updated_at, deleted_at FROM memories;
+  DROP TABLE memories;
+  ALTER TABLE memories_next RENAME TO memories;
+  CREATE INDEX memories_agent ON memories(agent_id, created_at);
+  CREATE UNIQUE INDEX memories_user_profile ON memories(kind) WHERE kind = 'profile';
+  CREATE TABLE turn_memory_usage (
+    turn_id TEXT NOT NULL REFERENCES turns(id),
+    memory_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('profile', 'agent', 'skill')),
+    text TEXT NOT NULL,
+    PRIMARY KEY(turn_id, memory_id, kind)
+  )`,
+  // 27: deterministic machine names (`codigo-01`) for agents placed in a Firecracker microVM
+  `CREATE TABLE machines (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL UNIQUE,
+    host_id TEXT,
+    created_at INTEGER NOT NULL
+  )`,
+  // 28: agents cockpit — role ("O que ele faz"), per-agent approval policy, parallel instances
+  `ALTER TABLE agents ADD COLUMN role TEXT NOT NULL DEFAULT '';
+  ALTER TABLE agents ADD COLUMN require_approval INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE agents ADD COLUMN max_instances INTEGER`,
+  // 29: saved routine attachments reused by every run
+  `ALTER TABLE routines ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]'`,
+  // 30: decided approvals stay in approval_records with their decision time, so task
+  // timelines show approval cards and decision times after a daemon restart.
+  `ALTER TABLE approval_records ADD COLUMN resolved_at INTEGER`,
+  // 31: marketplace installation ownership and immutable artifact fingerprints
+  `CREATE TABLE marketplace_installations (
+    source TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    PRIMARY KEY (source, item_id)
+  );
+  CREATE TABLE marketplace_artifacts (
+    source TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('skill', 'agent')),
+    name TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    created INTEGER NOT NULL,
+    PRIMARY KEY (source, item_id, kind, name)
+  );
+  CREATE INDEX marketplace_artifact_refs ON marketplace_artifacts(kind, name)`,
+  // 32: retain explicit uninstall state and registry skill identity
+  `ALTER TABLE marketplace_installations ADD COLUMN active INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE marketplace_artifacts ADD COLUMN registry_id TEXT`,
 ];

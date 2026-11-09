@@ -11,3 +11,4 @@ spikes/out/
 *.db-wal
 *.db-shm
 .DS_Store
+.fake-acp-state/

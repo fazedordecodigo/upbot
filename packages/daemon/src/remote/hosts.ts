@@ -31,8 +31,8 @@ type HostRow = {
   created_at: number;
 };
 
-const HELPER = "bin/boto-host.ts";
-const BUN_PATH = 'PATH="$HOME/.bun/bin:$PATH"';
+export const HELPER = "bin/boto-host.ts";
+export const BUN_PATH = 'PATH="$HOME/.bun/bin:$PATH"';
 
 /** POSIX single-quote escaping. */
 export const shq = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;

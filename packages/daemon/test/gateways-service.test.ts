@@ -34,6 +34,9 @@ test("gateway notices stay bound to their source transport and send errors stay 
       avatar: null,
       createdAt: 1,
       updatedAt: 1,
+      role: "",
+      requireApproval: true,
+      maxInstances: null,
     };
     db.query(
       "INSERT INTO agents (id, name, instructions, provider, workspace_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",

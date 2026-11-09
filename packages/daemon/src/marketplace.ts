@@ -2,12 +2,22 @@ import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { type Agent, AgentAvatar, type MarketplaceItem, ProviderId } from "@boto/protocol";
+import {
+  type Agent,
+  AgentAvatar,
+  type ConnectedApp,
+  type MarketplaceFilters,
+  type MarketplaceItem,
+  MarketplaceRegistryEntry,
+  ProviderId,
+} from "@boto/protocol";
 import { z } from "zod";
 import type { AgentStore } from "./agents";
+import { APP_CATALOG, APP_MARKETPLACE, type AppsService } from "./apps";
 import { getSetting, setSetting } from "./db/settings";
+import type { ProvidersService } from "./providers-service";
 import { RpcError } from "./runtime/agent-runtime";
-import type { SkillLibrary } from "./skills";
+import { type SkillLibrary, skillSlug } from "./skills";
 
 // Marketplace: JSON registries (http(s) or file URLs) listing skills and agent templates.
 // Every file is verified against the sha256 in the index before it is installed.
@@ -33,7 +43,10 @@ export class MarketplaceFetchError extends Error {
   }
 }
 
-type IndexItem = Omit<MarketplaceItem, "source" | "installed">;
+type IndexItem = z.infer<typeof MarketplaceRegistryEntry>;
+type Artifact = { kind: "skill" | "agent"; name: string; hash: string; created: number };
+const fingerprint = (value: string) => createHash("sha256").update(value).digest("hex");
+export const BUILTIN_APPS_SOURCE = "builtin:apps";
 type Template = {
   name: string;
   instructions: string;
@@ -61,6 +74,8 @@ export class Marketplace {
     private db: Database,
     private skills: SkillLibrary,
     private agents: AgentStore,
+    private apps: AppsService,
+    private providers?: Pick<ProvidersService, "getDefault">,
   ) {}
 
   sources(): string[] {
@@ -89,29 +104,94 @@ export class Marketplace {
   }
 
   private async index(source: string): Promise<IndexItem[]> {
-    const raw = JSON.parse((await fetchBytes(source)).toString("utf8")) as { items?: IndexItem[] };
+    const raw = JSON.parse((await fetchBytes(source)).toString("utf8")) as { items?: unknown[] };
     if (!Array.isArray(raw.items))
       throw new MarketplaceFetchError("invalid_index", `${source} is not a marketplace index`);
-    return raw.items.filter(
-      (i) =>
-        typeof i.id === "string" &&
-        (i.kind === "skill" || i.kind === "agent") &&
-        typeof i.url === "string" &&
-        /^[0-9a-f]{64}$/.test(String(i.sha256)),
+    const items = raw.items.flatMap((rawItem) => {
+      const result = MarketplaceRegistryEntry.safeParse(rawItem);
+      return result.success ? [result.data] : [];
+    });
+    return items.filter(
+      (item) =>
+        item.kind !== "plugin" ||
+        item.skills?.every((id) =>
+          items.some((skill) => skill.id === id && skill.kind === "skill"),
+        ),
     );
   }
 
-  private installed(item: IndexItem): boolean {
-    if (item.kind === "skill") return this.skills.get(item.name) !== null;
-    return this.agents.list().some((a) => a.name === item.name);
+  private installed(item: IndexItem, source: string, index: IndexItem[]): boolean {
+    const installation = this.db
+      .query("SELECT active FROM marketplace_installations WHERE source = ? AND item_id = ?")
+      .get(source, item.id) as { active: number } | null;
+    if (installation?.active === 0) return false;
+    if (item.kind === "plugin") {
+      const artifacts = this.db
+        .query(
+          "SELECT name, registry_id FROM marketplace_artifacts WHERE source = ? AND item_id = ? AND kind = 'skill'",
+        )
+        .all(source, item.id) as { name: string; registry_id: string | null }[];
+      return (
+        !!item.skills?.length &&
+        item.skills.every((id) => {
+          const skill = index.find((entry) => entry.kind === "skill" && entry.id === id);
+          if (!skill) return false;
+          const name = skillSlug(skill.name ?? skill.id);
+          const artifact = artifacts.find(
+            (entry) => entry.registry_id === id || (!entry.registry_id && entry.name === name),
+          );
+          return installation
+            ? !!artifact && this.skills.get(artifact.name) !== null
+            : this.skills.get(name) !== null;
+        })
+      );
+    }
+    if (item.kind === "skill") return this.skills.get(item.name ?? item.id) !== null;
+    return this.agents.list().some((a) => a.name === (item.name ?? item.id));
   }
 
-  async list(): Promise<{ items: MarketplaceItem[]; errors: { source: string; error: string }[] }> {
+  private builtinItems(): MarketplaceItem[] {
+    const connected = this.apps.list();
+    return APP_CATALOG.filter(
+      (entry) => entry.id !== "custom-stdio" && entry.id !== "custom-http",
+    ).map((entry) => {
+      const metadata = APP_MARKETPLACE[entry.id];
+      return {
+        id: entry.id,
+        name: entry.name,
+        description: entry.description,
+        kind: metadata?.kind ?? "app",
+        category: metadata?.category ?? "Outros",
+        featured: metadata?.featured ?? false,
+        icon: metadata?.icon ?? null,
+        author: metadata?.author ?? entry.name,
+        homepage: entry.docsUrl,
+        catalogId: entry.id,
+        secrets: entry.secrets,
+        includes: [],
+        source: BUILTIN_APPS_SOURCE,
+        installed: connected.some((app) => app.catalogId === entry.id),
+        version:
+          entry.command
+            ?.map((arg) => arg.match(/@(\d+\.\d+\.\d+(?:[-+][\w.-]+)?)$/)?.[1])
+            .find(Boolean) ?? "",
+        url: "",
+        sha256: "",
+      };
+    });
+  }
+
+  async list(filters: MarketplaceFilters = {}): Promise<{
+    items: MarketplaceItem[];
+    errors: { source: string; error: string }[];
+    categories: { name: string; count: number }[];
+  }> {
     const items: MarketplaceItem[] = [];
     const errors: { source: string; error: string }[] = [];
     for (const source of this.sources()) {
       try {
-        for (const i of await this.index(source)) {
+        const all = await this.index(source);
+        for (const i of all) {
           items.push({
             id: i.id,
             kind: i.kind,
@@ -121,15 +201,52 @@ export class Marketplace {
             version: String(i.version ?? ""),
             url: i.url,
             sha256: i.sha256,
+            category: i.category,
+            featured: i.featured,
+            icon: i.icon,
+            homepage: i.homepage,
+            catalogId: null,
+            secrets: [],
+            includes: i.kind === "skill" ? [] : (i.skills ?? []),
             source,
-            installed: this.installed(i),
+            installed: this.installed(i, source, all),
           });
         }
       } catch (e) {
         errors.push({ source, error: (e as Error).message });
       }
     }
-    return { items, errors };
+    items.push(...this.builtinItems());
+    const byKind = items.filter((item) => !filters.kind || item.kind === filters.kind);
+    const counts = new Map<string, number>();
+    for (const item of byKind) counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
+    const normalize = (value: string) =>
+      value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+    const query = normalize(filters.query ?? "");
+    return {
+      items: byKind.filter(
+        (item) =>
+          (!filters.category || item.category === filters.category) &&
+          [item.name, item.description, item.category, item.author].some((value) =>
+            normalize(value).includes(query),
+          ),
+      ),
+      errors,
+      categories: [...counts]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    };
+  }
+
+  async get(id: string, source?: string): Promise<MarketplaceItem> {
+    const item = (await this.list()).items.find(
+      (item) => item.id === id && (!source || item.source === source),
+    );
+    if (!item) throw new RpcError("not_found", "marketplace item not found");
+    return item;
   }
 
   private async download(source: string, item: IndexItem): Promise<string> {
@@ -140,7 +257,99 @@ export class Marketplace {
     return buf.toString("utf8");
   }
 
-  private async installSkill(source: string, item: IndexItem) {
+  private remember(
+    source: string,
+    owner: string,
+    kind: Artifact["kind"],
+    name: string,
+    raw: string,
+    created: boolean,
+    registryId: string | null = null,
+  ) {
+    const hash = fingerprint(raw);
+    const previous = this.db
+      .query(
+        "SELECT hash, created FROM marketplace_artifacts WHERE source = ? AND item_id = ? AND kind = ? AND name = ?",
+      )
+      .get(source, owner, kind, name) as Pick<Artifact, "hash" | "created"> | null;
+    this.db
+      .query(
+        "INSERT OR REPLACE INTO marketplace_artifacts (source, item_id, kind, name, hash, created, registry_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        source,
+        owner,
+        kind,
+        name,
+        hash,
+        created || (previous?.created && previous.hash === hash) ? 1 : 0,
+        registryId,
+      );
+  }
+
+  async uninstall(source: string, id: string) {
+    if (source === BUILTIN_APPS_SOURCE) {
+      const apps = this.apps.list().filter((app) => app.catalogId === id);
+      for (const app of apps) await this.apps.delete(app.id);
+      return {
+        ok: true as const,
+        removed: apps.map((app) => app.id),
+        preserved: [],
+        agents: [] as string[],
+      };
+    }
+    const installation = this.db
+      .query("SELECT 1 FROM marketplace_installations WHERE source = ? AND item_id = ?")
+      .get(source, id);
+    if (!installation) {
+      const item = await this.get(id, source).catch((error) => {
+        if (error instanceof RpcError && error.code === "not_found") return null;
+        throw error;
+      });
+      if (item?.installed)
+        throw new RpcError(
+          "bad_request",
+          "installation ownership is unknown; existing files have been preserved",
+        );
+    }
+    const artifacts = this.db
+      .query(
+        "SELECT kind, name, hash, created FROM marketplace_artifacts WHERE source = ? AND item_id = ?",
+      )
+      .all(source, id) as Artifact[];
+    const removed: string[] = [];
+    const preserved: string[] = [];
+    const agents: string[] = [];
+    for (const artifact of artifacts) {
+      const skill = artifact.kind === "skill" ? this.skills.get(artifact.name) : null;
+      const agent = artifact.kind === "agent" ? this.agents.get(artifact.name) : null;
+      const raw = skill?.raw ?? (agent ? JSON.stringify(agent) : null);
+      if (raw === null) continue;
+      const referenced = this.db
+        .query(
+          "SELECT 1 FROM marketplace_artifacts WHERE kind = ? AND name = ? AND NOT (source = ? AND item_id = ?) LIMIT 1",
+        )
+        .get(artifact.kind, artifact.name, source, id);
+      if (!artifact.created || fingerprint(raw) !== artifact.hash || referenced) {
+        preserved.push(artifact.name);
+        continue;
+      }
+      if (artifact.kind === "skill") this.skills.removeUnmodified(artifact.name, raw);
+      else if (this.agents.softDelete(artifact.name)) agents.push(artifact.name);
+      removed.push(artifact.name);
+    }
+    this.db.transaction(() => {
+      this.db
+        .query("DELETE FROM marketplace_artifacts WHERE source = ? AND item_id = ?")
+        .run(source, id);
+      this.db
+        .query("UPDATE marketplace_installations SET active = 0 WHERE source = ? AND item_id = ?")
+        .run(source, id);
+    })();
+    return { ok: true as const, removed, preserved, agents };
+  }
+
+  private async installSkill(source: string, item: IndexItem, owner: string) {
     const text = await this.download(source, item);
     const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text);
     const meta: Record<string, string> = {};
@@ -148,39 +357,103 @@ export class Marketplace {
       const i = line.indexOf(":");
       if (i > 0) meta[line.slice(0, i).trim()] = line.slice(i + 1).trim();
     }
-    return this.skills.save(
-      {
-        name: meta.name ?? item.name,
-        description: meta.description ?? item.description ?? "",
-        body: m ? (m[2] ?? "") : text,
-        author: `marketplace:${item.author || "unknown"}`,
-      },
-      "upsert",
+    const name = skillSlug(meta.name ?? item.name ?? item.id);
+    const existing = this.skills.get(name);
+    const previous = this.db
+      .query(
+        "SELECT hash, created FROM marketplace_artifacts WHERE source = ? AND item_id = ? AND kind = 'skill' AND name = ?",
+      )
+      .get(source, owner, name) as Pick<Artifact, "hash" | "created"> | null;
+    const owned = !!existing && !!previous?.created && fingerprint(existing.raw) === previous.hash;
+    const content = {
+      name,
+      description: meta.description ?? item.description ?? "",
+      body: m ? (m[2] ?? "") : text,
+      author: `marketplace:${item.author || "unknown"}`,
+    };
+    const changed =
+      existing &&
+      (existing.body.trimEnd() !== content.body.trimEnd() ||
+        existing.description !== content.description ||
+        existing.author !== content.author);
+    if (changed && previous && !owned)
+      throw new RpcError(
+        "bad_request",
+        `skill "${name}" has local or unowned content; preserved without changes`,
+      );
+    const skill =
+      !existing || (changed && owned)
+        ? this.skills.save(content, existing ? "revise" : "create")
+        : existing;
+    this.remember(
+      source,
+      owner,
+      "skill",
+      skill.name,
+      this.skills.get(skill.name)!.raw,
+      !existing || owned,
+      item.id,
     );
+    return skill;
   }
 
   async install(
     source: string,
     id: string,
     provider?: string,
-  ): Promise<{ skills: string[]; agent: Agent | null }> {
+    options: Pick<Parameters<AppsService["connect"]>[0], "permissions" | "secrets"> = {
+      secrets: {},
+    },
+  ): Promise<{ skills: string[]; agent: Agent | null; app: ConnectedApp | null }> {
+    if (source === BUILTIN_APPS_SOURCE) {
+      const item = this.builtinItems().find((item) => item.id === id);
+      if (!item?.catalogId) throw new RpcError("not_found", "marketplace app not found");
+      return {
+        skills: [],
+        agent: null,
+        app: this.apps.connect({ catalogId: item.catalogId, ...options }),
+      };
+    }
     if (!this.sources().includes(source))
       throw new RpcError("bad_request", "unknown marketplace source");
     const all = await this.index(source);
     const item = all.find((i) => i.id === id);
     if (!item) throw new RpcError("not_found", `no item "${id}" in ${source}`);
+    const finish = <T>(result: T): T => {
+      this.db
+        .query(
+          "INSERT INTO marketplace_installations (source, item_id, active) VALUES (?, ?, 1) ON CONFLICT (source, item_id) DO UPDATE SET active = 1",
+        )
+        .run(source, id);
+      return result;
+    };
     if (item.kind === "skill")
-      return { skills: [(await this.installSkill(source, item)).name], agent: null };
+      return finish({
+        skills: [(await this.installSkill(source, item, id)).name],
+        agent: null,
+        app: null,
+      });
+    if (item.kind === "plugin") {
+      const skills: string[] = [];
+      for (const skillId of item.skills ?? []) {
+        const skill = all.find((entry) => entry.kind === "skill" && entry.id === skillId);
+        if (!skill) throw new RpcError("bad_request", "plugin skill not found");
+        skills.push((await this.installSkill(source, skill, id)).name);
+      }
+      return finish({ skills, agent: null, app: null });
+    }
     const t = JSON.parse(await this.download(source, item)) as Template;
     if (typeof t.name !== "string" || typeof t.instructions !== "string") {
       throw new RpcError("bad_request", "invalid agent template");
     }
-    const prov = ProviderId.safeParse(provider ?? t.provider ?? "claude");
+    const prov = ProviderId.safeParse(
+      provider ?? t.provider ?? this.providers?.getDefault().provider ?? "claude",
+    );
     if (!prov.success) throw new RpcError("bad_request", "unknown provider");
     const skills: string[] = [];
     for (const sid of t.skills ?? []) {
       const s = all.find((i) => i.id === sid && i.kind === "skill");
-      if (s) skills.push((await this.installSkill(source, s)).name);
+      if (s) skills.push((await this.installSkill(source, s, id)).name);
     }
     const avatar = AgentAvatar.safeParse(t.avatar);
     const agent = this.agents.create({
@@ -189,6 +462,7 @@ export class Marketplace {
       provider: prov.data,
       avatar: avatar.success ? avatar.data : null,
     });
-    return { skills, agent };
+    this.remember(source, id, "agent", agent.id, JSON.stringify(agent), true);
+    return finish({ skills, agent, app: null });
   }
 }

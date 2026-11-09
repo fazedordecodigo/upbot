@@ -64,6 +64,12 @@ export class VmCredentials {
     return this.vault.delete(`${VMCRED_PREFIX}${provider}`);
   }
 
+  maskedApiKey(provider: VmCredentialProvider): string | null {
+    const entry = this.readEntry(provider);
+    if (entry?.kind !== "api_key") return null;
+    return `••••${entry.value.length >= 12 ? entry.value.slice(-4) : ""}`;
+  }
+
   /** Environment variables for a provider session inside a microVM ({} when none is set). */
   env(provider: string): Record<string, string> {
     if (!isProvider(provider)) return {};

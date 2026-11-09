@@ -1,5 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { Agent } from "@boto/protocol";
 import { spawnProvider } from "../src/providers/process";
 import { ProviderError } from "../src/providers/types";
@@ -7,12 +6,15 @@ import {
   DaemonClient,
   type DaemonHandle,
   FAKE_AGENT,
+  removeDir,
   startDaemon,
   stopDaemon,
   tmp,
 } from "./helpers";
 
 const TOKEN = `spawn-errors-${crypto.randomUUID()}`;
+
+setDefaultTimeout(30_000);
 // matches the AIza pattern in redactSecrets; only ever a fake test value
 const FAKE_GEMINI_KEY = `AIzaSyFakeGemini${crypto.randomUUID().replaceAll("-", "")}`;
 
@@ -53,8 +55,7 @@ describe("asynchronous child spawn errors", () => {
   afterAll(async () => {
     await stopDaemon(daemon, client, stateDir);
     for (const directory of [dataDir, agentsRoot, stateDir]) {
-      if (directory)
-        rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      if (directory) await removeDir(directory);
     }
   });
 

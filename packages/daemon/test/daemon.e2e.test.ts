@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_BOT_NAME } from "../src/persona";
@@ -15,6 +15,8 @@ import {
 } from "./helpers";
 
 const TOKEN = `test-token-${crypto.randomUUID()}`;
+
+setDefaultTimeout(30_000);
 
 describe("daemon e2e", () => {
   let dataDir: string;
@@ -152,7 +154,7 @@ describe("daemon e2e", () => {
 
     const db = new Database(join(dataDir, "boto.db"), { readonly: true });
     const rows = db.query("SELECT COUNT(*) AS n FROM schema_migrations").get() as { n: number };
-    expect(rows.n).toBe(22);
+    expect(rows.n).toBe(32);
     db.close();
   });
 

@@ -5,12 +5,14 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  rmdirSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { Skill, SkillVersion } from "@boto/protocol";
+import type { MemoryUsageItem, Skill, SkillVersion } from "@boto/protocol";
 
 // Local skills library shared by all agents: <shared>/Skills/<name>/SKILL.md with a
 // `name`/`description`/`author` frontmatter. Revisions keep the previous file in .history/.
@@ -147,10 +149,25 @@ export class SkillLibrary {
     return true;
   }
 
-  promptBlock(): string {
-    const skills = this.list();
+  removeUnmodified(name: string, raw: string): boolean {
+    const current = this.get(name);
+    if (!current || current.raw !== raw) return false;
+    unlinkSync(this.file(current.name));
+    try {
+      rmdirSync(join(this.root, current.name));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOTEMPTY") throw error;
+    }
+    return true;
+  }
+
+  promptBlock(onUsed?: (items: MemoryUsageItem[]) => void): string {
+    const skills = this.list().slice(0, 100);
     if (skills.length === 0) return "";
-    const lines = skills.slice(0, 100).map((s) => `- ${s.name}: ${s.description}`);
+    onUsed?.(
+      skills.map((s) => ({ id: s.name, text: `${s.name}: ${s.description}`, kind: "skill" })),
+    );
+    const lines = skills.map((s) => `- ${s.name}: ${s.description}`);
     return `<skills_library>\nReusable skills shared by all Boto agents. Load one with the boto read_skill tool when it fits the task; create_skill/revise_skill to save what you learn.\n${lines.join("\n")}\n</skills_library>\n\n`;
   }
 }

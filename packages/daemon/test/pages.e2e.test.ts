@@ -51,6 +51,7 @@ describe("pages e2e", () => {
       name: "A",
       provider: "devin",
       instructions: "",
+      requireApproval: false,
     });
   });
 

@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { Approval, ApprovalDecision, ApprovalRule } from "@boto/protocol";
+import type { AppPermissionKind, Approval, ApprovalDecision, ApprovalRule } from "@boto/protocol";
 import { classifyAppTool, isSensitivePermission } from "@boto/protocol";
 import { z } from "zod";
 import type { AppsService } from "./apps";
@@ -16,8 +16,9 @@ import type { Vault } from "./vault";
 // gateways, group chats) expire after BOTO_APPROVAL_BACKGROUND_TTL_MS (default 10 min),
 // others after BOTO_APPROVAL_TTL_MS (default 60 min). The same queue carries secure secret
 // requests (value goes straight to the vault) and browser take-over requests.
-// Pending approvals are mirrored in approval_records (audit fields only). The blocked call
-// dies with the daemon, so a restart marks leftovers "interrupted": never resumable.
+// Approvals are mirrored in approval_records (audit fields only): pending ones until decided,
+// then the decision and its time (resolved_at) so task timelines survive restarts. The blocked
+// call dies with the daemon, so a restart marks pending leftovers "interrupted": never resumable.
 
 type Broadcast = (event: string, data: unknown) => void;
 type Waiter = {
@@ -46,6 +47,8 @@ export class GateRejection extends Error {
 }
 
 const MAX_INTERRUPTED = 50;
+const MAX_DECIDED = 500;
+const recordStatus = z.enum(["approved", "denied", "expired", "done", "interrupted"]);
 
 const recordSchema = z.object({
   kind: z.enum(["tool", "secret", "takeover"]),
@@ -65,6 +68,7 @@ type RecordRow = {
   data_json: string;
   created_at: number;
   interrupted_at: number | null;
+  resolved_at: number | null;
 };
 
 /** Title rebuilt from stored fields: bot-written titles are not persisted. */
@@ -83,7 +87,20 @@ const rulesSchema = z.array(
   }),
 );
 
+/** A tool call an ask policy may force through the approval flow. */
+export type AskQuery = {
+  agentId: string;
+  turnId: string | null;
+  tool: string;
+  isAppTool: boolean;
+  /** App permission kind of the call; null for built-in bridge tools. */
+  permission: AppPermissionKind | null;
+};
+/** Returns true to require approval. Policies only add asks; they never allow a call. */
+export type AskPolicy = (q: AskQuery) => boolean;
+
 export class ApprovalService {
+  private askPolicies: AskPolicy[] = [];
   private pending = new Map<string, Approval>();
   private waiters = new Map<string, Waiter>();
   private recent: Approval[] = [];
@@ -151,7 +168,7 @@ export class ApprovalService {
     try {
       this.insertAudit(event, data, a);
     } catch (error) {
-      console.error("[botod] approval.audit_write_failed", (error as Error).message);
+      console.error("[botod] approval.audit_write_failed", errorDiagnostics(error));
     }
   }
 
@@ -193,9 +210,13 @@ export class ApprovalService {
     }
   }
 
-  private unpersist(id: string): void {
+  private persistDecision(a: Approval): void {
     try {
-      this.db.query("DELETE FROM approval_records WHERE id = ? AND status = 'pending'").run(id);
+      this.db
+        .query(
+          "UPDATE approval_records SET status = ?, resolved_at = ? WHERE id = ? AND status = 'pending'",
+        )
+        .run(a.status, a.resolvedAt ?? Date.now(), a.id);
     } catch (error) {
       console.error("[botod] approval.record_write_failed", errorDiagnostics(error));
     }
@@ -203,8 +224,10 @@ export class ApprovalService {
 
   private fromRecord(r: RecordRow): Approval | null {
     let parsed: z.infer<typeof recordSchema>;
+    let status: z.infer<typeof recordStatus>;
     try {
       parsed = recordSchema.parse(JSON.parse(r.data_json));
+      status = recordStatus.parse(r.status);
     } catch {
       return null;
     }
@@ -221,10 +244,11 @@ export class ApprovalService {
       ...(parsed.appName ? { appName: parsed.appName } : {}),
       ...(parsed.permission ? { permission: parsed.permission } : {}),
       background: parsed.background,
-      status: "interrupted",
+      status,
       createdAt: r.created_at,
       expiresAt: parsed.expiresAt,
       ...(r.interrupted_at !== null ? { interruptedAt: r.interrupted_at } : {}),
+      ...(r.resolved_at !== null ? { resolvedAt: r.resolved_at } : {}),
     };
   }
 
@@ -245,7 +269,12 @@ export class ApprovalService {
           "UPDATE approval_records SET status = 'interrupted', interrupted_at = ? WHERE id = ? AND status = 'pending'",
         )
         .run(now, r.id);
-      const a = this.fromRecord({ ...r, status: "interrupted", interrupted_at: now });
+      const a = this.fromRecord({
+        ...r,
+        status: "interrupted",
+        interrupted_at: now,
+        resolved_at: null,
+      });
       this.insertAudit(
         "approval.interrupted",
         {
@@ -283,6 +312,11 @@ export class ApprovalService {
           "DELETE FROM approval_records WHERE status = 'interrupted' AND id NOT IN (SELECT id FROM approval_records WHERE status = 'interrupted' ORDER BY interrupted_at DESC, created_at DESC LIMIT ?)",
         )
         .run(MAX_INTERRUPTED);
+      this.db
+        .query(
+          "DELETE FROM approval_records WHERE status NOT IN ('pending', 'interrupted') AND id NOT IN (SELECT id FROM approval_records WHERE status NOT IN ('pending', 'interrupted') ORDER BY resolved_at DESC, created_at DESC LIMIT ?)",
+        )
+        .run(MAX_DECIDED);
     } catch (error) {
       console.error("[botod] approval.record_write_failed", errorDiagnostics(error));
     }
@@ -297,14 +331,15 @@ export class ApprovalService {
     this.suspended = true;
   }
 
-  private interrupted(agentId?: string): Approval[] {
+  /** Interrupted and decided approvals kept in approval_records (audit fields only). */
+  private stored(agentId?: string): Approval[] {
     try {
       const rows = (
         agentId
           ? this.db
-              .query("SELECT * FROM approval_records WHERE status = 'interrupted' AND agent_id = ?")
+              .query("SELECT * FROM approval_records WHERE status != 'pending' AND agent_id = ?")
               .all(agentId)
-          : this.db.query("SELECT * FROM approval_records WHERE status = 'interrupted'").all()
+          : this.db.query("SELECT * FROM approval_records WHERE status != 'pending'").all()
       ) as RecordRow[];
       return rows.map((r) => this.fromRecord(r)).filter((a): a is Approval => a !== null);
     } catch (error) {
@@ -325,6 +360,10 @@ export class ApprovalService {
     }
   }
 
+  addAskPolicy(policy: AskPolicy): void {
+    this.askPolicies.push(policy);
+  }
+
   /** "ask" | "allow" for a tool call, after rules and defaults. */
   decide(agentId: string, tool: string, isAppTool: boolean): "ask" | "allow" {
     const hits = this.rules().filter(
@@ -334,9 +373,12 @@ export class ApprovalService {
     );
     if (hits.some((r) => r.action === "ask")) return "ask";
     const app = isAppTool ? this.apps.appForTool(tool) : undefined;
-    if (app) {
-      const kind = classifyAppTool(tool);
-      const turn = this.runtimes().currentTurn(agentId);
+    const kind = app ? classifyAppTool(tool) : null;
+    const turn = this.runtimes().currentTurn(agentId);
+    const query = { agentId, turnId: turn?.id ?? null, tool, isAppTool, permission: kind };
+    const forced = this.askPolicies.some((policy) => policy(query));
+    if (forced) return "ask";
+    if (app && kind) {
       if (
         !isSensitivePermission(kind) &&
         turn &&
@@ -350,8 +392,10 @@ export class ApprovalService {
   }
 
   list(agentId?: string): Approval[] {
-    const all = [...this.pending.values(), ...this.recent, ...this.interrupted(agentId)];
-    return all
+    const all = new Map<string, Approval>();
+    for (const a of [...this.pending.values(), ...this.recent, ...this.stored(agentId)])
+      if (!all.has(a.id)) all.set(a.id, a);
+    return [...all.values()]
       .filter((a) => !agentId || a.agentId === agentId)
       .sort((a, b) => b.createdAt - a.createdAt);
   }
@@ -364,6 +408,18 @@ export class ApprovalService {
     >,
   ): Promise<{ approval: Approval; value?: string }> {
     const cur = this.runtimes().currentTurn(agentId);
+    if (
+      !cur &&
+      this.db
+        .query(
+          "SELECT 1 FROM tasks WHERE agent_id = ? AND private = 1 AND ended_at IS NULL LIMIT 1",
+        )
+        .get(agentId)
+    )
+      throw new GateRejection(
+        "denied",
+        "approval requires an unambiguous private task context; retry when only one turn is running",
+      );
     const background = cur?.background ?? true;
     const ttl = background
       ? envPositiveNumber("BOTO_APPROVAL_BACKGROUND_TTL_MS", 10 * 60_000)
@@ -407,8 +463,8 @@ export class ApprovalService {
     const a = this.pending.get(id);
     if (!a) return null;
     this.pending.delete(id);
-    this.unpersist(id);
-    const done = { ...a, status };
+    const done: Approval = { ...a, status, resolvedAt: Date.now() };
+    this.persistDecision(done);
     this.recent = [done, ...this.recent].slice(0, 50);
     this.audit(
       "approval.decided",
@@ -418,6 +474,7 @@ export class ApprovalService {
         kind: done.kind,
         tool: done.tool,
         appId: done.appId ?? null,
+        appName: done.appName ?? null,
         permission: done.permission ?? null,
         secretName: done.kind === "secret" ? done.secretName : null,
         status,
@@ -426,7 +483,10 @@ export class ApprovalService {
         reason: outcome?.reason ?? null,
         failure: outcome?.failure ?? null,
         background: done.background,
-        ageMs: Date.now() - done.createdAt,
+        createdAt: done.createdAt,
+        expiresAt: done.expiresAt,
+        resolvedAt: done.resolvedAt,
+        ageMs: done.resolvedAt! - done.createdAt,
       },
       done,
     );
@@ -574,8 +634,17 @@ export class ApprovalService {
       if (a.agentId === agentId && a.turnId === turnId) this.finish(a.id, "expired");
   }
 
-  /** Blocks until a tool call is allowed; throws when denied or expired. */
-  async gate(agentId: string, tool: string, args: unknown, isAppTool: boolean): Promise<void> {
+  /**
+   * Blocks until a tool call is allowed; throws when denied or expired. `forceAsk` (a task
+   * with "Pedir aprovação" on an external action) can only add an approval, never skip one.
+   */
+  async gate(
+    agentId: string,
+    tool: string,
+    args: unknown,
+    isAppTool: boolean,
+    opts: { forceAsk?: boolean } = {},
+  ): Promise<void> {
     const app = isAppTool ? this.apps.appForTool(tool) : undefined;
     if (isAppTool && !app) throw new RpcError("not_found", "app not found");
     const permission = classifyAppTool(tool);
@@ -589,7 +658,7 @@ export class ApprovalService {
       });
       throw new GateRejection("denied", `${app.name} não permite ${permission}`);
     }
-    if (this.decide(agentId, tool, isAppTool) === "allow") return;
+    if (!opts.forceAsk && this.decide(agentId, tool, isAppTool) === "allow") return;
     const detail = JSON.stringify(args ?? {}, null, 2);
     const { approval } = await this.open(agentId, {
       kind: "tool",

@@ -174,7 +174,7 @@ test("read objects are nouns, while connectors chain actions with sensitivity pr
 test("migration backfills existing apps and service validation rejects sensitive allow", async () => {
   const db = new Database(":memory:");
   try {
-    for (const sql of migrations.slice(0, -1)) db.exec(sql);
+    for (const sql of migrations.slice(0, 18)) db.exec(sql);
     db.query(
       "INSERT INTO connected_apps (id, catalog_id, config_json, enabled, created_at) VALUES (?, ?, ?, 0, 1)",
     ).run(
@@ -190,7 +190,7 @@ test("migration backfills existing apps and service validation rejects sensitive
         agentIds: [],
       }),
     );
-    db.exec(migrations.at(-1)!);
+    for (const sql of migrations.slice(18)) db.exec(sql);
     const apps = new AppsService(db, new Vault(db, "unused"), () => {});
     expect(apps.get("legacy").permissions).toEqual(defaultAppPermissions);
     for (const kind of ["send", "pay", "book", "del"]) {
