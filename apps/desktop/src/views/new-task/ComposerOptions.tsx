@@ -1,55 +1,7 @@
-import type { Agent, ToolMode, When } from "@boto/protocol";
+import type { ToolMode, When } from "@boto/protocol";
 import { toolLabels, whenLabels } from "../../lib/new-task";
 import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from "../../ui/Dropdown";
 import { Icon } from "../../ui/icons";
-
-export function AgentPicker({
-  agents,
-  agentId,
-  disabled,
-  onChange,
-}: {
-  agents: Agent[];
-  agentId: string;
-  disabled: boolean;
-  onChange: (id: string) => void;
-}) {
-  return (
-    <Dropdown
-      label="Escolher agente"
-      trigger={
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm opt-trigger"
-          id="agent-trigger"
-          disabled={disabled || !agents.length}
-        >
-          <Icon name="users" />
-          <span className="opt-key">Agente</span>
-          <span className="opt-value">
-            {agents.find((agent) => agent.id === agentId)?.name ?? "Escolher agente"}
-          </span>
-          <Icon name="chevron-down" className="opt-chevron" />
-        </button>
-      }
-    >
-      <DropdownLabel>Delegar a este agente</DropdownLabel>
-      {agents.map((agent) => (
-        <DropdownItem
-          key={agent.id}
-          role="menuitemradio"
-          aria-checked={agentId === agent.id}
-          onClick={() => onChange(agent.id)}
-        >
-          <Icon name="check" className="item-check" />
-          <span className="od-field od-fill">
-            <span className="item-name">{agent.name}</span>
-          </span>
-        </DropdownItem>
-      ))}
-    </Dropdown>
-  );
-}
 
 export function WhenPicker({
   when,

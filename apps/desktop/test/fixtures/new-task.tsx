@@ -14,11 +14,23 @@ import "../../src/shell/shell.css";
 function Harness() {
   const { navigate, view, params } = useRouter();
   useEffect(() => {
-    const templateId = new URLSearchParams(location.search).get("templateId");
-    navigate("new", templateId ? { templateId } : {});
+    const query = new URLSearchParams(location.search);
+    const templateId = query.get("templateId");
+    const agentId = query.get("agentId");
+    navigate("new", { ...(templateId ? { templateId } : {}), ...(agentId ? { agentId } : {}) });
   }, [navigate]);
   return (
     <main id="main" data-view={view} data-route-id={params.id}>
+      <button
+        type="button"
+        onClick={() =>
+          navigate("new", {
+            agentId: new URLSearchParams(location.search).get("nextAgentId") ?? "",
+          })
+        }
+      >
+        Switch route agent
+      </button>
       <Topbar collapsed={false} expand={() => {}} openMenu={() => {}} />
       {view === "new" ? <NewTaskView /> : <h1 tabIndex={-1}>{view}</h1>}
     </main>
