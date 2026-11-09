@@ -475,7 +475,7 @@ export class ApprovalService {
         createdAt: done.createdAt,
         expiresAt: done.expiresAt,
         resolvedAt: done.resolvedAt,
-        ageMs: done.resolvedAt - done.createdAt,
+        ageMs: done.resolvedAt! - done.createdAt,
       },
       done,
     );

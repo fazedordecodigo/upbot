@@ -136,7 +136,7 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     );
     await page.reload();
     await page.getByText("memory navigation", { exact: true }).waitFor();
-    await page.getByRole("button", { name: /Usou .* itens da memória/ }).click();
+    await page.getByRole("button", { name: /Usou .* ite(?:m|ns) da memória/ }).click();
     await page.getByRole("button", { name: "Editar memória", exact: true }).click();
     await page.locator("#st-memory").waitFor();
     expect(await page.locator("#st-tab-memory").getAttribute("aria-selected")).toBe("true");
@@ -402,8 +402,8 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     await page.locator("#task-desk .live-frame").waitFor();
     await page.locator("#ctl-stop").click();
     await page.setViewportSize({ width: 1440, height: 900 });
-    const stopDialog = await page.locator("#confirm-stop").boundingBox();
-    expect(stopDialog?.width).toBeGreaterThan(520);
+    const stopDialog = await page.locator("#confirm").boundingBox();
+    expect(stopDialog?.width).toBe(520);
     await page.getByRole("button", { name: "Encerrar tarefa", exact: true }).click();
     await page.locator("#task-meta").getByText("Encerrada", { exact: true }).waitFor();
     expect(await page.locator("#instruct-input").isDisabled()).toBe(true);

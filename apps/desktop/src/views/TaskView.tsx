@@ -1,5 +1,6 @@
 import type { ChatItem } from "@boto/protocol";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { useConfirm } from "../dialogs/ConfirmDialog";
 import { VmDialog } from "../dialogs/VmDialog";
 import { useMachine } from "../hooks/useMachine";
 import { useTask } from "../hooks/useTask";
@@ -14,7 +15,6 @@ import { readStorage, writeStorage } from "../lib/storage";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
 import { LiveDesk } from "../task/LiveDesk";
-import { Dialog } from "../ui/Dialog";
 import { Icon, type IconName } from "../ui/icons";
 import { useToast } from "../ui/Toast";
 import "./TaskView.css";
@@ -131,7 +131,7 @@ function TaskSurface() {
   useEffect(() => {
     if (session.error) toast(session.error);
   }, [session.error, toast]);
-  const [confirm, setConfirm] = useState(false);
+  const confirm = useConfirm();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const scroll = useRef<HTMLDivElement>(null);
@@ -143,7 +143,6 @@ function TaskSurface() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset task-local controls when routing to another task.
   useEffect(() => {
     setText("");
-    setConfirm(false);
     setBusy(false);
     bottom.current = true;
   }, [params.id]);
@@ -286,7 +285,17 @@ function TaskSurface() {
             aria-label="Encerrar"
             data-tip="Encerrar"
             disabled={!task || tone === "done" || busy}
-            onClick={() => setConfirm(true)}
+            onClick={() =>
+              task &&
+              void confirm({
+                title: "Encerrar esta tarefa?",
+                description:
+                  "O Boto para na etapa atual e não continua depois. O que já foi feito fica em Arquivos.",
+                action: "Encerrar tarefa",
+                cancel: "Continuar a tarefa",
+                onConfirm: () => act(() => client.request("tasks.stop", { id: task.id })),
+              })
+            }
           >
             <Icon name="power" />
             <span className="ctl-label">Encerrar</span>
@@ -707,44 +716,6 @@ function TaskSurface() {
           </div>
         </div>
       </div>
-      <Dialog
-        id="confirm-stop"
-        open={confirm}
-        onClose={() => setConfirm(false)}
-        aria-labelledby="confirm-stop-title"
-        aria-describedby="confirm-stop-desc"
-      >
-        <div className="dialog-body">
-          <div className="dialog-header">
-            <h2 className="dialog-title" id="confirm-stop-title">
-              Encerrar esta tarefa?
-            </h2>
-            <p className="dialog-description" id="confirm-stop-desc">
-              O Boto para na etapa atual e não continua depois. O que já foi feito fica em Arquivos.
-            </p>
-          </div>
-          <div className="dialog-footer">
-            <button type="button" className="btn btn-outline" onClick={() => setConfirm(false)}>
-              Continuar a tarefa
-            </button>
-            <button
-              type="button"
-              className="btn btn-destructive"
-              id="confirm-stop-btn"
-              disabled={busy}
-              onClick={() =>
-                task &&
-                void act(
-                  () => client.request("tasks.stop", { id: task.id }),
-                  () => setConfirm(false),
-                )
-              }
-            >
-              Encerrar tarefa
-            </button>
-          </div>
-        </div>
-      </Dialog>
       {machine && (
         <VmDialog machineId={machine.id} open={vmOpen} onClose={() => setVmOpen(false)} />
       )}

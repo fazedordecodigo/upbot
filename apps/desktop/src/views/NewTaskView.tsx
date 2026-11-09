@@ -85,7 +85,7 @@ function NewTaskComposer() {
           setTemplateId(template.templateId);
           setWhen(template.when ?? "now");
           setSchedule(template.when ? null : template.schedule);
-        } else if (profile.defaults.delegationMode === "scheduled") setWhen("in1h");
+        }
         setLoaded(true);
       })
       .catch((cause: unknown) => {

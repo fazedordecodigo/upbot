@@ -355,6 +355,7 @@ test(
       await page.locator("#home-title").waitFor();
       await page.keyboard.press("Control+Shift+O");
       await page.locator("#composer-input").fill("Outra tarefa");
+      await choose(page, "#when-trigger", "Toda segunda às 9h");
       await page.locator("#file-input").setInputFiles({
         name: "arquivo.txt",
         mimeType: "text/plain",

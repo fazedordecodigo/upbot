@@ -14,6 +14,7 @@ export type ConfirmOptions = {
   title: string;
   description: string;
   action: string;
+  cancel?: string;
   pendingAction?: string;
   onConfirm?: () => Promise<unknown>;
 };
@@ -108,7 +109,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 disabled={pending}
                 onClick={() => settle(false)}
               >
-                Cancelar
+                {request.cancel ?? "Cancelar"}
               </button>
               <button
                 type="button"
