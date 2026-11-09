@@ -68,14 +68,17 @@ function NewTaskComposer() {
       .then(([profile, template]) => {
         if (!active) return;
         setToolMode(template?.toolMode ?? profile.defaults.toolMode);
-        setRequireApproval(template?.requireApproval ?? profile.defaults.requireApproval);
+        setRequireApproval(
+          template?.requireApproval ??
+            (profile.defaults.delegationMode === "approval" || profile.defaults.requireApproval),
+        );
         setTemplateMissing(Boolean(params.templateId) && !template);
         if (template) {
           setText(template.prompt);
           setTemplateId(template.templateId);
           setWhen(template.when ?? "now");
           setSchedule(template.when ? null : template.schedule);
-        }
+        } else if (profile.defaults.delegationMode === "scheduled") setWhen("in1h");
         setLoaded(true);
       })
       .catch((cause: unknown) => {

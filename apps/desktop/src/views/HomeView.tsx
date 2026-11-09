@@ -2,6 +2,7 @@ import type { Approval, PendingPermission, Task } from "@boto/protocol";
 import { useEffect, useState } from "react";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { useHomeTasks } from "../hooks/useHomeTasks";
+import { dayGreeting } from "../lib/greeting";
 import { addDelivery, taskLanes } from "../lib/tasks";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
@@ -179,8 +180,7 @@ export function HomeView() {
   const agentName = (id: string) => agents.find((agent) => agent.id === id)?.name ?? "a definir";
   const lanes = taskLanes(items);
   const hour = new Date(now).getHours();
-  const greeting =
-    hour >= 5 && hour < 12 ? "Bom dia" : hour >= 12 && hour < 18 ? "Boa tarde" : "Boa noite";
+  const greeting = dayGreeting(hour);
   const status = {
     run: ["loader", "Em execução"],
     muted: ["circle-pause", "Pausada"],
