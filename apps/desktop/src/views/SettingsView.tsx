@@ -98,10 +98,13 @@ export function SettingsView() {
   const updateDefaults = async (key: "private" | "requireApproval", value: boolean) => {
     setBusy(true);
     setError("");
+    const defaults = { ...profile.data?.defaults, [key]: value };
+    if (key === "requireApproval" && !value && defaults.delegationMode === "approval")
+      defaults.delegationMode = "now";
     try {
       profile.setData(
         await client.request("profile.update", {
-          defaults: { ...profile.data?.defaults, [key]: value },
+          defaults,
         }),
       );
     } catch {
@@ -125,7 +128,7 @@ export function SettingsView() {
               Configurações
             </h1>
             <p className="page-sub">
-              Escolha o provedor de IA que os agentes usam e ajuste a memória, a aparência e a
+              Escolha o provedor de IA que os bots usam e ajuste a memória, a aparência e a
               privacidade. Não tem conta no Boto: tudo fica neste navegador.
             </p>
           </div>
@@ -202,7 +205,7 @@ export function SettingsView() {
                     <h2 className="st-title">Você e a memória</h2>
                     <p className="st-desc">
                       O Boto não tem cadastro. Ele só sabe o que você escreve aqui e usa isso para
-                      personalizar as sessões de todos os agentes.
+                      personalizar as sessões de todos os bots.
                     </p>
                   </div>
                 </div>
@@ -469,8 +472,8 @@ export function SettingsView() {
                       Pedir aprovação antes de ações externas
                     </span>
                     <span className="st-row-help" id="st-approval-help">
-                      O agente para e pergunta antes de enviar e-mail, publicar, abrir um PR ou
-                      mexer em pagamentos.
+                      O bot para e pergunta antes de enviar e-mail, publicar, abrir um PR ou mexer
+                      em pagamentos.
                     </span>
                   </span>
                   <Switch
@@ -488,8 +491,8 @@ export function SettingsView() {
                   <div className="od-field od-fill">
                     <h2 className="st-title">Permissões das ferramentas</h2>
                     <p className="st-desc">
-                      Todos os agentes podem usar as ferramentas do computador e os apps instalados.
-                      Na primeira vez que um agente usa uma ferramenta numa sessão, o Boto pede sua
+                      Todos os bots podem usar as ferramentas do computador e os apps instalados. Na
+                      primeira vez que um bot usa uma ferramenta numa sessão, o Boto pede sua
                       permissão. O que você libera em todas as sessões aparece aqui, e dá para
                       revogar.
                     </p>

@@ -172,12 +172,12 @@ test("onboarding persists real profile, handles errors, and exposes working shor
               id: "ask-confirm",
               onClick: async () => {
                 const answer = await confirm({
-                  title: "Excluir agente?",
-                  description: "Esta ação remove o agente.",
+                  title: "Excluir bot?",
+                  description: "Esta ação remove o bot.",
                   action: "Excluir",
                 });
                 setResult(String(answer));
-                if (answer) toast("Agente excluído.");
+                if (answer) toast("Bot excluído.");
               },
             },
             "Confirmar",
@@ -224,7 +224,7 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     await page.locator("#confirm-ok").click();
     expect(await page.locator("#confirm-result").textContent()).toBe("true");
     await page.locator(".toast").waitFor();
-    expect(await page.locator(".toast").textContent()).toContain("Agente excluído.");
+    expect(await page.locator(".toast").textContent()).toContain("Bot excluído.");
     expect(
       await page.locator(".toaster").evaluate((element) => getComputedStyle(element).maxWidth),
     ).toBe("360px");
@@ -247,6 +247,11 @@ test("onboarding persists real profile, handles errors, and exposes working shor
         if (outcome === "resolve") settleConfirm.resolve();
         else settleConfirm.reject(new Error("falhou"));
       }, outcome);
+      if (outcome === "reject") {
+        await page.locator('#confirm[aria-busy="false"]').waitFor();
+        expect(await page.locator("#confirm-ok").isEnabled()).toBe(true);
+        await page.locator("#confirm-cancel").click();
+      }
       await page.locator("#confirm").waitFor({ state: "detached" });
       expect(await page.locator("#confirm-result").textContent()).toBe(
         `pending:${outcome === "resolve"}`,

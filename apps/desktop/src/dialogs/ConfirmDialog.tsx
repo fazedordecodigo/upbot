@@ -69,7 +69,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       running.current = false;
       setPending(false);
     }
-    if (current.current === active) settle(confirmed);
+    if (current.current === active && confirmed) settle(true);
   };
   useEffect(
     () => () => {

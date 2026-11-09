@@ -59,6 +59,45 @@ afterAll(async () => {
   if (state) rmSync(state, { recursive: true, force: true });
 }, 30000);
 
+test("plugin removal calls provenance-safe daemon uninstall and preserves an independently installed shared skill", async () => {
+  const plugin = (await rpc.request("marketplace.list", { kind: "plugin" })).items[0]!;
+  const shared = (await rpc.request("marketplace.list", { kind: "skill" })).items.find((skill) =>
+    plugin.includes.includes(skill.id),
+  )!;
+  await rpc.request("marketplace.install", { source: shared.source, id: shared.id });
+  await rpc.request("marketplace.install", { source: plugin.source, id: plugin.id });
+  const isolated = await browser.newPage();
+  isolated.setDefaultTimeout(5000);
+  const methods: string[] = [];
+  isolated.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      const message = JSON.parse(String(payload));
+      if (message.method) methods.push(message.method);
+    }),
+  );
+  try {
+    await isolated.goto(`${base}/#port=${daemon.port}&token=${token}`);
+    await isolated.locator('[data-nav="marketplace"]').click();
+    await isolated.locator("#mk-tab-plugins").click();
+    await isolated.locator("#mk-grid .mk-card").filter({ hasText: plugin.name }).click();
+    await isolated
+      .locator("#mk-panel")
+      .getByRole("button", { name: "Remover", exact: true })
+      .click();
+    await isolated.locator("#confirm-ok").click();
+    await isolated.getByRole("button", { name: "Instalar", exact: true }).waitFor();
+    expect((await rpc.request("skills.list", {})).some((skill) => skill.name === shared.name)).toBe(
+      true,
+    );
+    expect(methods.includes("marketplace.uninstall")).toBe(true);
+    expect(methods.includes("skills.delete")).toBe(false);
+  } finally {
+    await isolated.close();
+    await rpc.request("marketplace.uninstall", { source: plugin.source, id: plugin.id });
+    await rpc.request("marketplace.uninstall", { source: shared.source, id: shared.id });
+  }
+}, 30_000);
+
 test("builtin apps, keyboard tabs, search, category and empty filters use real registry", async () => {
   const apps = await rpc.request("marketplace.list", { kind: "app" });
   expect(await page.locator("#mk-grid .mk-card").count()).toBe(apps.items.length);

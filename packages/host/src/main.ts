@@ -1099,45 +1099,48 @@ function xdo(display: string, args: string[], input?: string): string | null {
 }
 
 function readPointer(display: string): { x: number; y: number } {
-  const out = xdo(display, ["getmouselocation", "--shell"]) ?? "";
+  const out = xdo(display, ["getmouselocation", "--shell"]);
+  if (out === null) throw new Error("desktop input command failed");
   const x = Number(/X=(\d+)/.exec(out)?.[1] ?? 0);
   const y = Number(/Y=(\d+)/.exec(out)?.[1] ?? 0);
   return { x, y };
 }
 
 export function performDesktopEvents(display: string, events: DesktopInputEvent[]): string {
+  const input = (args: string[], text?: string) => {
+    if (xdo(display, args, text) === null) throw new Error("desktop input command failed");
+  };
   let kind = "move";
   for (const e of events) {
     switch (e.type) {
       case "mouse_move":
-        xdo(display, ["mousemove", String(e.x), String(e.y)]);
+        input(["mousemove", String(e.x), String(e.y)]);
         break;
       case "mouse_down":
-        xdo(display, ["mousedown", String(e.button)]);
+        input(["mousedown", String(e.button)]);
         kind = "click";
         break;
       case "mouse_up":
-        xdo(display, ["mouseup", String(e.button)]);
+        input(["mouseup", String(e.button)]);
         kind = "click";
         break;
       case "wheel": {
         const button = e.deltaY > 0 ? "5" : "4";
         const n = Math.min(Math.abs(e.deltaY), 10);
-        if (n > 0) xdo(display, ["click", "--repeat", String(n), "--delay", "10", button]);
+        if (n > 0) input(["click", "--repeat", String(n), "--delay", "10", button]);
         break;
       }
       case "key_down":
-        xdo(display, ["keydown", "--", e.keysym]);
+        input(["keydown", "--", e.keysym]);
         kind = "key";
         break;
       case "key_up":
-        xdo(display, ["keyup", "--", e.keysym]);
+        input(["keyup", "--", e.keysym]);
         kind = "key";
         break;
       case "click":
-        xdo(display, ["mousemove", String(e.x), String(e.y)]);
-        xdo(
-          display,
+        input(["mousemove", String(e.x), String(e.y)]);
+        input(
           e.double
             ? ["click", "--repeat", "2", "--delay", "80", String(e.button)]
             : ["click", String(e.button)],
@@ -1145,11 +1148,11 @@ export function performDesktopEvents(display: string, events: DesktopInputEvent[
         kind = "click";
         break;
       case "type":
-        if (e.text) xdo(display, ["type", "--delay", "12", "--file", "-"], e.text);
+        if (e.text) input(["type", "--delay", "0", "--file", "-"], e.text);
         kind = "type";
         break;
       case "key":
-        xdo(display, ["key", "--", e.keysym]);
+        input(["key", "--", e.keysym]);
         kind = "key";
         break;
     }
@@ -1251,11 +1254,15 @@ async function guestDesktop() {
           send({ type: "error", id, code: "not_controller" });
           break;
         }
-        const kind = performDesktopEvents(display, events);
-        const { x, y } = readPointer(display);
-        if (source === "agent") {
-          send({ type: "cursor", x, y, kind });
-          send({ type: "done", id, text: `pointer at (${x}, ${y})` });
+        try {
+          const kind = performDesktopEvents(display, events);
+          const { x, y } = readPointer(display);
+          if (source === "agent") {
+            send({ type: "cursor", x, y, kind });
+            send({ type: "done", id, text: `pointer at (${x}, ${y})` });
+          }
+        } catch {
+          send({ type: "error", id, code: "input_failed" });
         }
         break;
       }

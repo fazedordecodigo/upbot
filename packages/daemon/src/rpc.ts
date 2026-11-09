@@ -424,6 +424,7 @@ export class Rpc {
         const p = params as MethodParsedParams<typeof method>;
         if (!this.agents.get(p.agentId)) throw new RpcError("not_found", "agent not found");
         const placed = asBadRequest(() => this.extras.hosts.setPlacement(p));
+        this.extras.desktop.placementChanged(p.agentId);
         await this.runtimes.restartSession(p.agentId);
         queueMicrotask(() => this.broadcast("placement.updated", placed));
         return placed;
@@ -464,6 +465,17 @@ export class Rpc {
           queueMicrotask(() => this.broadcast("agent.created", agent));
         }
         return r;
+      }
+      case "marketplace.uninstall": {
+        const p = params as MethodParsedParams<typeof method>;
+        const result = this.extras.marketplace.uninstall(p.source, p.id);
+        for (const id of result.agents) {
+          this.queue.removeAllForAgent(id);
+          this.runtimes.agentDeleted(id);
+          queueMicrotask(() => this.broadcast("agent.deleted", { id }));
+        }
+        this.broadcast("skills.changed", {});
+        return result;
       }
       case "marketplace.setSources":
         this.extras.marketplace.setSources((params as MethodParsedParams<typeof method>).urls);
@@ -549,7 +561,7 @@ export class Rpc {
         return { ok: true };
       case "computer.access":
         return {
-          ...this.extras.computer.status(),
+          ...this.extras.computer.status((params as MethodParsedParams<typeof method>).agentId),
           agentIds: this.extras.computer.access(),
         };
       case "computer.setAccess": {

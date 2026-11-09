@@ -52,10 +52,10 @@ export function AgentsView() {
         <div className="page-head">
           <div className="od-field od-fill">
             <h1 className="page-title" id="agents-title" tabIndex={-1}>
-              Agentes
+              Bots
             </h1>
             <p className="page-sub">
-              O quadro de todos os agentes do Boto. Cada agente tem uma especialidade, trabalha em
+              O quadro de todos os bots do Boto. Cada bot tem uma especialidade, trabalha em
               instâncias próprias no computador na nuvem e puxa a próxima tarefa da fila quando uma
               instância fica livre.
             </p>
@@ -68,13 +68,13 @@ export function AgentsView() {
             onClick={() => setCreating(true)}
           >
             <Icon name="plus" />
-            Novo agente
+            Novo bot
           </button>
         </div>
-        <section className="ag-stats" id="ag-stats" aria-label="Resumo dos agentes">
+        <section className="ag-stats" id="ag-stats" aria-label="Resumo dos bots">
           {(
             [
-              ["agents", "Agentes"],
+              ["agents", "Bots"],
               ["running", "Em execução"],
               ["waiting", "Aguardando você"],
               ["queued", "Na fila"],
@@ -96,7 +96,7 @@ export function AgentsView() {
             <div
               className="tabs-list ag-filter"
               role="radiogroup"
-              aria-label="Filtrar agentes pela situação"
+              aria-label="Filtrar bots pela situação"
               id="ag-filter"
             >
               {filters.map(([key, label], index) => (
@@ -146,7 +146,7 @@ export function AgentsView() {
             {overview.error ? (
               <div>
                 <p className="ag-empty" role="alert">
-                  Não foi possível carregar os agentes.
+                  Não foi possível carregar os bots.
                 </p>
                 <button type="button" className="btn btn-outline" onClick={overview.reload}>
                   Tentar de novo
@@ -154,17 +154,17 @@ export function AgentsView() {
               </div>
             ) : !overview.data ? (
               <p className="ag-empty" role="status">
-                Carregando agentes…
+                Carregando bots…
               </p>
             ) : !overview.data.agents.length ? (
               <div className="card ag-empty-card">
-                <p>Nenhum agente ainda. Crie o primeiro para delegar tarefas.</p>
+                <p>Nenhum bot ainda. Crie o primeiro para delegar tarefas.</p>
                 <button type="button" className="btn btn-outline" onClick={() => setCreating(true)}>
-                  Novo agente
+                  Novo bot
                 </button>
               </div>
             ) : !rows.some((row) => filter === "all" || row.item.situation === filter) ? (
-              <p className="ag-empty">Nenhum agente nesta situação.</p>
+              <p className="ag-empty">Nenhum bot nesta situação.</p>
             ) : (
               rows
                 .filter((row) => filter === "all" || row.item.situation === filter)

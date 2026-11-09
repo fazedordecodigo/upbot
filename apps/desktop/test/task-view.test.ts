@@ -69,10 +69,10 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     await page.getByText("permission:allow_once", { exact: true }).waitFor();
     expect(await page.locator("#ctl-takeover").isDisabled()).toBe(true);
     expect(await page.locator("#ctl-takeover").getAttribute("title")).toBe(
-      "Este agente não tem uma área de trabalho",
+      "Este bot não tem uma área de trabalho",
     );
     expect(await page.locator("#task-desk").innerText()).toContain(
-      "Este agente trabalha sem área de trabalho. Ela está disponível para agentes em uma microVM.",
+      "Este bot trabalha sem área de trabalho. Ela está disponível para bots em uma microVM.",
     );
     await page.locator("#instruct-input").fill("echo: oi");
     await page.locator("#instruct-input").press("Enter");
@@ -402,12 +402,10 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     expect(await page.evaluate(() => !!document.activeElement?.closest("#vm-dialog"))).toBe(true);
     await page.keyboard.press("Escape");
     await page.locator("#vm-dialog").waitFor({ state: "hidden" });
-    await page.waitForFunction(
-      () => !document.querySelector('#task-desk .live-desk[data-owned="true"]'),
-    );
+    await page.locator('#task-desk .live-desk[data-owned="true"]').waitFor();
     expect(
       (await client.request("desktop.machines", {})).find((m) => m.id === machine.id)?.controller,
-    ).toBe("agent");
+    ).toBe("user");
     await page.getByRole("button", { name: "Abrir em tela cheia", exact: true }).click();
     await page.locator("#vm-desk").getByText("Você está no controle", { exact: true }).waitFor();
     await capture("390-vm", 390, 844);

@@ -73,7 +73,8 @@ export function RoutinesView() {
       </button>
     );
   }
-  function content(once: boolean) {
+  function content(kind: "once" | "recurring" | "manual") {
+    const once = kind === "once";
     if (query.error)
       return (
         <p className="rt-empty">
@@ -86,39 +87,46 @@ export function RoutinesView() {
     if (!query.loaded) return <p className="rt-empty">Carregando rotinas…</p>;
     const routines = (query.data ?? [])
       .filter((routine) =>
-        once
-          ? routine.runAt != null
-          : routine.runAt == null && (routine.schedule != null || routine.webhook),
+        kind === "manual"
+          ? routine.runAt == null && routine.schedule == null && !routine.webhook
+          : once
+            ? routine.runAt != null
+            : routine.runAt == null && (routine.schedule != null || routine.webhook),
       )
-      .sort(
-        (a, b) =>
-          (once ? (a.runAt ?? Infinity) : (a.nextRunAt ?? Infinity)) -
-          (once ? (b.runAt ?? Infinity) : (b.nextRunAt ?? Infinity)),
+      .sort((a, b) =>
+        kind === "manual"
+          ? a.name.localeCompare(b.name, "pt-BR")
+          : (once ? (a.runAt ?? Infinity) : (a.nextRunAt ?? Infinity)) -
+            (once ? (b.runAt ?? Infinity) : (b.nextRunAt ?? Infinity)),
       );
     if (!routines.length)
       return (
         <p className="rt-empty">
-          {once
-            ? "Nenhuma tarefa agendada. Ao delegar, escolha “Daqui a 1 hora” ou “Amanhã às 8h”."
-            : "Nenhuma rotina recorrente. Crie uma em Nova rotina ou escolha “Todo dia às 8h” ao delegar uma tarefa."}
+          {kind === "manual"
+            ? "Nenhuma rotina manual."
+            : once
+              ? "Nenhuma tarefa agendada. Ao delegar, escolha “Daqui a 1 hora” ou “Amanhã às 8h”."
+              : "Nenhuma rotina recorrente. Crie uma em Nova rotina ou escolha “Todo dia às 8h” ao delegar uma tarefa."}
         </p>
       );
     return (
       <ul className="rt-list">
         {routines.map((routine) => (
           <li className="rt-row" key={routine.id}>
-            <Icon name={once ? "calendar" : "repeat"} />
+            <Icon name={kind === "manual" ? "play" : once ? "calendar" : "repeat"} />
             <div className="rt-main">
               <div className="rt-name od-truncate" title={routine.name}>
                 {routine.name}
               </div>
               <div className="rt-meta">
-                <span className="rt-time">{formatSchedule(routine)}</span>
+                <span className="rt-time">
+                  {kind === "manual" ? "Manual" : formatSchedule(routine)}
+                </span>
                 <span aria-hidden="true"> · </span>
                 <span className="rt-agent">
                   {agents.find((agent) => agent.id === routine.agentId)?.name ?? "a definir"}
                 </span>
-                {!once && (
+                {kind === "recurring" && (
                   <>
                     <span aria-hidden="true"> · </span>
                     <span className="rt-time">{formatNextRun(routine)}</span>
@@ -183,7 +191,7 @@ export function RoutinesView() {
               Recorrentes
             </h2>
           </div>
-          <div id="rt-recurring">{content(false)}</div>
+          <div id="rt-recurring">{content("recurring")}</div>
         </section>
         <section aria-labelledby="rt-once-title" aria-busy={!query.loaded && !query.error}>
           <div className="section-head od-row">
@@ -191,7 +199,15 @@ export function RoutinesView() {
               Agendadas uma vez
             </h2>
           </div>
-          <div id="rt-once">{content(true)}</div>
+          <div id="rt-once">{content("once")}</div>
+        </section>
+        <section aria-labelledby="rt-manual-title" aria-busy={!query.loaded && !query.error}>
+          <div className="section-head od-row">
+            <h2 className="section-title" id="rt-manual-title">
+              Manuais
+            </h2>
+          </div>
+          <div id="rt-manual">{content("manual")}</div>
         </section>
       </div>
     </section>

@@ -15,7 +15,7 @@ const draft: NewTaskDraft = {
 test("new-task validates text, agent, limits and never drops scheduled attachments", () => {
   expect(draftError(draft)).toBeNull();
   expect(draftError({ ...draft, text: "  " })).toContain("Descreva");
-  expect(draftError({ ...draft, agentId: "" })).toContain("Escolha um agente");
+  expect(draftError({ ...draft, agentId: "" })).toContain("Escolha um bot");
   expect(draftError({ ...draft, text: "x".repeat(100_001) })).toContain("100.000");
   expect(draftError({ ...draft, text: "x".repeat(20_001), when: "daily" })).toContain("20.000");
   expect(draftError({ ...draft, when: "in1h", files: [new File(["a"], "a.txt")] })).toBeNull();

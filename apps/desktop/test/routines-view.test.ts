@@ -49,6 +49,42 @@ async function openRoutines(page: Page) {
   await page.locator("#routines-title").waitFor();
 }
 
+test("manual routines are visible with run, pause, resume and delete controls", async () => {
+  const agent = await rpc.request("agents.create", { name: "Manual bot", provider: "devin" });
+  const manual = await rpc.request("routines.create", {
+    agentId: agent.id,
+    name: "Manual report",
+    prompt: "echo:report",
+    private: false,
+    requireApproval: false,
+  });
+  const page = await browser.newPage();
+  page.setDefaultTimeout(5000);
+  try {
+    await openRoutines(page);
+    const row = page.locator("#rt-manual .rt-row").filter({ hasText: "Manual report" });
+    await row.waitFor();
+    expect(await page.locator("#rt-manual-title").innerText()).toBe("Manuais");
+    await row.getByRole("button", { name: "Pausar rotina", exact: true }).click();
+    await row.getByText("Pausada", { exact: true }).waitFor();
+    await row.getByRole("button", { name: "Retomar rotina", exact: true }).click();
+    await row.getByText("Ativa", { exact: true }).waitFor();
+    await row.getByRole("button", { name: "Executar agora", exact: true }).click();
+    await page.getByText("Rotina iniciada", { exact: true }).waitFor();
+    expect((await rpc.request("routines.runs", { id: manual.id })).length).toBeGreaterThan(0);
+    await row.getByRole("button", { name: "Excluir rotina", exact: true }).click();
+    await page.locator("#confirm-ok").click();
+    await row.waitFor({ state: "detached" });
+    expect(
+      (await rpc.request("routines.list", {})).some((routine) => routine.id === manual.id),
+    ).toBe(false);
+  } finally {
+    await page.close();
+    if ((await rpc.request("routines.list", {})).some((routine) => routine.id === manual.id))
+      await rpc.request("routines.delete", { id: manual.id });
+  }
+}, 30_000);
+
 test("fresh daemon shows both empty states and the composer action", async () => {
   const page = await browser.newPage();
   try {

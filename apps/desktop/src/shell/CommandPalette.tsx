@@ -11,7 +11,7 @@ import "./CommandPalette.css";
 const actions: { label: string; view?: ViewName }[] = [
   { label: "Nova tarefa", view: "new" },
   { label: "Início", view: "home" },
-  { label: "Agentes", view: "agents" },
+  { label: "Bots", view: "agents" },
   { label: "Rotinas", view: "routines" },
   { label: "Modelos", view: "templates" },
   { label: "Marketplace", view: "marketplace" },

@@ -88,6 +88,7 @@ export type RoutineTrigger = z.infer<typeof RoutineTrigger>;
 export const Agent = z.object({
   id: z.string(),
   name: z.string().trim().min(1).max(80),
+  isDefault: z.boolean().optional(),
   instructions: z.string(),
   provider: ProviderId,
   config: z.record(z.string(), z.string()),
@@ -1183,7 +1184,7 @@ export const methodMap = {
   },
   "vault.delete": { params: z.object({ name: VaultName }).strict(), result: Ok },
   "computer.access": {
-    params: z.object({}).strict(),
+    params: z.object({ agentId: z.string().optional() }).strict(),
     result: z.object({
       available: z.boolean(),
       reason: z.string().optional(),
