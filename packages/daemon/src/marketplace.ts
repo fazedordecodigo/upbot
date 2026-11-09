@@ -359,24 +359,39 @@ export class Marketplace {
     }
     const name = skillSlug(meta.name ?? item.name ?? item.id);
     const existing = this.skills.get(name);
-    const skill =
-      existing ??
-      this.skills.save(
-        {
-          name,
-          description: meta.description ?? item.description ?? "",
-          body: m ? (m[2] ?? "") : text,
-          author: `marketplace:${item.author || "unknown"}`,
-        },
-        "create",
+    const previous = this.db
+      .query(
+        "SELECT hash, created FROM marketplace_artifacts WHERE source = ? AND item_id = ? AND kind = 'skill' AND name = ?",
+      )
+      .get(source, owner, name) as Pick<Artifact, "hash" | "created"> | null;
+    const owned = !!existing && !!previous?.created && fingerprint(existing.raw) === previous.hash;
+    const content = {
+      name,
+      description: meta.description ?? item.description ?? "",
+      body: m ? (m[2] ?? "") : text,
+      author: `marketplace:${item.author || "unknown"}`,
+    };
+    const changed =
+      existing &&
+      (existing.body.trimEnd() !== content.body.trimEnd() ||
+        existing.description !== content.description ||
+        existing.author !== content.author);
+    if (changed && previous && !owned)
+      throw new RpcError(
+        "bad_request",
+        `skill "${name}" has local or unowned content; preserved without changes`,
       );
+    const skill =
+      !existing || (changed && owned)
+        ? this.skills.save(content, existing ? "revise" : "create")
+        : existing;
     this.remember(
       source,
       owner,
       "skill",
       skill.name,
       this.skills.get(skill.name)!.raw,
-      !existing,
+      !existing || owned,
       item.id,
     );
     return skill;
