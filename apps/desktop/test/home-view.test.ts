@@ -74,6 +74,56 @@ afterAll(async () => {
   if (state) rmSync(state, { recursive: true, force: true });
 }, 30000);
 
+test("home paginates paused tasks without letting completed tasks crowd out active ones", async () => {
+  const agent = await rpc.request("agents.create", { name: "Pagination", provider: "grok" });
+  const db = new Database(join(state, "data", "boto.db"));
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  try {
+    const now = Date.now();
+    const insert = db.query(
+      "INSERT INTO tasks (id, agent_id, title, prompt, situation, outcome, created_at, updated_at, ended_at) VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)",
+    );
+    db.transaction(() => {
+      insert.run("home-running", agent.id, "Running pagination", "run", null, now, now, null);
+      for (let i = 0; i < 201; i++) {
+        insert.run(
+          `home-paused-${i}`,
+          agent.id,
+          "Paused pagination",
+          "muted",
+          null,
+          now + i,
+          now,
+          null,
+        );
+        insert.run(
+          `home-completed-${i}`,
+          agent.id,
+          "Completed pagination",
+          "done",
+          "ok",
+          now + 1000 + i,
+          now,
+          now,
+        );
+      }
+    }).immediate();
+    await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
+    await page.waitForFunction(
+      () => document.querySelector("#lane-running-count")?.textContent === "202",
+    );
+    expect(await page.locator("#lane-running .lane-item").count()).toBe(202);
+    expect(await page.locator("#lane-running").innerText()).toContain("Running pagination");
+    expect(await page.locator("#lane-running").innerText()).not.toContain("Completed pagination");
+    expect(await page.locator("#lane-waiting-count").innerText()).toBe("0");
+  } finally {
+    await page.close();
+    db.query("DELETE FROM tasks WHERE agent_id = ?").run(agent.id);
+    db.close();
+    await rpc.request("agents.delete", { id: agent.id });
+  }
+}, 60000);
+
 test("home reflects real profile, running and waiting tasks, deliveries and navigation", async () => {
   const page = await browser.newPage({
     viewport: { width: 1440, height: 900 },
@@ -94,7 +144,7 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
     const runner = await createAgent("Código");
     const waiter = await createAgent("Pesquisa");
     const writer = await createAgent("Resumo");
-    const running = await rpc.request("tasks.create", {
+    await rpc.request("tasks.create", {
       agentId: runner.id,
       text: "slow",
     });
@@ -108,125 +158,11 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
       .filter({ hasText: "Permissão pendente: Fake tool" })
       .waitFor();
     expect(await page.locator("#lane-waiting-count").innerText()).toBe("1");
-    const db = new Database(join(state, "data", "boto.db"));
-    db.exec("PRAGMA busy_timeout = 5000");
-    try {
-      const row = db.query("SELECT * FROM tasks WHERE id = ?").get(running.id) as Record<
-        string,
-        string | number | null
-      >;
-      const columns = Object.keys(row);
-      const insert = db.query(
-        `INSERT INTO tasks (${columns.join(",")}) VALUES (${columns.map(() => "?").join(",")})`,
-      );
-      db.transaction(() => {
-        for (let i = 0; i < 201; i++) {
-          const paused = {
-            ...row,
-            id: `home-paused-${i}`,
-            situation: "muted",
-            private: 0,
-            created_at: Date.now() + i,
-          };
-          insert.run(...columns.map((column) => paused[column as keyof typeof paused] ?? null));
-        }
-      }).immediate();
-      await page.reload();
-      await page
-        .waitForFunction(() => document.querySelector("#lane-running-count")?.textContent === "202")
-        .catch(async (error) => {
-          console.log(
-            "home pagination diagnostics",
-            JSON.stringify(
-              await Promise.allSettled([
-                rpc.request("tasks.get", { id: running.id }),
-                rpc
-                  .request("tasks.history", { id: running.id, limit: 5 })
-                  .then((value) => value.turns),
-                rpc.request("tasks.list", { situation: "run", limit: 5 }),
-                rpc
-                  .request("tasks.list", { situation: "muted", limit: 200 })
-                  .then(async (first) => ({
-                    count: first.items.length,
-                    nextCount: first.nextCursor
-                      ? (
-                          await rpc.request("tasks.list", {
-                            situation: "muted",
-                            limit: 200,
-                            cursor: first.nextCursor,
-                          })
-                        ).items.length
-                      : 0,
-                  })),
-                page.locator("#lane-running-count").innerText(),
-                page.locator("#lane-running").innerText(),
-              ]),
-            ),
-          );
-          throw error;
-        });
-      if (process.env.HOME_SCREEN_DIR)
-        await page.screenshot({
-          path: join(process.env.HOME_SCREEN_DIR, "home-after-pagination.png"),
-        });
-    } finally {
-      db.query("DELETE FROM tasks WHERE id LIKE 'home-paused-%'").run();
-      db.close();
-    }
-    await page.reload();
     await rpc.request("tasks.create", { agentId: writer.id, text: "echo:Resumo entregue" });
     await page.locator("#deliveries .delivery-item").filter({ hasText: "Resumo" }).waitFor();
     expect(await page.locator("#deliveries").innerText()).toContain("Resumo");
-    const completedDb = new Database(join(state, "data", "boto.db"));
-    completedDb.exec("PRAGMA busy_timeout = 5000");
-    try {
-      const row = completedDb.query("SELECT * FROM tasks WHERE id = ?").get(running.id) as Record<
-        string,
-        string | number | null
-      >;
-      const columns = Object.keys(row);
-      const insert = completedDb.query(
-        `INSERT INTO tasks (${columns.join(",")}) VALUES (${columns.map(() => "?").join(",")})`,
-      );
-      completedDb
-        .transaction(() => {
-          for (let i = 0; i < 201; i++) {
-            const completed = {
-              ...row,
-              id: `home-completed-${i}`,
-              situation: "done",
-              private: 0,
-              created_at: Date.now() + i,
-            };
-            insert.run(
-              ...columns.map((column) => completed[column as keyof typeof completed] ?? null),
-            );
-          }
-        })
-        .immediate();
-    } finally {
-      completedDb.close();
-    }
     await page.reload();
-    await page
-      .locator("#lane-running .lane-item")
-      .waitFor()
-      .catch(async (error) => {
-        console.log(
-          "home running diagnostics",
-          JSON.stringify(
-            await Promise.allSettled([
-              rpc.request("tasks.get", { id: running.id }),
-              rpc
-                .request("tasks.history", { id: running.id, limit: 5 })
-                .then((value) => value.turns),
-              rpc.request("tasks.list", { situation: "run", limit: 5 }),
-              page.locator("#lane-running").innerText(),
-            ]),
-          ),
-        );
-        throw error;
-      });
+    await page.locator("#lane-running .lane-item").waitFor();
     expect(await page.locator("#lane-running").innerText()).not.toContain("Private runner");
     await page
       .locator("#lane-waiting .lane-item")
