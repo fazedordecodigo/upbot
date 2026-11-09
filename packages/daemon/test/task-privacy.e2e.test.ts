@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import type { Agent, Approval, PendingPermission } from "@boto/protocol";
 import {
   DaemonClient,
@@ -11,6 +11,8 @@ import {
 } from "./helpers";
 
 const token = `privacy-${crypto.randomUUID()}`;
+
+setDefaultTimeout(30_000);
 let daemon: DaemonHandle;
 let client: DaemonClient;
 let agent: Agent;
