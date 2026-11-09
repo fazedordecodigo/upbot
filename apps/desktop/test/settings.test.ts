@@ -166,7 +166,7 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
     });
     expect(await p.locator("#st-about-count").innerText()).toBe("25/600");
     expect(await p.locator("#st-memories").innerText()).toContain(
-      "Nenhum agente guardou memórias ainda.",
+      "Nenhum bot guardou memórias ainda.",
     );
     const agent = await rpc.request("agents.create", { name: "Memória UI", provider: "devin" });
     const memory = await rpc.request("memories.add", {

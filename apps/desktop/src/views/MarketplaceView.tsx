@@ -68,9 +68,9 @@ export function MarketplaceView() {
               Marketplace
             </h1>
             <p className="page-sub">
-              Novas ferramentas para os seus agentes: apps, plugins, skills e servidores MCP. O que
-              você instala aqui fica disponível no computador do Boto para todos os agentes. Na
-              primeira vez que um agente usa uma ferramenta numa sessão, ele pede sua permissão.
+              Novas ferramentas para os seus bots: apps, plugins, skills e servidores MCP. O que
+              você instala aqui fica disponível no computador do Boto para todos os bots. Na
+              primeira vez que um bot usa uma ferramenta numa sessão, ele pede sua permissão.
             </p>
           </div>
         </div>

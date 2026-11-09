@@ -103,7 +103,7 @@ export function MarketplaceDetail({
                       mcp: "Servidor MCP",
                       skill: "Skill",
                       plugin: "Plugin",
-                      agent: "Agente",
+                      agent: "Bot",
                     }[item.kind]
                   }
                 </span>
@@ -152,7 +152,7 @@ export function MarketplaceDetail({
               </a>
             )}
             <p className="mk-permission">
-              Na primeira vez que um agente usa uma ferramenta numa sessão, ele pede sua permissão.
+              Na primeira vez que um bot usa uma ferramenta numa sessão, ele pede sua permissão.
             </p>
             <p className="mk-status" role="status">
               {status}
@@ -166,7 +166,7 @@ export function MarketplaceDetail({
               <div className="od-stack mk-installed">
                 <InstalledBadge />
                 {item.kind === "agent" ? (
-                  <p>Gerencie este item em Agentes.</p>
+                  <p>Gerencie este item em Bots.</p>
                 ) : (
                   <button
                     type="button"
@@ -175,7 +175,7 @@ export function MarketplaceDetail({
                     onClick={() =>
                       void confirm({
                         title: `Remover ${item.name}?`,
-                        description: "Este item deixará de ficar disponível para os agentes.",
+                        description: "Este item deixará de ficar disponível para os bots.",
                         action: "Remover",
                         pendingAction: "Removendo…",
                         onConfirm: remove,

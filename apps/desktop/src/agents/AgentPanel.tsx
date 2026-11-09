@@ -108,8 +108,8 @@ export function AgentPanel({
       const confirmed = await confirm({
         title: `Excluir ${agent.name}?`,
         description:
-          "O agente sai do quadro e a fila dele é cancelada. A pasta de trabalho fica no computador.",
-        action: "Excluir agente",
+          "O bot sai do quadro e a fila dele é cancelada. A pasta de trabalho fica no computador.",
+        action: "Excluir bot",
       });
       if (!confirmed) return;
       await client.request("agents.delete", { id: agentId });
@@ -137,8 +137,8 @@ export function AgentPanel({
           <button
             type="button"
             className="btn btn-ghost btn-icon btn-sm ap-close"
-            aria-label="Fechar painel do agente"
-            title="Fechar painel do agente"
+            aria-label="Fechar painel do bot"
+            title="Fechar painel do bot"
             onClick={onClose}
           >
             <Icon name="x" />
@@ -213,7 +213,7 @@ export function AgentPanel({
           </div>
           <section className="ap-section" aria-labelledby="ap-add-title">
             <h3 className="ap-sec-title" id="ap-add-title">
-              Delegar a este agente
+              Delegar a este bot
             </h3>
             <div className="field">
               <label className="label" htmlFor="ap-add-input">
@@ -262,7 +262,7 @@ export function AgentPanel({
           </section>
           <div id="ap-info" className="ap-stack">
             <section className="ap-section">
-              <h3 className="ap-sec-title">Sobre este agente</h3>
+              <h3 className="ap-sec-title">Sobre este bot</h3>
               <div className="ap-row od-row">
                 <span className="ap-row-name">O que ele faz</span>
                 <span className="ap-row-help">{agent.role || "Sem descrição"}</span>
@@ -366,7 +366,7 @@ export function AgentPanel({
               disabled={saving}
               onClick={() => void deleteAgent()}
             >
-              Excluir agente
+              Excluir bot
             </button>
           </div>
         </div>

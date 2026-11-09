@@ -239,7 +239,7 @@ export function Providers() {
         <BlockHead
           title="Provedor padrão"
           id="st-default-title"
-          description="O que os agentes usam quando você não escolhe outro. Só aparecem os provedores prontos para uso."
+          description="O que os bots usam quando você não escolhe outro. Só aparecem os provedores prontos para uso."
         />
         <div id="st-default" aria-busy={!defaultQuery.loaded && !defaultQuery.error}>
           <QueryState query={defaultQuery}>

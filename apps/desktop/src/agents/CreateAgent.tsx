@@ -24,7 +24,7 @@ export function CreateAgent({
   const input = useRef<HTMLInputElement>(null);
   async function create() {
     if (!name.trim()) {
-      setNameError("Dê um nome ao agente.");
+      setNameError("Dê um nome ao bot.");
       input.current?.focus();
       return;
     }
@@ -63,12 +63,11 @@ export function CreateAgent({
       <div className="dialog-body">
         <div className="dialog-header">
           <h2 className="dialog-title" id="an-title">
-            Novo agente
+            Novo bot
           </h2>
           <p className="dialog-description" id="an-desc">
-            Um agente é um colega com uma especialidade. Ele pode usar todas as ferramentas
-            disponíveis no computador do Boto e pede sua permissão na primeira vez que usa cada uma
-            numa sessão.
+            Um bot é um colega com uma especialidade. Ele pode usar todas as ferramentas disponíveis
+            no computador do Boto e pede sua permissão na primeira vez que usa cada uma numa sessão.
           </p>
         </div>
         <div className="field">
@@ -137,7 +136,7 @@ export function CreateAgent({
             disabled={busy}
             onClick={() => void create()}
           >
-            Criar agente
+            Criar bot
           </button>
         </div>
       </div>
