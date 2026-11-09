@@ -28,6 +28,28 @@ const count = (page: Page, method: string) =>
     method,
   );
 
+test("task approvals require an owned turn and never use a same-bot fallback", async () => {
+  const page = await open();
+  try {
+    for (const name of ["Task approval", "Turnless approval", "Foreign approval"])
+      await page.getByText(name, { exact: true }).click();
+    expect(await page.locator("#approvals").textContent()).toBe("");
+    await page.getByText("Load history", { exact: true }).click();
+    await page.locator("#loading").filter({ hasText: "false" }).waitFor();
+    expect(await page.locator("#approvals").textContent()).toBe("own");
+    await page.getByText("Clear task", { exact: true }).click();
+    expect(await page.locator("#approvals").textContent()).toBe("");
+    await page.reload();
+    await page.locator('body[data-history="requested"]').waitFor();
+    await page.getByText("Turnless approval", { exact: true }).click();
+    await page.getByText("Fail history", { exact: true }).click();
+    await page.locator("#error").filter({ hasText: "true" }).waitFor();
+    expect(await page.locator("#approvals").textContent()).toBe("");
+  } finally {
+    await page.close();
+  }
+}, 20_000);
+
 test("task permissions are scoped to known turns and reconciled when events precede history or turns", async () => {
   const page = await open();
   try {

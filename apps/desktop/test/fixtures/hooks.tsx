@@ -12,6 +12,12 @@ const permission = (requestId: string, turnId: string) => ({
   options: [],
 });
 const turn = (id: string) => ({ id, taskId: "task", agentId: "bot" });
+const approval = (id: string, turnId: string | null) => ({
+  id,
+  turnId,
+  agentId: "bot",
+  status: "pending",
+});
 const machine = {
   id: "machine",
   agentId: "bot",
@@ -109,6 +115,30 @@ function Harness() {
           .join(",")}
       </output>
       <output id="error">{String(state.error)}</output>
+      <output id="approvals">
+        {state.approvals
+          .map((item) => item.id)
+          .sort()
+          .join(",")}
+      </output>
+      <button
+        type="button"
+        onClick={() => fixture.emit("approval.updated", approval("own", "own-turn"))}
+      >
+        Task approval
+      </button>
+      <button
+        type="button"
+        onClick={() => fixture.emit("approval.updated", approval("turnless", null))}
+      >
+        Turnless approval
+      </button>
+      <button
+        type="button"
+        onClick={() => fixture.emit("approval.updated", approval("foreign", "foreign-turn"))}
+      >
+        Foreign approval
+      </button>
       <output id="loading">{String(state.loading)}</output>
       <button
         type="button"
