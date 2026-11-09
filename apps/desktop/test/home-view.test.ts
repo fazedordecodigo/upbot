@@ -178,7 +178,25 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
       completedDb.close();
     }
     await page.reload();
-    await page.locator("#lane-running .lane-item").waitFor();
+    await page
+      .locator("#lane-running .lane-item")
+      .waitFor()
+      .catch(async (error) => {
+        console.log(
+          "home running diagnostics",
+          JSON.stringify(
+            await Promise.allSettled([
+              rpc.request("tasks.get", { id: running.id }),
+              rpc
+                .request("tasks.history", { id: running.id, limit: 5 })
+                .then((value) => value.turns),
+              rpc.request("tasks.list", { situation: "run", limit: 5 }),
+              page.locator("#lane-running").innerText(),
+            ]),
+          ),
+        );
+        throw error;
+      });
     expect(await page.locator("#lane-running").innerText()).not.toContain("Private runner");
     await page
       .locator("#lane-waiting .lane-item")
