@@ -62,8 +62,12 @@ After `bun install`, run from the repository root in one terminal:
 
 ```sh
 ROOT="$PWD"
+umask 077
 STATE="$(mktemp -d "$HOME/boto-preview.XXXXXX")"
-TOKEN="$(bun -e 'console.log(crypto.randomUUID())')"
+openssl rand -hex 32 > "$STATE/token"
+chmod 600 "$STATE/token"
+TOKEN="$(cat "$STATE/token")"
+printf 'Preview state directory: %s\n' "$STATE"
 ACP="$(bun -e 'console.log(JSON.stringify([process.execPath, process.cwd() + "/packages/daemon/test/fixtures/fake-acp-agent.ts"]))')"
 { printf '%s\n' "$TOKEN"; cat; } | \
   BOTO_PROVIDER_COMMAND_DEVIN="$ACP" \
@@ -73,7 +77,9 @@ ACP="$(bun -e 'console.log(JSON.stringify([process.execPath, process.cwd() + "/p
 ```
 
 Keep stdin open: its first line authenticates the daemon; EOF stops it. The fake ACP
-is a development/test provider, not product data. Do not log or commit the token.
+is a development/test provider, not product data. Do not enable shell tracing (`set -x`),
+echo or commit the token, or share credential-bearing URLs. Only the state directory
+path is printed; the token file is private and outside the checkout.
 In separate terminals, still from the repository root:
 
 ```sh
@@ -81,8 +87,18 @@ bun run --cwd apps/desktop dev --port 1420 --strictPort
 python3 -m http.server 8765 --bind 127.0.0.1
 ```
 
-Open `http://localhost:1420/#port=<port>&token=<token>` with the port from
-`BOTO_READY` and the token held in `TOKEN`. Open the reference at
+In another shell, reuse the private token file without printing its contents. Replace
+the state suffix with the directory printed above, and use the port from `BOTO_READY`:
+
+```sh
+STATE="$HOME/boto-preview.XXXXXX" # replace with the printed directory
+PORT=12345 # replace with the BOTO_READY port
+TOKEN="$(cat "$STATE/token")"
+xdg-open "http://localhost:1420/#port=$PORT&token=$TOKEN" # macOS: use open instead
+unset TOKEN
+```
+
+Remove the preview state directory after stopping the daemon. Open the reference at
 `http://127.0.0.1:8765/docs/design/index.html`. Complete onboarding in the app;
 onboarding checks instead start with a fresh data directory.
 

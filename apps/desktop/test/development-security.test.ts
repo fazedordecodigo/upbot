@@ -10,3 +10,13 @@ test("preview recipe isolates fake ACP state outside the checkout", () => {
     ".fake-acp-state/",
   );
 });
+
+test("preview token stays in a private file and is reused in the browser hash without being printed", () => {
+  expect(readme).toContain("umask 077");
+  expect(readme).toContain('openssl rand -hex 32 > "$STATE/token"');
+  expect(readme).toContain('chmod 600 "$STATE/token"');
+  expect(readme).toContain('TOKEN="$(cat "$STATE/token")"');
+  expect(readme).toContain('xdg-open "http://localhost:1420/#port=$PORT&token=$TOKEN"');
+  expect(readme).toContain("set -x");
+  expect(readme).not.toMatch(/(?:echo|console\.log)\s*\(?["']?\$TOKEN/);
+});
