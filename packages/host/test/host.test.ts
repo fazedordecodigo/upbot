@@ -15,6 +15,7 @@ import {
   encodeDesktopMessage,
   isFirecrackerReady,
   matchesGuestHelperStamp,
+  performDesktopEvents,
   proxyServer,
   proxyTarget,
   type RunSpec,
@@ -22,7 +23,6 @@ import {
   relayErrorReporter,
   validateDesktopEvents,
   vmConfig,
-  performDesktopEvents,
 } from "../src/main";
 
 const MAIN = join(import.meta.dir, "../src/main.ts");
@@ -460,7 +460,6 @@ describe("boto-host", () => {
 });
 
 describe("boto-host desktop", () => {
-
   test("moves the pointer without --sync so a move to the current spot cannot stall the stream", () => {
     const dir = mkdtempSync(join(tmpdir(), "boto-xdo-"));
     try {
