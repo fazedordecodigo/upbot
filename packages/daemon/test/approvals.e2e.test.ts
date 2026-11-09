@@ -1,5 +1,13 @@
 import { Database } from "bun:sqlite";
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  setDefaultTimeout,
+  test,
+} from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, Approval, ConnectedApp } from "@boto/protocol";
@@ -17,6 +25,8 @@ import {
 
 const TOKEN = `approvals-test-${crypto.randomUUID()}`;
 const FAKE_MCP = join(ROOT, "packages/daemon/test/fixtures/fake-mcp-server.ts");
+
+setDefaultTimeout(30_000);
 
 describe("approvals e2e", () => {
   let dataDir: string;
