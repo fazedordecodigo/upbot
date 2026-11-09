@@ -1,5 +1,6 @@
 import type { Approval, PendingPermission, Task } from "@boto/protocol";
 import { useEffect, useState } from "react";
+import { MachineThumb } from "../agents/AgentParts";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { useHomeTasks } from "../hooks/useHomeTasks";
 import { addDelivery, taskLanes } from "../lib/tasks";
@@ -335,33 +336,8 @@ export function HomeView() {
             {activeMachines.map((machine) => {
               const content = (
                 <>
-                  <span className="machine-name">{machine.name}</span>
+                  <MachineThumb machine={machine} />
                   <span className="home-muted">{agentName(machine.agentId)}</span>
-                  <span
-                    className="status"
-                    data-tone={
-                      machine.status === "ready"
-                        ? "run"
-                        : machine.status === "error"
-                          ? "wait"
-                          : "muted"
-                    }
-                  >
-                    <Icon
-                      name={
-                        machine.status === "ready"
-                          ? "circle-check"
-                          : machine.status === "error"
-                            ? "circle-alert"
-                            : "loader"
-                      }
-                    />
-                    {machine.status === "ready"
-                      ? "Pronta"
-                      : machine.status === "error"
-                        ? "Com erro"
-                        : "Iniciando"}
-                  </span>
                   {machine.controller === "user" && <span>Você está no controle</span>}
                   {machine.taskId && <span className="od-truncate">{title(machine.taskId)}</span>}
                 </>

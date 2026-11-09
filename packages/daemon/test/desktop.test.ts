@@ -154,6 +154,33 @@ describe("DesktopService (in-process, fake host stream)", () => {
     expect(desktop.list().find((m) => m.id === m2.id)?.controller).toBe("agent");
   });
 
+  test("the stream stops once the agent is idle and nobody is watching", async () => {
+    const m1 = desktop.list().find((m) => m.name === "codigo-01")!;
+    sent.length = 0;
+    desktop.subscribe(m1.id, "c1");
+    await until(
+      () => sent.filter((s) => s.conn === "c1" && s.event === "desktop.frame").length >= 2,
+    );
+    desktop.onAgentStatus({ agentId: "a1", status: "idle" });
+    const before = sent.filter((s) => s.event === "desktop.frame").length;
+    await until(() => sent.filter((s) => s.event === "desktop.frame").length > before + 1);
+    expect(desktop.list().find((m) => m.id === m1.id)?.status).toBe("ready");
+    machineEvents.length = 0;
+    desktop.unsubscribe(m1.id, "c1");
+    await until(() =>
+      machineEvents.some(
+        (e) =>
+          (e as { data: { id: string; status: string } }).data.id === m1.id &&
+          (e as { data: { status: string } }).data.status === "stopped",
+      ),
+    );
+    expect(desktop.list().find((m) => m.id === m1.id)?.status).toBe("stopped");
+    const m2 = desktop.list().find((m) => m.name === "codigo-02")!;
+    expect(desktop.list().find((m) => m.id === m2.id)?.status).toBe("ready");
+    desktop.onAgentStatus({ agentId: "a2", status: "idle" });
+    await until(() => desktop.list().find((m) => m.id === m2.id)?.status === "stopped");
+  });
+
   test("rejects unknown machines", () => {
     expect(() => desktop.subscribe("nope", "c1")).toThrow(/machine not found/);
     expect(() => desktop.takeover("nope", "c1")).toThrow(/machine not found/);

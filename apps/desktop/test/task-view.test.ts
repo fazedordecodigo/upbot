@@ -157,6 +157,7 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     ).mcpServers.find((server) => server.name === "boto");
     const bridgeToken = spec?.env.find((entry) => entry.name === "BOTO_BRIDGE_TOKEN")?.value;
     if (!bridgeToken) throw new Error("bridge token missing");
+    await page.addStyleTag({ content: ".live-click { animation-duration: 20s; }" });
     const click = await fetch(`http://127.0.0.1:${daemon.port}/bridge`, {
       method: "POST",
       headers: { authorization: `Bearer ${bridgeToken}`, "content-type": "application/json" },
@@ -167,6 +168,35 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     });
     expect(click.ok).toBe(true);
     await page.locator("#task-desk .live-cursor").waitFor();
+    await page.locator("#task-desk .live-click").waitFor();
+    const key = await fetch(`http://127.0.0.1:${daemon.port}/bridge`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${bridgeToken}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        method: "tools/call",
+        params: { name: "computer_key", arguments: { key: "escape" } },
+      }),
+    });
+    expect(key.ok).toBe(true);
+    await page.waitForTimeout(400);
+    // the click wave outlives the following key press and stays anchored at the click point
+    expect(await page.locator("#task-desk .live-click").count()).toBe(1);
+    const [wave, frame] = await Promise.all([
+      page.locator("#task-desk .live-click").boundingBox(),
+      page.locator("#task-desk img.live-frame").boundingBox(),
+    ]);
+    if (!wave || !frame) throw new Error("wave or frame missing");
+    expect(Math.abs(wave.x + wave.width / 2 - (frame.x + (frame.width * 480) / 1280))).toBeLessThan(
+      3,
+    );
+    expect(
+      Math.abs(wave.y + wave.height / 2 - (frame.y + (frame.height * 320) / 800)),
+    ).toBeLessThan(3);
+    await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await page.locator("#pc-card .ag-thumb img").waitFor();
+    expect(await page.locator("#pc-card").innerText()).toContain(machine.name);
+    await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}&task=${task.id}`);
+    await page.locator("#task-desk img.live-frame").waitFor();
 
     const shots = process.env.BOTO_TASK_SHOTS;
     if (shots) mkdirSync(shots, { recursive: true });
@@ -292,6 +322,12 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     await page.getByRole("button", { name: "Encerrar tarefa", exact: true }).click();
     await page.locator("#task-meta").getByText("Encerrada", { exact: true }).waitFor();
     expect(await page.locator("#instruct-input").isDisabled()).toBe(true);
+    // leaving the finished task's view is what lets the idle machine's stream stop
+    await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await page.getByText("Nenhuma área de trabalho ativa agora.", { exact: true }).waitFor();
+    expect(
+      (await client.request("desktop.machines", {})).find((m) => m.id === machine.id)?.status,
+    ).toBe("stopped");
     await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}&task=missing`);
     await page.reload();
     await page.getByRole("button", { name: "Tentar de novo" }).waitFor();

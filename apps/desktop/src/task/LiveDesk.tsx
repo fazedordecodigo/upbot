@@ -26,7 +26,7 @@ export function LiveDesk({
   const surface = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [announcement, setAnnouncement] = useState("");
-  const [wave, setWave] = useState(0);
+  const [waves, setWaves] = useState<{ id: number; x: number; y: number }[]>([]);
   const [decoded, setDecoded] = useState(false);
   const lastAnnouncement = useRef(0);
   useEffect(() => {
@@ -43,7 +43,11 @@ export function LiveDesk({
   }, [frameUrl]);
   useEffect(() => {
     if (!cursor) return;
-    if (cursor.kind === "click") setWave((value) => value + 1);
+    if (cursor.kind === "click")
+      setWaves((value) => [
+        ...value.slice(-3),
+        { id: Date.now() + Math.random(), x: cursor.x, y: cursor.y },
+      ]);
     if (Date.now() - lastAnnouncement.current < 1500) return;
     lastAnnouncement.current = Date.now();
     setAnnouncement(
@@ -179,9 +183,17 @@ export function LiveDesk({
               <path d="M2 2 L2 26 L8 21 L13 31 L18 28 L13 18 L22 18 Z" />
             </svg>
             <span>Boto</span>
-            {cursor.kind === "click" && <i className="live-click" key={wave} />}
           </div>
         )}
+        {waves.map((wave) => (
+          <i
+            key={wave.id}
+            className="live-click"
+            style={{ left: guest.left + wave.x * scale, top: guest.top + wave.y * scale }}
+            onAnimationEnd={() => setWaves((value) => value.filter((w) => w.id !== wave.id))}
+            aria-hidden="true"
+          />
+        ))}
       </div>
       <div className="live-bar">
         <Icon name="monitor" />
