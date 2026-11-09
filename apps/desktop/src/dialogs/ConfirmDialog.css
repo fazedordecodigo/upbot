@@ -1,0 +1,7 @@
+#confirm { width: min(calc(100% - var(--boto-space-8)), var(--boto-size-dialog)); max-width: none; padding: var(--boto-space-6); box-shadow: var(--boto-shadow-lg); }
+#confirm .dialog-header { display: grid; gap: var(--boto-space-2); padding-right: 0; }
+#confirm .dialog-description { font-size: var(--boto-font-size-base); overflow-wrap: anywhere; }
+#confirm .dialog-footer { padding-top: var(--boto-space-2); gap: var(--boto-space-3); }
+@media (max-width: 479px) {
+  #confirm .dialog-footer .btn { min-height: var(--boto-size-target); }
+}
