@@ -1,3 +1,4 @@
+.dialog.onboarding { max-width: min(calc(100% - var(--boto-space-8)), var(--boto-size-chat-column)); }
 .ob-theme-options { display: flex; gap: var(--boto-space-3); }
 .ob-option { padding: var(--boto-space-4); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-md); background: var(--boto-color-card); }
 .ob-option[aria-checked="true"] { border-color: var(--boto-color-ring); }

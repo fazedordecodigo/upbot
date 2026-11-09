@@ -1,0 +1,1 @@
+#confirm { max-width: min(calc(100% - var(--boto-space-8)), var(--boto-size-chat-column)); }

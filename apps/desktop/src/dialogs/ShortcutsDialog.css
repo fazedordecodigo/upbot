@@ -1,3 +1,4 @@
+#shortcuts { max-width: min(calc(100% - var(--boto-space-8)), var(--boto-size-chat-column)); }
 .shortcut-list { margin: 0; }
 .shortcut-row { padding-block: var(--boto-space-2); }
 .shortcut-row dd { margin: 0; }
