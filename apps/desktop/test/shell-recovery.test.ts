@@ -29,6 +29,7 @@ test("main shell boots, navigates and refreshes history after daemon restart wit
   let daemon = await startDaemon(join(root, "data"), join(root, "agents"), token, env);
   let rpc = await DaemonClient.connect(daemon.port, token);
   const proxy = Bun.serve<{ upstream: WebSocket | null; queue: string[] }>({
+    hostname: "127.0.0.1",
     port: 0,
     fetch(request, server) {
       return server.upgrade(request, { data: { upstream: null, queue: [] } })
