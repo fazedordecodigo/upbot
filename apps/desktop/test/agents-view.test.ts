@@ -80,6 +80,7 @@ test("relative time handles current, past and future timestamps", () => {
 test("real agents can be created, delegated to, configured, filtered and deleted", async () => {
   await page.getByText("Nenhum agente ainda. Crie o primeiro para delegar tarefas.").waitFor();
   await page.locator("#new-agent").click();
+  expect((await page.locator("#agent-new").boundingBox())?.width).toBe(760);
   await page.locator("#an-create").click();
   expect(await page.locator("#an-name-error").textContent()).toBe("Dê um nome ao agente.");
   await page.locator("#an-name").fill("Financeiro");

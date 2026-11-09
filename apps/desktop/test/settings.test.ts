@@ -180,6 +180,10 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
     await p.getByRole("dialog").getByRole("button", { name: "Cancelar", exact: true }).click();
     expect((await rpc.request("profile.get", {})).name).toBe("Iara");
     await tab(p, "appearance");
+    expect(
+      await p.locator("#st-themes").evaluate((element) => getComputedStyle(element).display),
+    ).toBe("grid");
+    expect((await p.locator("#st-themes .ob-swatch").first().boundingBox())?.height).toBe(64);
     await p.locator('[data-st-theme="light"]').click();
     expect(await p.locator("html").getAttribute("data-theme")).toBe("light");
     await p.keyboard.press("ArrowLeft");

@@ -1,10 +1,13 @@
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { useShellProfile } from "../hooks/useShellProfile";
+import { openExternalLink } from "../lib/external-link";
+import { errorFields, logWarn } from "../lib/log";
 import { isMac } from "../lib/platform";
 import { useThemePref } from "../lib/theme";
 import { TaskHistory } from "../shell-data/TaskHistory";
 import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from "../ui/Dropdown";
 import { Icon, type IconName } from "../ui/icons";
+import { useToast } from "../ui/Toast";
 import { useDaemon } from "./daemon";
 import { useRouter, type ViewName } from "./router";
 
@@ -31,6 +34,7 @@ export function Sidebar({
   openOnboarding: () => void;
 }) {
   const { view, navigate } = useRouter();
+  const toast = useToast();
   const { client, ready, agents } = useDaemon();
   const profile = useShellProfile();
   const name = profile.data?.name?.trim() || "Você";
@@ -203,11 +207,12 @@ export function Sidebar({
             </DropdownItem>
             <DropdownItem
               onClick={() =>
-                window.open(
+                void openExternalLink(
                   "https://github.com/fazedordecodigo/boto/blob/develop/docs/design/identidade.html",
-                  "_blank",
-                  "noopener,noreferrer",
-                )
+                ).catch((error: unknown) => {
+                  logWarn("brand_guide.open_failed", errorFields(error));
+                  toast("Não foi possível abrir o guia da marca. Tente de novo.");
+                })
               }
             >
               <Icon name="book-open" />

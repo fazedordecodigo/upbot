@@ -230,6 +230,67 @@ test("user menu supports keyboard, dialogs restore focus, tooltip is labelled, t
   }
 }, 30000);
 
+test("brand guide opens in browsers and through the native opener, reporting failures", async () => {
+  const p = await page();
+  const guide = "https://github.com/fazedordecodigo/boto/blob/develop/docs/design/identidade.html";
+  try {
+    await p.evaluate(() => {
+      Object.assign(window, { openedLinks: [] });
+      window.open = (...args) => {
+        (window as unknown as { openedLinks: unknown[] }).openedLinks.push(args);
+        return null;
+      };
+    });
+    await p.getByRole("button", { name: "Menu da conta" }).click();
+    await p.getByRole("menuitem", { name: "Guia da marca" }).click();
+    expect(
+      await p.evaluate(() => (window as unknown as { openedLinks: unknown[] }).openedLinks),
+    ).toEqual([[guide, "_blank", "noopener,noreferrer"]]);
+    await p.evaluate(() => {
+      Object.assign(window, {
+        nativeLinks: [],
+        __TAURI_INTERNALS__: {
+          invoke: async (command: string, args: unknown) => {
+            if (command === "plugin:opener|open_url") {
+              (window as unknown as { nativeLinks: unknown[] }).nativeLinks.push(args);
+            }
+          },
+        },
+      });
+    });
+    await p.getByRole("button", { name: "Menu da conta" }).click();
+    await p.getByRole("menuitem", { name: "Guia da marca" }).click();
+    await until(
+      async () =>
+        await p.evaluate(
+          () => (window as unknown as { nativeLinks: unknown[] }).nativeLinks.length === 1,
+        ),
+    );
+    expect(
+      await p.evaluate(() => (window as unknown as { nativeLinks: unknown[] }).nativeLinks),
+    ).toEqual([{ url: guide, with: undefined }]);
+    await p.evaluate(() => {
+      Object.assign(window, {
+        __TAURI_INTERNALS__: {
+          invoke: async (command: string) => {
+            if (command === "plugin:opener|open_url") throw new Error("opener unavailable");
+          },
+        },
+      });
+    });
+    await p.getByRole("button", { name: "Menu da conta" }).click();
+    await p.getByRole("menuitem", { name: "Guia da marca" }).click();
+    await p
+      .getByText("Não foi possível abrir o guia da marca. Tente de novo.", { exact: true })
+      .waitFor();
+  } finally {
+    await p.evaluate(() => {
+      delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+    });
+    await p.close();
+  }
+}, 30000);
+
 test("failed initial refresh recovers on reconnect and reloads real counts", async () => {
   let fail = true;
   let profile: Profile = {

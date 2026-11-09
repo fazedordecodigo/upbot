@@ -26,6 +26,7 @@
 .ag-card-foot { display: flex; flex-wrap: wrap; gap: var(--boto-space-2); margin-top: auto; }
 .ag-empty-card { padding: var(--boto-space-5); display: grid; gap: var(--boto-space-4); }
 .agent-panel.sheet { inset: 0 0 0 auto; margin: 0; padding: 0; width: min(100%, calc(var(--boto-space-20) * 4)); max-width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; box-shadow: var(--boto-shadow-lg); animation: agent-panel-in var(--boto-duration-panel) var(--boto-easing-out); }
+@media (min-width: 768px) { .dialog.agent-new { max-width: min(calc(100% - var(--boto-space-8)), var(--boto-size-chat-column)); } }
 .ap { display: flex; flex-direction: column; height: 100%; }
 .ap-head { display: flex; align-items: flex-start; gap: var(--boto-space-2); padding: var(--boto-space-5); border-bottom: calc(var(--boto-space-1) / 4) solid var(--boto-color-border); }
 .ap-head-main { flex: 1; }
