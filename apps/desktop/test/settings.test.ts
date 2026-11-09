@@ -60,6 +60,34 @@ afterAll(async () => {
   if (directory) await removeDir(directory);
 }, 30000);
 
+test("approval default toggle clears approval delegation but preserves now and scheduled modes", async () => {
+  await rpc.request("profile.update", {
+    defaults: { requireApproval: true, delegationMode: "approval" },
+  });
+  const p = await settings();
+  try {
+    await tab(p, "privacy");
+    await p.locator("#st-approval:not(:disabled)").click();
+    await until(async () => !(await rpc.request("profile.get", {})).defaults.requireApproval);
+    expect((await rpc.request("profile.get", {})).defaults.delegationMode).toBe("now");
+    await p.locator("#st-approval:not(:disabled)").click();
+    await until(async () => (await rpc.request("profile.get", {})).defaults.requireApproval);
+    expect((await rpc.request("profile.get", {})).defaults.delegationMode).toBe("now");
+    await rpc.request("profile.update", { defaults: { delegationMode: "scheduled" } });
+    await p.reload();
+    await p.locator(".sb-settings").click();
+    await tab(p, "privacy");
+    await p.locator("#st-approval:not(:disabled)").click();
+    await until(async () => !(await rpc.request("profile.get", {})).defaults.requireApproval);
+    expect((await rpc.request("profile.get", {})).defaults.delegationMode).toBe("scheduled");
+  } finally {
+    await p.close();
+    await rpc.request("profile.update", {
+      defaults: { requireApproval: true, delegationMode: "now" },
+    });
+  }
+}, 30_000);
+
 async function settings() {
   const p = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   await p.goto(`${base}/#port=${daemon.port}&token=${token}`);

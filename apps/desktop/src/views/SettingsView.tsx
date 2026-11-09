@@ -98,10 +98,13 @@ export function SettingsView() {
   const updateDefaults = async (key: "private" | "requireApproval", value: boolean) => {
     setBusy(true);
     setError("");
+    const defaults = { ...profile.data?.defaults, [key]: value };
+    if (key === "requireApproval" && !value && defaults.delegationMode === "approval")
+      defaults.delegationMode = "now";
     try {
       profile.setData(
         await client.request("profile.update", {
-          defaults: { ...profile.data?.defaults, [key]: value },
+          defaults,
         }),
       );
     } catch {
