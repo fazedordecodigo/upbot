@@ -18,9 +18,47 @@ Regerar e conferir que o CSS commitado não muda:
 bun scripts/build-tokens.ts
 ```
 
-O `apps/desktop/src/index.css` importa `tokens.css` e, em seguida, `legacy-bridge.css`. O tema escuro é `:root`. O claro só entra com `[data-theme="light"]` no `<html>`. Sem preferência salva, `apps/desktop/src/lib/theme.ts` aplica escuro. A opção Automático das Configurações continua seguindo o sistema quando a pessoa a escolhe.
+O `apps/desktop/src/index.css` importa `tokens.css`, `layout.css`, `ui.css` e `shell/shell.css`. A ponte `legacy-bridge.css` continua gerada para compatibilidade, mas não é importada. O tema escuro é `:root`. O claro entra com `[data-theme="light"]` no `<html>`. Sem preferência salva, `apps/desktop/src/lib/theme.ts` aplica escuro; a preferência automática segue o sistema.
 
-`tailwind.theme.css` (utilitários novos como `bg-surface`) não entra enquanto as telas legadas não usarem essas classes. O `@theme` atual só remapeia `red-*` para a cor de erro.
+O shell usa CSS e tokens diretamente, sem Tailwind.
+
+## Frontend reconstruído e referência visual
+
+`docs/design/index.html`, `docs/design/assets/boto-ui.css` e
+`docs/design/assets/icons.svg` são a referência visual das telas, dos diálogos, da
+cópia em pt-BR, dos temas e dos breakpoints. `DESIGN.md` rege os componentes e os
+estados de regiões dinâmicas vazias no protótipo. O export local também tem controles
+inativos e estilos incompletos; não comprova paridade pixel a pixel nessas regiões.
+O app não preenche essas lacunas com dados de demonstração. Números desconhecidos
+usam “a definir”, não zero inventado.
+
+O shell reúne Início, Nova tarefa, Tarefa/Área de trabalho, Agentes (painel e criação),
+Rotinas, Modelos, Marketplace e Configurações (Provedor de IA, Você e a memória,
+Aparência e Privacidade). Onboarding tem quatro passos; busca, atalhos, menu da conta,
+tema, redimensionamento e painel móvel pertencem ao shell. O chip de situação é
+compartilhado em `src/styles/ui.css`, sempre com tom, ícone e texto.
+
+O [README do desktop](../apps/desktop/README.md#views-and-daemon-wiring) lista os
+métodos por tela: `tasks.*` e `desktop.*` para tarefas e área de trabalho;
+`agents.*` e `queue.*` para agentes; `routines.*`, `templates.*` e `marketplace.*`
+para os respectivos catálogos; `providers.*`, `profile.*`, `memories.*` e
+`permissions.*` para Configurações. Aprovações e permissões continuam reais no fluxo
+da tarefa (`approvals.respond` e `permissions.respond`), sem bypass.
+
+E-mail, Canais/chat em grupo, Páginas, Hosts, Biblioteca, a tela Aprovações, Apps
+conectados, Cofre, Gateways, Mobile, Times, a tela Ferramentas e usage bars foram
+removidos **somente da UI**. O daemon e o contrato do protocolo mantêm essas
+capacidades. Controles de ferramentas do composer e cartões de aprovação não são
+telas removidas.
+
+Para comparar, siga a [receita isolada](../apps/desktop/README.md#isolated-development-and-visual-checks):
+daemon com diretórios próprios e token na primeira linha de stdin, provedor ACP de
+teste, Vite em `:1420` e protótipo em `:8765`. Use
+`BOTO_MARKETPLACE_URL=file://<repo>/marketplace/index.json`, dados semeados por RPC e
+Chrome em 1440×900, 1024×768 e 390×844, nos dois temas. Complete onboarding salvo
+quando estiver testando seus quatro passos com um daemon novo. Rode
+`bun test apps/desktop/test`, `bun run lint`, `bun run typecheck` e
+`bun run --cwd apps/desktop build` após mudanças no frontend.
 
 ## Paleta Rio Negro
 
@@ -37,7 +75,7 @@ O `apps/desktop/src/index.css` importa `tokens.css` e, em seguida, `legacy-bridg
 
 ## Mapeamento Rio Negro → token
 
-O código novo lê o nome semântico. A ponte mantém o nome antigo para `boto.css`.
+O código novo lê o nome semântico. A ponte mantém os nomes antigos para compatibilidade.
 
 | Token | Claro | Escuro | Nome antigo |
 |---|---|---|---|
@@ -91,20 +129,16 @@ O corpo usa `--fs-body` (`--boto-font-size-base`), 16 px.
 
 As faces estão em `apps/desktop/src/fonts/` (woff2 variável, subset latin e latin-ext), com `OFL-BricolageGrotesque.txt`, `OFL-Inter.txt` e `OFL-JetBrainsMono.txt`. Não há CDN. O `@font-face` fica no `tokens.css` gerado. `--font-display` aponta para Bricolage Grotesque; `--font-body` aponta para Inter.
 
-Alguns módulos ainda declaram peso 700 ou 800 por cima da regra global (`AgentConfigScreen`, `AppsView`, `Approvals`, `MenuBar`). A coluna da conversa usa `var(--col-chat)` em `boto.css`; o token `size-chat-column` é 760 px.
+O token `size-chat-column` é 760 px. Os estilos de cada tela ficam no CSS da própria view.
 
-## O que o kit mostra
+## Shell e primitives
 
-`#/kit` lista os papéis da paleta e os controles. Os testes em `apps/desktop/test/design-system.test.ts` exigem:
+O shell vive em `apps/desktop/src/shell/`. As primitives ficam em `apps/desktop/src/ui/`: Dialog, Sheet, Dropdown, Tooltip, Toast, Tabs e Switch. Os ícones tipados em `apps/desktop/src/ui/icons.tsx` usam `public/assets/icons.svg`.
 
-- nenhum hex fora de `tokens.css`;
-- contraste AA a partir do estilo computado (`--fg`/`--bg`, `--fg`/`--surface`, `--muted`/`--bg` e `--on-accent`/`--accent` ≥ 4,5:1; `--focus`/`--bg` ≥ 3:1);
-- anel de foco de 2 px com folga de 2 px (`--boto-size-focus-ring` e `--boto-size-focus-offset`);
-- altura de controle de 36 px (`--boto-size-control`; a pequena é 32 px) e 44 px em `pointer: coarse`;
-- `bun scripts/build-tokens.ts` sem diff no CSS commitado.
+Os testes em `apps/desktop/test/design-system.test.ts` cobrem ambos os temas, logo e fundo computado, resize e persistência da barra lateral, recolher/expandir, Sheet móvel e paleta de comandos.
 
-A barra lateral, o Início e o cockpit de agentes estão em [design-system-sidebar.md](design-system-sidebar.md).
+Cada view tem um arquivo TSX e importa seu próprio CSS, mesmo vazio. Veja [apps/desktop/README.md](../apps/desktop/README.md). O protótipo de referência está em `docs/design/index.html`; as views ainda são estruturas iniciais, sem dados inventados.
 
-## Integrações secundárias
+## Integrações
 
-Habilidades, Navegador, Cofre, Gateways, Marketplace, Celular e Equipe (`Library.tsx`), Servidores (`HostsView.tsx`) e E-mail (`EmailView.tsx`) usam os controles de `components/ds/`, com textos em pt-BR e os controles e RPCs existentes preservados. Os estilos ficam em `Library.module.css`, `HostsView.module.css` e `EmailView.module.css`, com tokens `--boto-*`, sem layouts utilitários Tailwind nessas nove telas. Os rascunhos do compositor (`DraftCards`) mantêm sua apresentação e comportamento existentes; a apresentação dos rascunhos nas configurações de E-mail usa os mesmos controles.
+O contexto do daemon e `shell/useNativeIntegration.ts` preservam reconexão, notificações, badge de aprovações, contagem no tray e navegação nativa. A rota `#/menubar` permanece vazia. As bibliotecas e hooks de dados ficam em `src/lib/` e `src/hooks/`; a navegação do shell é em memória.

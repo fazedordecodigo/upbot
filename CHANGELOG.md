@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Rebuilt the desktop around the Rio Negro prototype in `docs/design/index.html`:
+  Início, Nova tarefa, Tarefa/Área de trabalho, Agentes, Rotinas, Modelos, Marketplace,
+  four-tab Configurações and four-step onboarding, responsive navigation and both themes.
+- Wired the redesigned views to real daemon task, desktop, agent/queue, routine, template,
+  marketplace, provider, profile, memory, permission and approval methods. Templates prefill
+  the composer; task approvals remain real and sidebar/composer privacy share profile defaults.
+- Removed standalone E-mail, Canais/chat em grupo, Páginas, Hosts, Biblioteca, Aprovações,
+  Apps conectados, Cofre, Gateways, Mobile, Times, Ferramentas and usage bars from the UI only;
+  their daemon/protocol capabilities are retained.
+- Documented isolated-daemon development with the fake ACP test provider, Vite on `:1420`,
+  the file-backed marketplace registry and side-by-side prototype checks in both themes.
 - Renamed UpBot to Boto, with migration of existing UpBot workspaces, app data and vault keys.
 - Updated repository, updater and marketplace URLs to `fazedordecodigo/boto`; saved legacy
   marketplace sources still migrate automatically without duplicating entries.
@@ -17,6 +28,8 @@
 
 ### Fixed
 
+- Open Guia da marca through the existing native opener in Tauri, with a browser fallback
+  and an error toast; align the desktop Novo agente dialog width and style Settings theme swatches.
 - Renomear uma habilidade move seu histórico e remove o nome antigo, sem sobrescrever outra habilidade.
 - Keep Linux interrupted-approval notices until reviewed without presenting replacements
   during mute or replaying them on unmute.

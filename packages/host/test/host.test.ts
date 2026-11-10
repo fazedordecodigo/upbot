@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,13 +9,19 @@ import {
   appendProxyLog,
   blockedHost,
   buildGuestProviderEnv,
+  DESKTOP_MAX_EVENTS,
+  DesktopControllerState,
+  DesktopDecoder,
+  encodeDesktopMessage,
   isFirecrackerReady,
   matchesGuestHelperStamp,
+  performDesktopEvents,
   proxyServer,
   proxyTarget,
   type RunSpec,
   readFirstLine,
   relayErrorReporter,
+  validateDesktopEvents,
   vmConfig,
 } from "../src/main";
 
@@ -450,5 +456,157 @@ describe("boto-host", () => {
     const actual = r.stdout.split(/\r?\n/, 1)[0]!;
     expect(realpathSync(actual)).toBe(realpathSync(join(root, "agents", "ag1")));
     expect(r.stdout).toContain("hello");
+  });
+});
+
+describe("boto-host desktop", () => {
+  test.skipIf(process.platform === "win32")(
+    "moves the pointer without --sync so a move to the current spot cannot stall the stream",
+    () => {
+      const dir = mkdtempSync(join(tmpdir(), "boto-xdo-"));
+      try {
+        const log = join(dir, "calls.log");
+        const fake = join(dir, "xdotool");
+        writeFileSync(
+          fake,
+          `#!/bin/sh
+echo "$@" >> "${log}"
+for arg in "$@"; do [ "$arg" = "--sync" ] && sleep 15; done
+exit 0
+`,
+        );
+        chmodSync(fake, 0o755);
+        const previous = process.env.PATH;
+        process.env.PATH = `${dir}:${previous ?? ""}`;
+        const started = Date.now();
+        try {
+          expect(
+            performDesktopEvents(":0", [
+              { type: "mouse_move", x: 640, y: 400 },
+              { type: "click", x: 640, y: 400, button: 3 },
+            ]),
+          ).toBe("click");
+        } finally {
+          process.env.PATH = previous;
+        }
+        expect(Date.now() - started).toBeLessThan(5000);
+        const calls = readFileSync(log, "utf8").trim().split("\n");
+        expect(calls).toEqual(["mousemove 640 400", "mousemove 640 400", "click 3"]);
+        expect(calls.some((c) => c.includes("--sync"))).toBe(false);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+  test("encodes one JSON message per line and decodes split or batched chunks", () => {
+    const a = encodeDesktopMessage({ type: "frame", seq: 1, data: "AAAA" });
+    const b = encodeDesktopMessage({ type: "cursor", x: 1, y: 2, kind: "move" });
+    expect(a.endsWith("\n")).toBe(true);
+    expect(a.slice(0, -1).includes("\n")).toBe(false);
+    const decoder = new DesktopDecoder();
+    const got: Record<string, unknown>[] = [];
+    const errors: string[] = [];
+    const bytes = Buffer.from(a + b);
+    decoder.push(
+      bytes.subarray(0, 7),
+      (m) => got.push(m),
+      (c) => errors.push(c),
+    );
+    expect(got).toHaveLength(0);
+    decoder.push(
+      bytes.subarray(7),
+      (m) => got.push(m),
+      (c) => errors.push(c),
+    );
+    expect(got).toEqual([
+      { type: "frame", seq: 1, data: "AAAA" },
+      { type: "cursor", x: 1, y: 2, kind: "move" },
+    ]);
+    expect(errors).toEqual([]);
+  });
+
+  test("reports malformed, non-object and oversized lines without throwing", () => {
+    const decoder = new DesktopDecoder(32);
+    const got: Record<string, unknown>[] = [];
+    const errors: string[] = [];
+    const onMessage = (m: Record<string, unknown>) => got.push(m);
+    const onError = (c: string) => errors.push(c);
+    decoder.push(Buffer.from("not json\n[1,2]\n\n"), onMessage, onError);
+    decoder.push(Buffer.from(`${"x".repeat(40)}\n{"type":"ok"}\n`), onMessage, onError);
+    decoder.push(Buffer.from("y".repeat(40)), onMessage, onError);
+    expect(errors).toEqual(["bad_json", "bad_message", "line_too_long", "line_too_long"]);
+    expect(got).toEqual([{ type: "ok" }]);
+  });
+
+  test("validates user input strictly and keeps composite actions for the agent", () => {
+    const user = validateDesktopEvents(
+      [
+        { type: "mouse_move", x: 10, y: 20 },
+        { type: "mouse_down", button: 1 },
+        { type: "mouse_up", button: 1 },
+        { type: "wheel", deltaY: -3 },
+        { type: "key_down", keysym: "Return" },
+        { type: "key_up", keysym: "Return" },
+      ],
+      "user",
+    );
+    expect(user).toHaveLength(6);
+    for (const bad of [
+      [],
+      "nope",
+      [{ type: "mouse_move", x: -1, y: 0 }],
+      [{ type: "mouse_move", x: 1.5, y: 0 }],
+      [{ type: "mouse_move", x: 9000, y: 0 }],
+      [{ type: "mouse_move", x: 1, y: 1, extra: true }],
+      [{ type: "mouse_down", button: 9 }],
+      [{ type: "wheel", deltaY: 1000 }],
+      [{ type: "key_down", keysym: "ctrl+c" }],
+      [{ type: "key_down", keysym: "" }],
+      [{ type: "click", x: 1, y: 1 }],
+      [{ type: "type", text: "hi" }],
+      [{ type: "key", keysym: "ctrl+c" }],
+      [{ type: "teleport" }],
+      Array.from({ length: DESKTOP_MAX_EVENTS + 1 }, () => ({ type: "mouse_down", button: 1 })),
+    ])
+      expect(validateDesktopEvents(bad, "user")).toBeNull();
+    expect(
+      validateDesktopEvents(
+        [
+          { type: "click", x: 5, y: 6 },
+          { type: "click", x: 5, y: 6, button: 3, double: true },
+          { type: "type", text: "olá" },
+          { type: "key", keysym: "ctrl+shift+t" },
+        ],
+        "agent",
+      ),
+    ).toEqual([
+      { type: "click", x: 5, y: 6, button: 1, double: false },
+      { type: "click", x: 5, y: 6, button: 3, double: true },
+      { type: "type", text: "olá" },
+      { type: "key", keysym: "ctrl+shift+t" },
+    ]);
+    expect(validateDesktopEvents([{ type: "type", text: "x".repeat(4001) }], "agent")).toBeNull();
+    expect(validateDesktopEvents([{ type: "key", keysym: "ctrl+c; rm" }], "agent")).toBeNull();
+  });
+
+  test("refuses input from whoever is not the controller", () => {
+    const state = new DesktopControllerState();
+    expect(state.accepts("agent")).toBe(true);
+    expect(state.accepts("user")).toBe(false);
+    expect(state.set("user")).toBe(true);
+    expect(state.accepts("user")).toBe(true);
+    expect(state.accepts("agent")).toBe(false);
+    expect(state.set("root")).toBe(false);
+    expect(state.controller).toBe("user");
+  });
+
+  test("passes the machine name to the guest only when it is a safe slug", () => {
+    const base: RunSpec = { agentId: "a", isolation: "firecracker", cmd: ["true"] };
+    const args = (spec: RunSpec) =>
+      vmConfig(spec, "/r.ext4", "/v.sock", "/w.ext4")["boot-source"].boot_args;
+    expect(args(base)).not.toContain("boto.name=");
+    expect(args({ ...base, machineName: "codigo-01" })).toContain(" boto.name=codigo-01");
+    expect(args({ ...base, machineName: "Código 01" })).not.toContain("boto.name=");
+    expect(args({ ...base, machineName: "x init=/bin/sh" })).not.toContain("boto.name=");
   });
 });

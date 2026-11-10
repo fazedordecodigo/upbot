@@ -187,7 +187,6 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(shared)
         .setup(move |app| {
@@ -203,7 +202,6 @@ fn main() {
             daemon_connection,
             badge::set_approval_badge,
             menubar::set_tray_count,
-            menubar::menubar_hide,
             menubar::open_main,
             menubar::main_ready,
             menubar::quit_app,

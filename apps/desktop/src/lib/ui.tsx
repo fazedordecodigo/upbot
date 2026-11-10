@@ -1,14 +1,4 @@
 import type { Agent, AgentStatusInfo, ProviderId, Turn } from "@boto/protocol";
-import {
-  BotoSimboloCurrentcolorIcon,
-  CalIcon,
-  ChartIcon,
-  MailIcon,
-  PlaneIcon,
-  ReceiptIcon,
-  SheetIcon,
-} from "../components/ds/icons";
-import { Icon, type IconName } from "../components/icons";
 
 export const PROVIDER_NAMES: Record<ProviderId, string> = {
   devin: "Devin",
@@ -48,22 +38,8 @@ const STATUS_TONE: Record<UiStatus, StatusTone> = {
   idle: "done",
 };
 
-const STATUS_ICON: Record<UiStatus, IconName> = {
-  run: "load",
-  wait: "hand",
-  queue: "circle-pause",
-  err: "alert",
-  ok: "check",
-  idle: "check",
-};
-
 export function statusTone(status: UiStatus): StatusTone {
   return STATUS_TONE[status];
-}
-
-export function statusIcon(status: UiStatus, paused = false): IconName {
-  if (paused && status !== "run" && status !== "wait") return "circle-pause";
-  return STATUS_ICON[status];
 }
 
 export function mono(name: string) {
@@ -107,62 +83,4 @@ export function status(
   if (latestTurn?.status === "completed") return "ok";
   if (latestTurn?.status === "failed") return "err";
   return "idle";
-}
-
-export function MonoAv({
-  agent,
-  status: st,
-  lg = false,
-  dot = true,
-}: {
-  agent: Pick<Agent, "name" | "avatar">;
-  status?: UiStatus;
-  lg?: boolean;
-  dot?: boolean;
-}) {
-  const avatar = agent.avatar;
-  const mark =
-    avatar && "icon" in avatar ? (
-      avatar.icon === "sym" ? (
-        <BotoSimboloCurrentcolorIcon />
-      ) : avatar.icon === "mail" ? (
-        <MailIcon />
-      ) : avatar.icon === "receipt" ? (
-        <ReceiptIcon />
-      ) : avatar.icon === "plane" ? (
-        <PlaneIcon />
-      ) : avatar.icon === "chart" ? (
-        <ChartIcon />
-      ) : avatar.icon === "cal" ? (
-        <CalIcon />
-      ) : (
-        <SheetIcon />
-      )
-    ) : avatar && "emoji" in avatar ? (
-      avatar.emoji
-    ) : (
-      mono(agent.name)
-    );
-  return (
-    <span
-      className={`mono-av${lg ? " lg" : ""}`}
-      style={
-        avatar && "color" in avatar
-          ? { background: `color-mix(in oklch, ${avatar.color} 15%, var(--surface))` }
-          : undefined
-      }
-    >
-      {mark}
-      {dot && st && <i className={`dot s-${st}`} />}
-    </span>
-  );
-}
-
-export function Pill({ st }: { st: UiStatus }) {
-  return (
-    <span className="status" data-tone={statusTone(st)}>
-      <Icon name={statusIcon(st)} size={13} />
-      {ST[st]}
-    </span>
-  );
 }

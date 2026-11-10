@@ -9,6 +9,7 @@ import type { ChannelService } from "./channels";
 import type { ChatStore, QueueStore } from "./chat-store";
 import type { ComputerUse } from "./computer";
 import { InvalidSettingError } from "./db/settings";
+import type { DesktopService } from "./desktop";
 import { draftAgent } from "./draft";
 import type { EmailService } from "./email";
 import type { GatewayService } from "./gateways";
@@ -67,6 +68,7 @@ function errorDiagnostics(e: unknown, depth = 0): ErrorDiagnostics {
   return diagnostics;
 }
 
+/** Identity of the WebSocket connection a request came from (desktop streams are per connection). */
 export type RpcConnection = { id: string; watchTask?: (id: string, watch: boolean) => void };
 
 export class Rpc {
@@ -101,6 +103,7 @@ export class Rpc {
       subagents: SubagentService;
       tasks: TaskService;
       profile: ProfileService;
+      desktop: DesktopService;
       overview?: AgentsOverviewService;
     },
   ) {}
@@ -174,6 +177,10 @@ export class Rpc {
     params: unknown,
     conn?: RpcConnection,
   ): Promise<unknown> {
+    const connId = () => {
+      if (!conn) throw new RpcError("bad_request", "desktop methods need a WebSocket connection");
+      return conn.id;
+    };
     switch (method) {
       case "profile.get":
         return this.extras.profile.get();
@@ -189,6 +196,32 @@ export class Rpc {
         const { turnId } = params as MethodParsedParams<typeof method>;
         if (!this.chat.getTurn(turnId)) throw new RpcError("not_found", "turn not found");
         return this.memories.usage(turnId);
+      }
+      case "desktop.machines":
+        return this.extras.desktop.list();
+      case "desktop.subscribe": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.subscribe(p.machineId, connId());
+      }
+      case "desktop.unsubscribe": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.unsubscribe(p.machineId, connId());
+      }
+      case "desktop.thumbnail": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.thumbnail(p.machineId);
+      }
+      case "desktop.takeover": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.takeover(p.machineId, connId());
+      }
+      case "desktop.release": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.release(p.machineId, connId());
+      }
+      case "desktop.input": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.desktop.input(p.machineId, connId(), p.events);
       }
       case "tools.permissions.list":
         return this.extras.toolPermissions.list();
@@ -391,6 +424,7 @@ export class Rpc {
         const p = params as MethodParsedParams<typeof method>;
         if (!this.agents.get(p.agentId)) throw new RpcError("not_found", "agent not found");
         const placed = asBadRequest(() => this.extras.hosts.setPlacement(p));
+        this.extras.desktop.placementChanged(p.agentId);
         await this.runtimes.restartSession(p.agentId);
         queueMicrotask(() => this.broadcast("placement.updated", placed));
         return placed;
@@ -527,7 +561,7 @@ export class Rpc {
         return { ok: true };
       case "computer.access":
         return {
-          ...this.extras.computer.status(),
+          ...this.extras.computer.status((params as MethodParsedParams<typeof method>).agentId),
           agentIds: this.extras.computer.access(),
         };
       case "computer.setAccess": {

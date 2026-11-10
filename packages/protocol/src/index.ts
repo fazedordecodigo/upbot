@@ -29,12 +29,14 @@ import {
   TasksSearchParams,
 } from "./tasks";
 import { ToolMode, templateMethods } from "./templates";
+import { type DesktopEventMap, desktopMethodMap } from "./vm-desktop";
 
 export * from "./agents-cockpit";
 export * from "./profile";
 export * from "./providers-catalog";
 export * from "./tasks";
 export * from "./templates";
+export * from "./vm-desktop";
 
 export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   devin: "~/.config/devin/config.json",
@@ -1182,7 +1184,7 @@ export const methodMap = {
   },
   "vault.delete": { params: z.object({ name: VaultName }).strict(), result: Ok },
   "computer.access": {
-    params: z.object({}).strict(),
+    params: z.object({ agentId: z.string().optional() }).strict(),
     result: z.object({
       available: z.boolean(),
       reason: z.string().optional(),
@@ -1320,6 +1322,7 @@ export const methodMap = {
     result: z.object({ tasks: z.array(Task), routines: z.array(Routine) }),
   },
   "tasks.deliveries": { params: TasksDeliveriesParams, result: z.array(TaskDelivery) },
+  ...desktopMethodMap,
   ...agentsCockpitMethods,
 } as const;
 
@@ -1374,4 +1377,4 @@ export type DaemonEventMap = AgentsCockpitEventMap & {
   "task.updated": Task;
   "task.delivery": TaskDelivery;
   "task.event": { taskId: string; event: string; data: unknown };
-};
+} & DesktopEventMap;

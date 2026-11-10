@@ -1,0 +1,7 @@
+.sb-group + .sb-group { margin-top: var(--boto-space-4); }
+.sb-group-title, .sb-history-message { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); padding: var(--boto-space-2) var(--boto-space-3); }
+.sb-group-title { font-weight: var(--boto-font-weight-medium); }
+.sb-task { width: 100%; min-width: 0; }
+.sb .sb-history { min-height: 0; }
+.sidebar > .sb, .sheet > .sb { min-width: 0; height: 100%; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+.sidebar > .sb { height: calc(100dvh - var(--boto-space-8)); }

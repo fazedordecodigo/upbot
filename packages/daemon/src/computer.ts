@@ -18,8 +18,18 @@ import { getSetting, setSetting } from "./db/settings";
 
 const accessSchema = z.array(z.string());
 
+/** Computer Use backend for agents whose desktop lives elsewhere (a microVM guest). */
+export type RemoteComputer = {
+  screenshot(agent: Agent): Promise<string>;
+  click(agent: Agent, x: unknown, y: unknown, double: boolean): Promise<string>;
+  type(agent: Agent, text: string): Promise<string>;
+  key(agent: Agent, key: string, modifiers: unknown): Promise<string>;
+};
+
 export class ComputerUse {
   private typing: Promise<void> = Promise.resolve();
+  /** Returns the remote desktop for an agent, or null to use this machine's display. */
+  remote: (agentId: string) => RemoteComputer | null = () => null;
 
   constructor(
     private db: Database,
@@ -34,11 +44,12 @@ export class ComputerUse {
     setSetting(this.db, "computer_use_agents", [...new Set(agentIds)]);
   }
 
-  available(): boolean {
-    return this.status().available;
+  available(agentId?: string): boolean {
+    return this.status(agentId).available;
   }
 
-  status(): { available: boolean; reason?: string } {
+  status(agentId?: string): { available: boolean; reason?: string } {
+    if (agentId && this.remote(agentId)) return { available: true };
     const support = computerSupport(this.environment);
     return "backend" in support
       ? { available: true }
@@ -48,12 +59,16 @@ export class ComputerUse {
   private check(agent: Agent) {
     const support = computerSupport(this.environment);
     if ("reason" in support) throw new Error(support.reason);
+    this.checkAccess(agent);
+    return support.backend;
+  }
+
+  private checkAccess(agent: Agent): void {
     if (!this.access().includes(agent.id)) {
       throw new Error(
         "Computer Use is not enabled for you; the user can enable it in your agent settings",
       );
     }
-    return support.backend;
   }
 
   private async exec(cmd: string[], text?: string): Promise<void> {
@@ -79,6 +94,9 @@ export class ComputerUse {
   }
 
   async screenshot(agent: Agent): Promise<string> {
+    this.checkAccess(agent);
+    const remote = this.remote(agent.id);
+    if (remote) return remote.screenshot(agent);
     const backend = this.check(agent);
     const dir = join(agent.workspacePath, "computer");
     mkdirSync(dir, { recursive: true });
@@ -90,6 +108,9 @@ export class ComputerUse {
   }
 
   async click(agent: Agent, x: unknown, y: unknown, double: boolean): Promise<string> {
+    this.checkAccess(agent);
+    const remote = this.remote(agent.id);
+    if (remote) return remote.click(agent, x, y, double);
     const backend = this.check(agent);
     const px = Number(x);
     const py = Number(y);
@@ -107,6 +128,9 @@ export class ComputerUse {
   }
 
   async type(agent: Agent, text: string): Promise<string> {
+    this.checkAccess(agent);
+    const remote = this.remote(agent.id);
+    if (remote) return remote.type(agent, text);
     const backend = this.check(agent);
     if (!text || text.length > 5000 || text.includes("\0"))
       throw new Error("`text` must be 1-5000 characters without NUL");
@@ -121,6 +145,9 @@ export class ComputerUse {
   }
 
   async key(agent: Agent, key: string, modifiers: unknown): Promise<string> {
+    this.checkAccess(agent);
+    const remote = this.remote(agent.id);
+    if (remote) return remote.key(agent, key, modifiers);
     const backend = this.check(agent);
     const mods = (Array.isArray(modifiers) ? modifiers : []).map(String);
     await this.exec(keyCommand(backend, key, mods));

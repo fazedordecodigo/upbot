@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -15,6 +15,7 @@ import { ComputerUse } from "./computer";
 import { Connectors } from "./connectors";
 import { openDatabase } from "./db";
 import { getProfileDefaults } from "./db/settings";
+import { DesktopService } from "./desktop";
 import { EmailService } from "./email";
 import { mergedPath } from "./env/login-path";
 import { GatewayService } from "./gateways";
@@ -122,6 +123,7 @@ let serverRef: { stop(): void } | null = null;
 let runtimesRef: { closeAll(): Promise<void> } | null = null;
 let gatewaysRef: { stopAll(): void } | null = null;
 let approvalsSuspendRef: { suspend(): void } | null = null;
+let desktopStopRef: { stop(): void } | null = null;
 
 function shutdown(code: number, reason: string) {
   if (shuttingDown) return;
@@ -129,6 +131,9 @@ function shutdown(code: number, reason: string) {
   log("shutting down", { reason, code });
   try {
     approvalsSuspendRef?.suspend();
+  } catch {}
+  try {
+    desktopStopRef?.stop();
   } catch {}
   try {
     gatewaysRef?.stopAll();
@@ -179,10 +184,14 @@ async function main() {
   const sockets = new Set<
     import("bun").ServerWebSocket<{ connId: string; taskIds: Set<string> }>
   >();
+  let desktopRef: DesktopService | null = null;
+  desktopStopRef = null;
 
   function broadcast(event: string, data: unknown) {
     const privateTasks = chat.privateEventTasks(event, data);
     const msg = JSON.stringify({ event, data });
+    if (event === "agent.status")
+      desktopRef?.onAgentStatus(data as { agentId: string; status: string });
     for (const ws of sockets) {
       try {
         if (privateTasks.length) {
@@ -252,6 +261,11 @@ async function main() {
   const providers = new ProvidersService(db, vmCredentials, broadcast);
   hosts.credentialEnv = (provider) => vmCredentials.env(provider);
   const computer = new ComputerUse(db);
+  const desktop = new DesktopService(db, hosts, (id) => store.get(id), broadcast, log);
+  desktopRef = desktop;
+  desktopStopRef = desktop;
+  hosts.machineNameFor = (id) => desktop.machineNameFor(id);
+  computer.remote = (id) => desktop.remoteComputer(id);
   const voice = new Voice(join(dataDir, "voice"), mergedPath);
   bridge.vault = vault;
   const email = new EmailService(db, vault, broadcast);
@@ -262,6 +276,7 @@ async function main() {
   approvals.interruptLeftovers();
   approvalsSuspendRef = approvals;
   bridge.approvals = approvals;
+  desktop.approvals = approvals;
   const pages = new PageLibrary(db, workspaceRoot, broadcast);
   bridge.pages = pages;
   approvalsRef = approvals;
@@ -319,6 +334,13 @@ async function main() {
     const task = taskService.get(taskId);
     return { taskId, title: task.title };
   });
+  overview.addMachineSource((agentId) =>
+    desktop
+      .list()
+      .filter((m) => m.agentId === agentId)
+      .map((m) => m.id),
+  );
+  desktop.taskFor = (agentId) => runtimes.currentTurn(agentId)?.taskId ?? null;
   bridge.tasksFor = (agentId) =>
     runtimes.activeTurns(agentId).flatMap((turn) => {
       const stored = chat.getTurn(turn.id);
@@ -365,6 +387,7 @@ async function main() {
       subagents,
       tasks: taskService,
       profile: new ProfileService(db, memories, broadcast),
+      desktop,
       overview,
     },
   );
@@ -395,7 +418,7 @@ async function main() {
           logLimited("auth.rejected", "/ws:401", { route: "/ws", status: 401 });
           return new Response("unauthorized", { status: 401 });
         }
-        if (srv.upgrade(req, { data: { connId: crypto.randomUUID(), taskIds: new Set<string>() } }))
+        if (srv.upgrade(req, { data: { connId: randomUUID(), taskIds: new Set<string>() } }))
           return undefined;
         return new Response("upgrade failed", { status: 400 });
       }
@@ -496,9 +519,13 @@ async function main() {
       maxPayloadLength: 48 * 1024 * 1024,
       open(ws) {
         sockets.add(ws);
+        desktop.attach(ws.data.connId, (event, data) => {
+          ws.send(JSON.stringify({ event, data }));
+        });
       },
       close(ws) {
         sockets.delete(ws);
+        desktop.detach(ws.data.connId);
       },
       async message(ws, msg) {
         const text = typeof msg === "string" ? msg : Buffer.from(msg).toString("utf8");

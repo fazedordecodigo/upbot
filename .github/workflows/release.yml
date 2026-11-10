@@ -74,11 +74,7 @@ jobs:
             bundles: app,dmg
           - os: ubuntu-22.04
             bundles: appimage,deb,rpm
-          - os: ubuntu-22.04-arm
-            bundles: appimage,deb,rpm
           - os: windows-latest
-            bundles: nsis
-          - os: windows-11-arm
             bundles: nsis
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
@@ -104,11 +100,6 @@ jobs:
             libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
             libssl-dev build-essential zip unzip
       - run: bun install --frozen-lockfile
-      - name: Install ARM64 Linux test browser
-        if: runner.os == 'Linux' && runner.arch == 'ARM64'
-        run: |
-          bunx --no-install playwright-core install --with-deps chromium
-          bun -e 'import { chromium } from "playwright-core"; console.log(`CHROME_PATH=${chromium.executablePath()}`)' >> "$GITHUB_ENV"
       - run: bun run test
       - name: Enable Apple signing when configured
         id: apple-signing

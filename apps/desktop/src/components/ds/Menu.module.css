@@ -1,9 +1,0 @@
-.root { position: relative; }
-.menu { position: absolute; top: calc(100% + var(--boto-space-1)); right: 0; width: var(--boto-size-menu); padding: var(--boto-space-1); z-index: 10; border: 1px solid var(--border); border-radius: var(--boto-radius-lg); background: var(--surface); box-shadow: var(--shadow-pop); }
-.menu button { width: 100%; min-height: var(--boto-size-control); display: flex; align-items: center; justify-content: space-between; padding: var(--boto-space-2); text-align: left; border-radius: var(--boto-radius-sm); font-size: var(--fs-meta); }
-.menu button:hover { background: var(--fg-soft); }
-.menu button:focus-visible { outline: var(--boto-size-focus-ring) solid var(--boto-color-focus); outline-offset: var(--boto-size-focus-offset) !important; background: var(--fg); color: var(--bg); }
-@media (pointer: coarse) {
-  .menu button { min-height: var(--boto-size-target); }
-}
-.menu button:disabled { opacity: .45; cursor: not-allowed; }

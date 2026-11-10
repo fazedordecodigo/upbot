@@ -1,5 +1,20 @@
 # Providers (native, ACP, microVM)
 
+## Local provider catalog
+
+`providers.list` caches CLI detection; `providers.scan` refreshes it and emits
+`providers.changed`. Detection uses the runtime command overrides and merged PATH.
+Versions have a three-second deadline and are skipped for overridden commands.
+`providers.login` starts the CLI login flow asynchronously with discarded output;
+`BOTO_PROVIDER_LOGIN_COMMAND_<PROVIDER>` accepts a JSON command array for tests.
+Credential presence is not proof that a token is valid: unknown local login formats
+return `loggedIn: null`. Codex checks `~/.codex/auth.json` and Gemini checks
+`~/.gemini/oauth_creds.json`; vault OAuth takes precedence.
+API keys use the encrypted VM credential store and only masked suffixes reach the catalog.
+`providers.setDefault` requires a ready provider and persists `default_provider`;
+new bots without an explicit provider use it. With no saved default, creation still
+requires a provider, as before.
+
 ## Native Claude + Codex (Phase 4)
 
 `src/providers/index.ts` routes providers: `claude` -> `ClaudeDriver` (`claude.ts`),
