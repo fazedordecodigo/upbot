@@ -1,0 +1,491 @@
+import { expect, test } from "bun:test";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chromium } from "playwright-core";
+import {
+  DaemonClient,
+  FAKE_AGENT,
+  ROOT,
+  readLog,
+  startDaemon,
+} from "../../../packages/daemon/test/helpers";
+import { startVite } from "./vite";
+
+test("task timeline, real desktop stream, takeover, split, VM dialog and mobile tabs", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "boto-task-view-"));
+  const token = crypto.randomUUID();
+  const daemon = await startDaemon(join(dir, "data"), join(dir, "agents"), token, {
+    BOTO_PROVIDER_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
+    FAKE_ACP_STATE_DIR: dir,
+    BOTO_VAULT_KEY: "12".repeat(32),
+    BOTO_SSH_COMMAND: JSON.stringify([
+      "bun",
+      join(ROOT, "packages/daemon/test/fixtures/fake-ssh.ts"),
+    ]),
+    BOTO_DESKTOP_COMMAND: JSON.stringify([
+      "bun",
+      join(ROOT, "packages/daemon/test/fixtures/fake-desktop-host.ts"),
+    ]),
+    FAKE_SSH_HOME: join(dir, "ssh"),
+    FAKE_DESKTOP_LOG: join(dir, "desktop.jsonl"),
+    FAKE_DESKTOP_FRAME_FILE: join(dir, "frame.jpg"),
+  });
+  const vite = await startVite();
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const client = await DaemonClient.connect(daemon.port, token);
+  await client.request("onboarding.complete", {});
+  try {
+    const agent = await client.request("agents.create", {
+      name: "Código",
+      provider: "devin",
+      requireApproval: false,
+    });
+    await client.request("apps.connect", {
+      catalogId: "custom-stdio",
+      name: "Notes",
+      secrets: {},
+      command: ["bun", join(ROOT, "packages/daemon/test/fixtures/fake-mcp-server.ts")],
+    });
+    await client.request("profile.update", { about: "Prefiro respostas curtas." });
+    const task = await client.request("tasks.create", { agentId: agent.id, text: "tool" });
+    const video = process.env.BOTO_TASK_VIDEO;
+    const page = await browser.newPage(
+      video ? { recordVideo: { dir: video, size: { width: 1440, height: 900 } } } : {},
+    );
+    page.setDefaultTimeout(10000);
+    await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}&task=${task.id}`);
+    await page
+      .getByRole("button", { name: "Permitir nesta sessão", exact: true })
+      .click()
+      .catch(async (error) => {
+        console.log(
+          "task history:",
+          JSON.stringify(await client.request("tasks.history", { id: task.id })),
+        );
+        console.log("render:", await page.locator("#main").innerText());
+        throw error;
+      });
+    await page.getByText("permission:allow_once", { exact: true }).waitFor();
+    expect(await page.locator("#ctl-takeover").isDisabled()).toBe(true);
+    expect(await page.locator("#ctl-takeover").getAttribute("title")).toBe(
+      "Este bot não tem uma área de trabalho",
+    );
+    expect(await page.locator("#task-desk").innerText()).toContain(
+      "Este bot trabalha sem área de trabalho. Ela está disponível para bots em uma microVM.",
+    );
+    await page.locator("#instruct-input").fill("echo: oi");
+    await page.locator("#instruct-input").press("Enter");
+    await page
+      .locator(".task-message > p")
+      .filter({ hasText: /^\s*oi$/ })
+      .waitFor();
+    expect(await page.locator("#timeline").innerText()).toMatch(
+      /Permitido nesta sessão · \d{2}:\d{2}/,
+    );
+    await page.locator("#instruct-input").fill("mcp:notes-create_note {}");
+    await page.locator("#instruct-input").press("Enter");
+    await page.getByRole("button", { name: "Aprovar", exact: true }).click();
+    await page.getByText("tool-ok:note-created", { exact: true }).waitFor();
+    expect(await page.locator("#timeline").innerText()).toMatch(/Aprovada · \d{2}:\d{2}/);
+    await page.reload();
+    const approval = page.locator(".task-card").filter({ hasText: "Aprovada" });
+    await approval.waitFor();
+    expect(await approval.locator("h3").innerText()).toBe("Código quer criar uma nota em Notes.");
+    expect(await approval.innerText()).toMatch(/Aprovada · \d{2}:\d{2}/);
+    expect(await page.locator("#timeline").innerText()).not.toContain("indisponível");
+    const memory = page.getByRole("button", { name: "Usou 1 item da memória · Perfil" }).first();
+    await memory.click();
+    await page.getByText("Prefiro respostas curtas.", { exact: true }).first().waitFor();
+    await page.getByRole("button", { name: "Editar memória", exact: true }).click();
+    expect(await page.locator("#st-tab-memory").getAttribute("aria-selected")).toBe("true");
+    await page.locator("#sidebar [data-history]").getByText(task.title, { exact: true }).click();
+    await page.reload();
+    await page.locator("#timeline").waitFor();
+
+    await page.reload();
+    await page.getByText("tool-ok:note-created", { exact: true }).waitFor();
+    expect(await page.locator("#timeline").innerText()).toMatch(/Aprovada · \d{2}:\d{2}/);
+    expect(await page.locator("#timeline").innerText()).not.toContain(
+      "Horário da decisão indisponível",
+    );
+    await client.request("profile.update", { about: "Perfil real para o indicador de memória." });
+    const memoryTask = await client.request("tasks.create", {
+      agentId: agent.id,
+      text: "echo:memory navigation",
+    });
+    await page.goto(
+      `http://localhost:1420/#port=${daemon.port}&token=${token}&task=${memoryTask.id}`,
+    );
+    await page.reload();
+    await page.getByText("memory navigation", { exact: true }).waitFor();
+    await page.getByRole("button", { name: /Usou .* ite(?:m|ns) da memória/ }).click();
+    await page.getByRole("button", { name: "Editar memória", exact: true }).click();
+    await page.locator("#st-memory").waitFor();
+    expect(await page.locator("#st-tab-memory").getAttribute("aria-selected")).toBe("true");
+    await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}&task=${task.id}`);
+    await page.reload();
+    await page.locator("#instruct-input:not([disabled])").waitFor();
+
+    const slow = await client.request("tasks.instruct", { id: task.id, text: "slow" });
+    await client.waitForEventWhere("turn.started", (turn) => turn.queueId === slow.queueId);
+    await page.locator("#ctl-pause").click();
+    await page.getByRole("button", { name: "Retomar", exact: true }).waitFor();
+    await client.waitForEventWhere("turn.ended", (turn) => turn.queueId === slow.queueId);
+    expect((await client.request("tasks.get", { id: task.id })).situation).toBe("muted");
+    await page.locator("#ctl-pause").click();
+    await page.getByRole("button", { name: "Pausar", exact: true }).waitFor();
+    await client.waitForEventWhere(
+      "task.updated",
+      (value) => value.id === task.id && value.situation === "done",
+    );
+    const next = await client.request("tasks.instruct", { id: task.id, text: "slow" });
+    await client.waitForEventWhere("turn.started", (turn) => turn.queueId === next.queueId);
+    await page.locator("#ctl-pause").click();
+    await client.waitForEventWhere("turn.ended", (turn) => turn.queueId === next.queueId);
+
+    const finished = await client.request("tasks.create", { agentId: agent.id, text: "echo: ok" });
+    await client.waitForEventWhere(
+      "task.updated",
+      (value) => value.id === finished.id && value.situation === "done",
+    );
+    const fixture = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    await fixture.goto("http://localhost:1420");
+    await fixture.setContent(
+      '<html><body style="margin:0; background:#0c1416; color:#e8eeee; font:24px monospace; padding:48px"><h1>Área de trabalho de teste</h1><p>Stream do host de verificação</p></body></html>',
+    );
+    await fixture.screenshot({ path: join(dir, "frame.jpg"), type: "jpeg" });
+    await fixture.close();
+    // the agent asks for a hand (request_takeover): the card speaks pt-BR and, without a
+    // machine, offers to mark the step done; once the agent gets a machine it hands it over
+    await page.locator("#ctl-pause").click();
+    await page.getByRole("button", { name: "Pausar", exact: true }).waitFor();
+    await client.waitForEventWhere(
+      "task.updated",
+      (value) => value.id === task.id && value.situation === "done",
+    );
+    const handover = await client.request("tasks.instruct", {
+      id: task.id,
+      text: 'mcp:request_takeover {"reason":"Preciso que você faça o login no site"}',
+    });
+    const handoverCard = page
+      .locator(".task-card")
+      .filter({ hasText: "precisa que você assuma o controle" });
+    await handoverCard.waitFor();
+    expect(await handoverCard.locator("h3").innerText()).toBe(
+      "Código precisa que você assuma o controle.",
+    );
+    expect(await handoverCard.innerText()).toContain("Preciso que você faça o login no site");
+    expect(await page.locator("#timeline").innerText()).not.toContain("Take over the bot browser");
+    await page.locator("#task-meta").getByText("Aguardando você", { exact: true }).waitFor();
+    await handoverCard.getByRole("button", { name: "Marcar como concluída", exact: true }).click();
+    await client.waitForEventWhere("turn.ended", (turn) => turn.queueId === handover.queueId);
+    await handoverCard.getByText(/Concluída · \d{2}:\d{2}/).waitFor();
+    await page
+      .getByText(
+        "tool-ok:the user finished in the browser; take a new browser_snapshot and continue",
+        { exact: true },
+      )
+      .waitFor();
+    const paused = await client.request("tasks.instruct", { id: task.id, text: "slow" });
+    await client.waitForEventWhere("turn.started", (turn) => turn.queueId === paused.queueId);
+    await page.locator("#ctl-pause").click();
+    await page.getByRole("button", { name: "Retomar", exact: true }).waitFor();
+    await client.waitForEventWhere("turn.ended", (turn) => turn.queueId === paused.queueId);
+    let host = await client.request("hosts.create", {
+      name: "Host de verificação",
+      target: "bob@vps.example.com",
+    });
+    host = await client.request("hosts.install", { id: host.id });
+    copyFileSync(
+      join(ROOT, "packages/daemon/test/fixtures/fake-boto-host-ready.ts"),
+      join(dir, "ssh/.boto/bin/boto-host.ts"),
+    );
+    host = await client.request("hosts.check", { id: host.id });
+    expect(host.preflight?.firecrackerReady).toBe(true);
+    await client.request("placements.set", {
+      agentId: agent.id,
+      hostId: host.id,
+      isolation: "firecracker",
+    });
+    await page.locator("#task-desk .live-frame").waitFor();
+    await page.waitForFunction(() => {
+      const img = document.querySelector<HTMLImageElement>("#task-desk .live-frame");
+      return img?.complete && img.naturalWidth > 0;
+    });
+    const machines = await client.request("desktop.machines", {});
+    const machine = machines.find((m) => m.agentId === agent.id);
+    if (!machine) throw new Error("machine missing");
+    await client.request("computer.setAccess", { agentIds: [agent.id] });
+    const session = readLog(dir).find((entry) => entry.method === "session/new");
+    if (!session) throw new Error("fake ACP session missing");
+    const spec = (
+      session.params as { mcpServers: { name: string; env: { name: string; value: string }[] }[] }
+    ).mcpServers.find((server) => server.name === "boto");
+    const bridgeToken = spec?.env.find((entry) => entry.name === "BOTO_BRIDGE_TOKEN")?.value;
+    if (!bridgeToken) throw new Error("bridge token missing");
+    await page.addStyleTag({ content: ".live-click { animation-duration: 20s; }" });
+    const click = await fetch(`http://127.0.0.1:${daemon.port}/bridge`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${bridgeToken}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        method: "tools/call",
+        params: { name: "computer_click", arguments: { x: 480, y: 320 } },
+      }),
+    });
+    expect(click.ok).toBe(true);
+    await page.locator("#task-desk .live-cursor").waitFor();
+    await page.locator("#task-desk .live-click").waitFor();
+    const wavesAfterClick = await page.locator("#task-desk .live-click").count();
+    const key = await fetch(`http://127.0.0.1:${daemon.port}/bridge`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${bridgeToken}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        method: "tools/call",
+        params: { name: "computer_key", arguments: { key: "escape" } },
+      }),
+    });
+    expect(key.ok).toBe(true);
+    await page.waitForTimeout(400);
+    // the click wave outlives the following key press and stays anchored at the click point
+    expect(await page.locator("#task-desk .live-click").count()).toBe(wavesAfterClick);
+    const [wave, frame] = await Promise.all([
+      page.locator("#task-desk .live-click").first().boundingBox(),
+      page.locator("#task-desk img.live-frame").boundingBox(),
+    ]);
+    if (!wave || !frame) throw new Error("wave or frame missing");
+    expect(Math.abs(wave.x + wave.width / 2 - (frame.x + (frame.width * 480) / 1280))).toBeLessThan(
+      3,
+    );
+    expect(
+      Math.abs(wave.y + wave.height / 2 - (frame.y + (frame.height * 320) / 800)),
+    ).toBeLessThan(3);
+    // Início lists the streaming machine with its real frame; another viewer (this client)
+    // keeps the idle machine streaming across the reload
+    await client.request("desktop.subscribe", { machineId: machine.id });
+    await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await page.reload();
+    await page.locator("#pc-card .ag-thumb img").waitFor();
+    expect(await page.locator("#pc-card").innerText()).toContain(machine.name);
+    await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}&task=${task.id}`);
+    await page.reload();
+    await page.locator("#task-desk img.live-frame").waitFor();
+
+    const shots = process.env.BOTO_TASK_SHOTS;
+    if (shots) mkdirSync(shots, { recursive: true });
+    const capture = async (name: string, width: number, height: number, theme = "dark") => {
+      await page.setViewportSize({ width, height });
+      await page.evaluate((theme) => {
+        document.documentElement.dataset.theme = theme;
+      }, theme);
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      if (shots)
+        await page.screenshot({ path: join(shots, `${name}.png`), animations: "disabled" });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+    };
+    await capture("1440-dark", 1440, 900);
+    await capture("1440-light", 1440, 900, "light");
+    await page.locator("#split").focus();
+    const split = Number(await page.locator("#split").getAttribute("aria-valuenow"));
+    await page.keyboard.press("ArrowRight");
+    expect(Number(await page.locator("#split").getAttribute("aria-valuenow"))).toBe(split + 2);
+    await page.keyboard.press("Home");
+    expect(await page.locator("#split").getAttribute("aria-valuenow")).toBe("30");
+    expect(await page.evaluate(() => localStorage.getItem("boto.task-split"))).toBe("30");
+    await page.keyboard.press("Enter");
+    const bar = await page.locator("#split").boundingBox();
+    const body = await page.locator(".task-body").boundingBox();
+    if (!bar || !body) throw new Error("split missing");
+    await page.mouse.move(bar.x + bar.width / 2, bar.y + bar.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(body.x + body.width * 0.5537, bar.y + bar.height / 2, { steps: 4 });
+    await page.mouse.up();
+    expect(await page.locator("#split").getAttribute("aria-valuenow")).toBe("55");
+    await page.locator("#split").dblclick();
+    expect(await page.locator("#split").getAttribute("aria-valuenow")).toBe("42");
+    await client.request("desktop.takeover", { machineId: machine.id });
+    await page.locator("#ctl-takeover").click();
+    await page
+      .getByText("Não foi possível concluir a ação. Tente de novo.", { exact: true })
+      .waitFor();
+    await page
+      .getByRole("region", { name: "Avisos" })
+      .getByRole("button", { name: "Fechar", exact: true })
+      .click();
+    await client.request("desktop.release", { machineId: machine.id });
+    await page.locator("#ctl-takeover").click();
+    await page.getByText("Você está no controle", { exact: true }).waitFor();
+    await page.locator("#task-desk .live-surface").click({ position: { x: 100, y: 100 } });
+    await page.keyboard.press("a");
+    await page.locator("#task-desk .live-surface").dispatchEvent("wheel", { deltaY: 999 });
+    const until = Date.now() + 5000;
+    while (
+      Date.now() < until &&
+      !(
+        existsSync(join(dir, "desktop.jsonl")) &&
+        readFileSync(join(dir, "desktop.jsonl"), "utf8").includes('"deltaY":100')
+      )
+    )
+      await Bun.sleep(20);
+    const input = readFileSync(join(dir, "desktop.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.event === "input" && entry.source === "user");
+    expect(
+      input.some((entry) =>
+        entry.events.some((event: { type: string }) => event.type === "mouse_down"),
+      ),
+    ).toBe(true);
+    expect(input.every((entry) => entry.events.length <= 64)).toBe(true);
+    expect(
+      input.some((entry) =>
+        entry.events.some(
+          (event: { type: string; keysym?: string }) =>
+            event.type === "key_down" && event.keysym === "a",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      input.some((entry) =>
+        entry.events.some(
+          (event: { type: string; deltaY?: number }) =>
+            event.type === "wheel" && event.deltaY === 100,
+        ),
+      ),
+    ).toBe(true);
+    await capture("1440-takeover", 1440, 900);
+    await capture("1440-takeover-light", 1440, 900, "light");
+    await page.locator("#ctl-takeover").click();
+    await page.getByText("Você está no controle", { exact: true }).waitFor({ state: "hidden" });
+    await capture("1024-dark", 1024, 768);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator("#tl-scroll").evaluate((el) => {
+      el.scrollTop = 0;
+    });
+    await capture("390-activity", 390, 844);
+    for (const id of ["#ctl-live", "#ctl-pause", "#ctl-takeover", "#ctl-stop"]) {
+      const label = page.locator(`${id} .ctl-label`);
+      expect(await label.isVisible()).toBe(true);
+      const box = await label.boundingBox();
+      expect((box?.width ?? 0) > 20).toBe(true);
+      expect((box?.x ?? 0) + (box?.width ?? 0) <= 390).toBe(true);
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await page.locator("#pane-tab-activity").focus();
+    await page.keyboard.press("End");
+    expect(await page.locator("#pane-tab-computer").getAttribute("aria-selected")).toBe("true");
+    await capture("390-desktop", 390, 844);
+    expect(await page.locator("#split").isVisible()).toBe(false);
+    await page.keyboard.press("Home");
+    expect(await page.locator("#pane-tab-activity").getAttribute("aria-selected")).toBe("true");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole("button", { name: "Abrir em tela cheia", exact: true }).click();
+    await page.locator("#vm-desk").getByText("Você está no controle", { exact: true }).waitFor();
+    await capture("1440-vm", 1440, 900);
+    await page.locator("#vm-desk .live-surface").focus();
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => !!document.activeElement?.closest("#vm-dialog"))).toBe(true);
+    await page.keyboard.press("Shift+Tab");
+    expect(
+      await page.evaluate(() => document.activeElement?.classList.contains("live-surface")),
+    ).toBe(true);
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => !!document.activeElement?.closest("#vm-dialog"))).toBe(true);
+    await page.keyboard.press("Escape");
+    await page.locator("#vm-dialog").waitFor({ state: "hidden" });
+    await page.locator('#task-desk .live-desk[data-owned="true"]').waitFor();
+    expect(
+      (await client.request("desktop.machines", {})).find((m) => m.id === machine.id)?.controller,
+    ).toBe("user");
+    await page.getByRole("button", { name: "Abrir em tela cheia", exact: true }).click();
+    await page.locator("#vm-desk").getByText("Você está no controle", { exact: true }).waitFor();
+    await capture("390-vm", 390, 844);
+    await page.getByRole("button", { name: "Fechar e devolver a máquina", exact: true }).click();
+    await page.locator("#vm-dialog").waitFor({ state: "hidden" });
+    expect(
+      (await client.request("desktop.machines", {})).find((m) => m.id === machine.id)?.controller,
+    ).toBe("agent");
+    const taskUrl = `http://localhost:1420/#port=${daemon.port}&token=${token}&task=`;
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(taskUrl + finished.id);
+    await page.reload();
+    await page.locator("#task-meta").getByText("Concluída", { exact: true }).waitFor();
+    await page.locator("#task-desk .live-frame").waitFor();
+    await page.waitForFunction(
+      () => !document.querySelector<HTMLButtonElement>("#ctl-takeover")?.disabled,
+    );
+    await page.goto(taskUrl + task.id);
+    await page.reload();
+    await page.locator("#task-desk .live-frame").waitFor();
+    await page.locator("#ctl-stop").click();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const stopDialog = await page.locator("#confirm").boundingBox();
+    expect(stopDialog?.width).toBe(520);
+    await page.getByRole("button", { name: "Encerrar tarefa", exact: true }).click();
+    await page.locator("#task-meta").getByText("Encerrada", { exact: true }).waitFor();
+    expect(await page.locator("#instruct-input").isDisabled()).toBe(true);
+    expect(await page.locator("#ctl-takeover").isDisabled()).toBe(true);
+    expect(await page.locator("#ctl-takeover").getAttribute("title")).toBe(
+      "Esta tarefa foi encerrada",
+    );
+    // once the last viewer leaves, the idle machine's stream stops
+    await client.request("desktop.unsubscribe", { machineId: machine.id });
+    await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}`);
+    await page.reload();
+    await page.getByText("Nenhuma área de trabalho ativa agora.", { exact: true }).waitFor();
+    expect(
+      (await client.request("desktop.machines", {})).find((m) => m.id === machine.id)?.status,
+    ).toBe("stopped");
+    await page.goto(`http://localhost:1420/#port=${daemon.port}&token=${token}&task=missing`);
+    await page.reload();
+    await page.getByRole("button", { name: "Tentar de novo" }).waitFor();
+    expect(await page.locator("#timeline").innerText()).not.toContain("permission:allow_once");
+    await page.evaluate(async () => {
+      const load = (path: string) => import(/* @vite-ignore */ path);
+      const ReactModule = await load("/node_modules/.vite/deps/react.js");
+      const React = ReactModule.default;
+      const ReactDOM = await load("/node_modules/.vite/deps/react-dom_client.js");
+      const createRoot = ReactDOM.createRoot ?? ReactDOM.default.createRoot;
+      const { useTask } = await load("/src/hooks/useTask.ts");
+      const { DaemonClient } = await load("/src/lib/daemon.ts");
+      const client = new DaemonClient();
+      const el = document.createElement("div");
+      el.id = "hook-result";
+      document.body.append(el);
+      function Probe() {
+        const state = useTask(client, undefined);
+        return React.createElement(
+          "pre",
+          null,
+          JSON.stringify({ loading: state.loading, items: state.items, task: state.task }),
+        );
+      }
+      createRoot(el).render(React.createElement(Probe));
+    });
+    await page.waitForFunction(() =>
+      document.querySelector("#hook-result")?.textContent?.includes('"loading":false'),
+    );
+    expect(JSON.parse(await page.locator("#hook-result").innerText())).toEqual({
+      loading: false,
+      items: [],
+      task: null,
+    });
+  } finally {
+    client.close();
+    await browser.close();
+    await vite?.stop();
+    daemon.proc.kill();
+    await Promise.all([daemon.proc.exited]);
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 90000);
