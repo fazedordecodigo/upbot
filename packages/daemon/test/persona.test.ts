@@ -35,7 +35,7 @@ async function withStore(run: (db: Database, store: AgentStore) => void) {
 
 describe("default Boto bot", () => {
   for (const deletedOldest of [false, true]) {
-    test(`backfills the oldest active legacy bot once (oldest deleted: ${deletedOldest})`, async () => {
+    test(`backfills the oldest historical legacy bot once (oldest deleted: ${deletedOldest})`, async () => {
       await withStore((db, store) => {
         const oldest = store.create({
           name: "Edited assistant",
@@ -54,13 +54,13 @@ describe("default Boto bot", () => {
         if (deletedOldest) store.softDelete(oldest.id);
         db.query("INSERT INTO settings (key,value) VALUES ('default_bot_seeded','1')").run();
         seedDefaultBot(db, store);
-        const adopted = deletedOldest ? next : oldest;
+        const adopted = oldest;
         expect(
           store
             .list()
             .filter((bot) => bot.isDefault)
             .map((bot) => bot.id),
-        ).toEqual([adopted.id]);
+        ).toEqual(deletedOldest ? [] : [adopted.id]);
         expect(db.query("SELECT value FROM settings WHERE key = 'default_bot_id'").get()).toEqual({
           value: JSON.stringify(adopted.id),
         });
@@ -69,25 +69,27 @@ describe("default Boto bot", () => {
         });
         db.query("UPDATE agents SET created_at = 0 WHERE id = ?").run(namesake.id);
         seedDefaultBot(db, store);
-        expect(store.get(adopted.id)?.isDefault).toBe(true);
+        expect(store.get(adopted.id)?.isDefault ?? false).toBe(!deletedOldest);
         store.softDelete(adopted.id);
         seedDefaultBot(db, store);
         expect(store.list().some((bot) => bot.isDefault)).toBe(false);
-        expect(store.list()).toHaveLength(deletedOldest ? 1 : 2);
+        expect(store.list()).toHaveLength(2);
       });
     });
   }
 
   for (const deletedHistory of [false, true]) {
-    test(`records no legacy default when no active bots exist (deleted history: ${deletedHistory})`, async () => {
+    test(`preserves the historical identity when no active bots exist (deleted history: ${deletedHistory})`, async () => {
       await withStore((db, store) => {
-        if (deletedHistory)
-          store.softDelete(store.create({ name: "Deleted assistant", provider: "claude" }).id);
+        const deleted = deletedHistory
+          ? store.create({ name: "Deleted assistant", provider: "claude" })
+          : null;
+        if (deleted) store.softDelete(deleted.id);
         db.query("INSERT INTO settings (key,value) VALUES ('default_bot_seeded','1')").run();
         seedDefaultBot(db, store);
         expect(store.list()).toEqual([]);
         expect(db.query("SELECT value FROM settings WHERE key = 'default_bot_id'").get()).toEqual({
-          value: "null",
+          value: JSON.stringify(deleted?.id ?? null),
         });
         store.create({
           name: DEFAULT_BOT_NAME,

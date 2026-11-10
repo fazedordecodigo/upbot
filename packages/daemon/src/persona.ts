@@ -38,9 +38,7 @@ export function seedDefaultBot(db: Database, store: AgentStore): void {
     );
     if (!hasSetting(db, "default_bot_id")) {
       const oldest = db
-        .query(
-          "SELECT id FROM agents WHERE deleted_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1",
-        )
+        .query("SELECT id FROM agents ORDER BY created_at ASC, id ASC LIMIT 1")
         .get() as { id: string } | null;
       setSetting(db, "default_bot_id", oldest?.id ?? null);
     }
