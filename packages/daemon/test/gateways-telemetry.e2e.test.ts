@@ -219,7 +219,7 @@ describe("gateway telemetry e2e", () => {
     try {
       daemon.proc.kill("SIGKILL");
     } catch {}
-    await daemon.proc.exited;
+    await daemon?.proc.exited;
     await stopTestChildren(stateDir);
     for (const dir of [dataDir, agentsRoot, stateDir])
       rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
