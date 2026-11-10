@@ -16,10 +16,10 @@ export function formatSchedule(
     return routine.lastRunAt != null
       ? `Executada em ${formatDate(routine.lastRunAt)}`
       : `Em ${formatDate(routine.runAt)}`;
-  const schedule = routine.schedule;
+  const schedule = routine.schedule?.trim().toLowerCase();
   if (!schedule) return routine.webhook ? "Por webhook" : "a definir";
-  const interval = /^every ([1-9]\d*)(m|h|d)$/.exec(schedule);
-  if (interval) {
+  const interval = /^every\s+(\d+)\s*(m|h|d)$/.exec(schedule);
+  if (interval && Number(interval[1]) > 0) {
     const unit =
       interval[2] === "m"
         ? "min"
@@ -28,11 +28,11 @@ export function formatSchedule(
           : Number(interval[1]) === 1
             ? "dia"
             : "dias";
-    return `A cada ${interval[1]} ${unit}`;
+    return `A cada ${Number(interval[1])} ${unit}`;
   }
-  const daily = /^daily ((?:[01]\d|2[0-3]):[0-5]\d)$/.exec(schedule);
-  if (daily) return `Todo dia às ${daily[1]}`;
-  const weekly = /^weekly (sun|mon|tue|wed|thu|fri|sat) ((?:[01]\d|2[0-3]):[0-5]\d)$/.exec(
+  const daily = /^daily\s+((?:[01]?\d|2[0-3]):[0-5]\d)$/.exec(schedule);
+  if (daily) return `Todo dia às ${daily[1]!.padStart(5, "0")}`;
+  const weekly = /^weekly\s+(sun|mon|tue|wed|thu|fri|sat)\s+((?:[01]?\d|2[0-3]):[0-5]\d)$/.exec(
     schedule,
   );
   if (weekly) {
@@ -45,7 +45,7 @@ export function formatSchedule(
       fri: "Toda sexta",
       sat: "Todo sábado",
     };
-    return `${days[weekly[1] ?? ""]} às ${weekly[2]}`;
+    return `${days[weekly[1] ?? ""]} às ${weekly[2]!.padStart(5, "0")}`;
   }
   return "a definir";
 }

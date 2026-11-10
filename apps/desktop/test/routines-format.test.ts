@@ -5,6 +5,11 @@ test("schedule copy follows daemon grammar without inventing unknown schedules",
   const format = (schedule: string | null, webhook = false) =>
     formatSchedule({ schedule, webhook, runAt: null });
   expect(format("daily 08:00")).toBe("Todo dia às 08:00");
+  expect(format("daily 8:00")).toBe("Todo dia às 08:00");
+  expect(format("  DAILY  0:05  ")).toBe("Todo dia às 00:05");
+  expect(format("weekly mon 9:00")).toBe("Toda segunda às 09:00");
+  expect(format(" WEEKLY\tSUN  23:59 ")).toBe("Todo domingo às 23:59");
+  expect(format(" every  030 m ")).toBe("A cada 30 min");
   for (const [day, name] of Object.entries({
     mon: "Toda segunda",
     tue: "Toda terça",
