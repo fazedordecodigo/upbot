@@ -1,0 +1,43 @@
+.mk-inner, .mk-results { display: grid; gap: var(--boto-space-6); }
+.mk-view .page-head { margin-bottom: 0; }
+.mk-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--boto-space-3); }
+.mk-tabs { flex: none; }
+.mk-search { flex: 1; min-width: calc(var(--boto-space-20) * 3); padding-inline: var(--boto-space-3); border: 1px solid var(--boto-color-input); border-radius: var(--boto-radius-md); background: var(--boto-color-background); }
+.mk-search-input { border: 0; background: transparent; min-height: var(--boto-space-10); width: 100%; font-size: var(--boto-font-size-sm); }
+.mk-search:focus-within { outline: var(--boto-size-focus-ring) solid var(--boto-color-ring); outline-offset: var(--boto-size-focus-offset); }
+.mk-search-input:focus-visible { outline: none; }
+.mk-cats { --od-rail-pad: 0; padding-block: var(--boto-space-1); }
+.mk-category { border-color: var(--boto-color-border); }
+.mk-category[aria-checked="true"] { background: var(--boto-color-secondary); }
+#mk-grid, .mk-featured-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--boto-space-4); }
+.mk-featured-wrap > h2 { margin-bottom: var(--boto-space-5); }
+.mk-card { display: grid; gap: var(--boto-space-3); padding: var(--boto-space-5); text-align: left; min-width: 0; color: var(--boto-color-foreground); }
+.mk-card:hover { background: var(--boto-color-accent-surface); }
+.mk-card strong { font-family: var(--boto-font-display); font-size: var(--boto-font-size-lg); }
+.mk-card .badge .od-icon { width: var(--boto-font-size-xs); height: var(--boto-font-size-xs); }
+.mk-logo { display: inline-grid; place-items: center; flex: none; width: var(--boto-space-12); height: var(--boto-space-12); padding: var(--boto-space-2); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-md); background: var(--boto-color-muted-surface); }
+.mk-logo-brand { background: var(--boto-color-logo-tile); }
+.mk-logo img { width: 100%; height: 100%; object-fit: contain; }
+.mk-logo > .od-icon { width: var(--boto-space-6); height: var(--boto-space-6); }
+.mk-author, .mk-hint, .mk-permission { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
+.mk-description { color: var(--boto-color-muted-foreground); }
+.mk-version { font-family: var(--boto-font-mono); }
+.mk-empty { display: grid; justify-items: start; gap: var(--boto-space-3); }
+.mk-notice { padding: var(--boto-space-3); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-md); }
+.mk-panel.sheet { position: fixed; inset: 0 0 0 auto; margin: 0; width: calc(var(--boto-space-20) * 4); max-width: 100%; height: 100%; max-height: 100%; padding: 0; border-radius: 0; }
+.mk-panel .ap { display: flex; flex-direction: column; height: 100%; }
+.mk-panel .ap-head { display: flex; align-items: flex-start; gap: var(--boto-space-2); padding: var(--boto-space-5); border-bottom: 1px solid var(--boto-color-border); }
+.mk-panel .ap-head-main { flex: 1; min-width: 0; gap: var(--boto-space-2); }
+.mk-panel h2 { font-size: var(--boto-font-size-xl); overflow-wrap: anywhere; }
+.mk-panel h3 { font-size: var(--boto-font-size-lg); }
+.mk-panel .ap-body { display: grid; align-content: start; gap: var(--boto-space-5); padding: var(--boto-space-5); overflow-wrap: anywhere; }
+.mk-installed > .badge { justify-self: start; align-self: flex-start; }
+.mk-status:empty { display: none; }
+.mk-panel .field-error { color: var(--boto-color-destructive); }
+.mk-panel .ap-body a { display: inline-flex; align-items: center; gap: var(--boto-space-2); }
+@media (min-width: 1024px) { .mk-featured-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1023px) { #mk-grid, .mk-featured-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) { #mk-grid, .mk-featured-grid { grid-template-columns: minmax(0, 1fr); } .mk-search { flex-basis: 100%; } .mk-tabs { max-width: 100%; } }
+@media (max-width: 479px) { .mk-view { padding-inline: var(--boto-space-4); } .mk-inner { gap: var(--boto-space-5); } }
+@media (max-width: 380px) { .mk-view { padding-inline: var(--boto-space-3); } .mk-tabs .tabs-trigger { padding-inline: var(--boto-space-2); } }
+@media (pointer: coarse) { .mk-search-input { min-height: var(--boto-size-target); } }
