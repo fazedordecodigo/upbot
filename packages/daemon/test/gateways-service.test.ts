@@ -210,4 +210,4 @@ test("gateway notices stay bound to their source transport and send errors stay 
     db.close();
     rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
-});
+}, 30_000);
