@@ -181,7 +181,7 @@ function NewTaskComposer() {
           <Icon name="eye-off" />
           <span>Tarefa privada: ela não fica no histórico nem nas entregas.</span>
         </p>
-        <div className="composer" id="composer" data-when={when} aria-busy={submitting}>
+        <div className="composer" id="composer" aria-busy={submitting}>
           <div className="composer-files" id="composer-files" hidden={!files.length}>
             {files.map((file) => (
               <span className="new-task-file od-row" key={fileIds.current.get(file)}>
@@ -263,13 +263,13 @@ function NewTaskComposer() {
             <span className="composer-spacer" />
             <button
               type="button"
-              className="btn btn-primary btn-pill composer-send"
+              className="btn btn-primary btn-icon composer-send"
               id="send"
+              aria-label={submitting ? "Delegando…" : "Delegar"}
               disabled={busy || !connected || invalid !== null}
               onClick={() => void submit()}
             >
-              <span id="send-label">{submitting ? "Delegando…" : "Delegar"}</span>
-              <Icon name={submitting ? "loader" : "arrow-right"} />
+              <Icon name={submitting ? "loader" : "send"} />
             </button>
           </div>
         </div>

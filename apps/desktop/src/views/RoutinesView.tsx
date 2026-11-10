@@ -106,8 +106,8 @@ export function RoutinesView() {
           {kind === "manual"
             ? "Nenhuma rotina manual."
             : once
-              ? "Nenhuma tarefa agendada. Ao delegar, escolha “Daqui a 1 hora” ou “Amanhã às 8h”."
-              : "Nenhuma rotina recorrente. Crie uma em Nova rotina ou escolha “Todo dia às 8h” ao delegar uma tarefa."}
+              ? "Nenhuma tarefa agendada. Crie uma a partir de um modelo ou use Nova rotina."
+              : "Nenhuma rotina recorrente. Crie uma em Nova rotina ou a partir de um modelo."}
         </p>
       );
     return (

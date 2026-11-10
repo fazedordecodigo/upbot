@@ -2,6 +2,8 @@
 .composer-input { width: 100%; resize: vertical; background: transparent; border: 0; }
 .chat-greet, .chat-compose { margin-block: var(--boto-space-8); }
 
+#view-new .composer-bar { display: flex; align-items: center; gap: var(--boto-space-2); }
+#view-new .composer-spacer { flex: 1; }
 #view-new .composer-files { display: flex; flex-wrap: wrap; gap: var(--boto-space-2); }
 #view-new .new-task-file { max-width: 100%; padding-inline-start: var(--boto-space-2); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-sm); font-size: var(--boto-font-size-sm); }
 #view-new .new-task-status { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }

@@ -115,9 +115,10 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     expect(await page.locator("#greeting").textContent()).toContain("Boa noite");
     await page.keyboard.press("Control+Shift+o");
     expect(await page.locator("#main").getAttribute("data-view")).toBe("new");
-    await page.locator("#send-label").waitFor();
     await page.waitForFunction(
-      () => document.querySelector("#approval-switch")?.getAttribute("aria-checked") === "true",
+      () =>
+        (document.querySelector("#composer-input") as HTMLTextAreaElement | null)?.disabled ===
+        false,
     );
     await client.request("profile.update", {
       defaults: { delegationMode: "scheduled", requireApproval: false },
@@ -125,9 +126,10 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     await page.locator(".sb").getByText("Início", { exact: true }).click();
     await page.keyboard.press("Control+Shift+o");
     await page.waitForFunction(
-      () => document.querySelector("#when-label")?.textContent === "Daqui a 1 hora",
+      () =>
+        (document.querySelector("#composer-input") as HTMLTextAreaElement | null)?.disabled ===
+        false,
     );
-    expect(await page.locator("#approval-switch").getAttribute("aria-checked")).toBe("false");
     await client.request("profile.update", {
       defaults: { delegationMode: "approval", requireApproval: true },
     });
