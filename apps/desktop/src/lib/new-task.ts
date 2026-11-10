@@ -2,18 +2,6 @@ import type { MethodParams, ToolMode, When } from "@boto/protocol";
 import { whenToRoutine } from "@boto/protocol";
 import type { DaemonClient } from "./daemon";
 
-export const whenLabels: Record<When, string> = {
-  now: "Agora",
-  in1h: "Daqui a 1 hora",
-  tomorrow: "Amanhã às 8h",
-  daily: "Todo dia às 8h",
-  weekly: "Toda segunda às 9h",
-};
-export const toolLabels: Record<ToolMode, string> = {
-  both: "Navegador e terminal",
-  browser: "Só navegador",
-  terminal: "Só terminal",
-};
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 export function greeting(hour = new Date().getHours()) {

@@ -6,9 +6,7 @@ import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
 import { usePrivateMode } from "../shell/Topbar";
 import { Icon } from "../ui/icons";
-import { Switch } from "../ui/Switch";
 import { useToast } from "../ui/Toast";
-import { ToolPicker, WhenPicker } from "./new-task/ComposerOptions";
 import "./NewTaskView.css";
 
 export function NewTaskView() {
@@ -262,33 +260,6 @@ function NewTaskComposer() {
                 input.current?.focus();
               }}
             />{" "}
-            <WhenPicker
-              when={when}
-              schedule={schedule}
-              disabled={busy}
-              onChange={(value) => {
-                setWhen(value);
-                setSchedule(null);
-                setError(null);
-              }}
-            />{" "}
-            <ToolPicker value={toolMode} disabled={busy} onChange={setToolMode} />
-            <div className="opt-approval od-row">
-              <Icon name="shield-check" />
-              <span id="approval-label">Pedir aprovação</span>
-              <Switch
-                id="approval-switch"
-                checked={requireApproval}
-                onCheckedChange={setRequireApproval}
-                disabled={busy}
-                aria-labelledby="approval-label"
-                aria-describedby="approval-help"
-              />
-              <span className="sr-only" id="approval-help">
-                O Boto para e pergunta antes de ações externas, como enviar e-mail, publicar ou
-                abrir um PR.
-              </span>
-            </div>
             <span className="composer-spacer" />
             <button
               type="button"
