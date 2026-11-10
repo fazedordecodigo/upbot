@@ -227,7 +227,7 @@ function NewTaskComposer() {
           <div className="composer-bar">
             <button
               type="button"
-              className="btn btn-ghost btn-icon composer-attach"
+              className="btn btn-outline btn-icon btn-pill composer-attach"
               data-action="attach"
               data-tip="Anexar arquivo"
               aria-label="Anexar arquivo"
@@ -235,7 +235,7 @@ function NewTaskComposer() {
               disabled={busy}
               onClick={() => fileInput.current?.click()}
             >
-              <Icon name="paperclip" />
+              <Icon name="plus" />
             </button>
             <input
               ref={fileInput}
@@ -262,13 +262,15 @@ function NewTaskComposer() {
             />{" "}
             <button
               type="button"
-              className="btn btn-primary btn-pill composer-send"
+              className="btn btn-primary btn-icon btn-pill composer-send"
               id="send"
+              data-tip="Delegar"
+              aria-label={submitting ? "Delegando…" : "Delegar"}
+              title="Delegar"
               disabled={busy || !connected || invalid !== null}
               onClick={() => void submit()}
             >
-              <span id="send-label">{submitting ? "Delegando…" : "Delegar"}</span>
-              <Icon name={submitting ? "loader" : "arrow-right"} />
+              <Icon name={submitting ? "loader" : "arrow-up"} />
             </button>
           </div>
         </div>

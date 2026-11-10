@@ -6,6 +6,7 @@ import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { errorMessage } from "../lib/errors";
 import { PROVIDER_NAMES } from "../lib/ui";
 import { useDaemon } from "../shell/daemon";
+import { useRouter } from "../shell/router";
 import { Icon } from "../ui/icons";
 import { useToast } from "../ui/Toast";
 import "./AgentsView.css";
@@ -20,6 +21,7 @@ const filters = [
 
 export function AgentsView() {
   const { client, agents } = useDaemon();
+  const { params } = useRouter();
   const toast = useToast();
   const overview = useDaemonQuery(client, "agents.overview", {});
   const { setData } = overview;
@@ -33,6 +35,9 @@ export function AgentsView() {
   );
   const [filter, setFilter] = useState<string>("all");
   const [creating, setCreating] = useState(false);
+  useEffect(() => {
+    if (params.create === "1") setCreating(true);
+  }, [params]);
   const [selected, setSelected] = useState<string>();
   const rows = agents.flatMap((agent) => {
     const item = overview.data?.agents.find((row) => row.agentId === agent.id);

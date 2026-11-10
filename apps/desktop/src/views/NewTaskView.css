@@ -10,8 +10,12 @@
 #view-new .chat-body { flex: 1; min-width: 0; }
 #view-new .chat-label { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); }
 #view-new .chat-greeting, #view-new .chat-text { color: var(--boto-color-muted-foreground); }
-#view-new .composer-bar { display: flex; flex-direction: column; align-items: flex-start; gap: var(--boto-space-3); }
-#view-new .composer-files { display: flex; flex-wrap: wrap; gap: var(--boto-space-2); }
+#view-new .chat-link { margin-block-start: var(--boto-space-4); }
+#view-new .composer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--boto-space-3) var(--boto-space-2); }
+#view-new .composer-input { flex: 1 1 0; min-width: 0; }
+#view-new .composer-bar { display: contents; }
+#view-new .composer-attach { order: -1; }
+#view-new .composer-files { order: -2; flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: var(--boto-space-2); }
 #view-new .new-task-file { max-width: 100%; padding-inline-start: var(--boto-space-2); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-sm); font-size: var(--boto-font-size-sm); }
 #view-new .new-task-status { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
 #view-new .new-task-status:not(:empty) { margin-block-start: var(--boto-space-3); }

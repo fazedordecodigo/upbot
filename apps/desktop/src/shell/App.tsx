@@ -174,6 +174,7 @@ function Shell() {
           open
           onClose={() => setCommand(false)}
           openShortcuts={() => setShortcuts(true)}
+          openOnboarding={() => setOnboarding(true)}
         />
       )}
       <ShortcutsDialog open={shortcuts} onClose={() => setShortcuts(false)} />

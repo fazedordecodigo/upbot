@@ -1,32 +1,24 @@
 import type { MethodResult, Task } from "@boto/protocol";
 import { useEffect, useRef, useState } from "react";
+import { isMac } from "../lib/platform";
 import { useThemePref } from "../lib/theme";
 import { TaskStatus } from "../shell-data/TaskStatus";
 import { Dialog } from "../ui/Dialog";
-import { Icon } from "../ui/icons";
+import { Icon, type IconName } from "../ui/icons";
 import { useDaemon } from "./daemon";
-import { useRouter, type ViewName } from "./router";
+import { useRouter } from "./router";
 import "./CommandPalette.css";
 
-const actions: { label: string; view?: ViewName }[] = [
-  { label: "Nova tarefa", view: "new" },
-  { label: "Início", view: "home" },
-  { label: "Bots", view: "agents" },
-  { label: "Rotinas", view: "routines" },
-  { label: "Modelos", view: "templates" },
-  { label: "Marketplace", view: "marketplace" },
-  { label: "Configurações", view: "settings" },
-  { label: "Alternar tema" },
-  { label: "Atalhos de teclado" },
-];
 export function CommandPalette({
   open,
   onClose,
   openShortcuts,
+  openOnboarding,
 }: {
   open: boolean;
   onClose: () => void;
   openShortcuts: () => void;
+  openOnboarding: () => void;
 }) {
   const { navigate } = useRouter();
   const { client } = useDaemon();
@@ -80,9 +72,45 @@ export function CommandPalette({
       .normalize("NFD")
       .replace(/\p{Diacritic}/gu, "")
       .toLocaleLowerCase("pt-BR");
+  const dark = document.documentElement.dataset.theme === "dark";
+  const toggleTheme = () => {
+    const theme = dark ? "light" : "dark";
+    setTheme(theme);
+    void client.request("profile.update", { theme }).catch(() => {});
+  };
+  const actions: { label: string; icon: IconName; shortcut?: string; run: () => void }[] = [
+    {
+      label: "Nova tarefa",
+      icon: "plus",
+      shortcut: isMac ? "⇧⌘O" : "Ctrl Shift O",
+      run: () => navigate("new"),
+    },
+    { label: "Ir para o início", icon: "home", run: () => navigate("home") },
+    { label: "Ver agentes", icon: "users", run: () => navigate("agents") },
+    {
+      label: "Criar agente",
+      icon: "plus",
+      run: () => navigate("agents", { create: "1" }),
+    },
+    { label: "Ver rotinas", icon: "repeat", run: () => navigate("routines") },
+    { label: "Ver modelos", icon: "layout-template", run: () => navigate("templates") },
+    { label: "Abrir o marketplace", icon: "store", run: () => navigate("marketplace") },
+    dark
+      ? { label: "Mudar para o tema claro", icon: "sun", run: toggleTheme }
+      : { label: "Mudar para o tema escuro", icon: "moon", run: toggleTheme },
+    { label: "Ver atalhos de teclado", icon: "keyboard", run: openShortcuts },
+    { label: "Rever a apresentação do Boto", icon: "info", run: openOnboarding },
+    { label: "Abrir as configurações", icon: "settings", run: () => navigate("settings") },
+  ];
   const groups: {
     label: string;
-    items: { label: string; task: Task | undefined; run: () => void }[];
+    items: {
+      label: string;
+      icon?: IconName;
+      shortcut?: string;
+      task: Task | undefined;
+      run: () => void;
+    }[];
   }[] = [
     {
       label: "Tarefas",
@@ -96,6 +124,7 @@ export function CommandPalette({
       label: "Rotinas",
       items: (search?.routines ?? []).map((routine) => ({
         label: routine.name,
+        icon: "repeat" as IconName,
         task: undefined,
         run: () => navigate("routines", { id: routine.id }),
       })),
@@ -104,19 +133,10 @@ export function CommandPalette({
       label: "Ações",
       items: actions
         .filter((action) => normalize(action.label).includes(normalize(query.trim())))
-        .map((action) => ({ label: action.label, task: undefined, run: () => run(action) })),
+        .map((action) => ({ ...action, task: undefined })),
     },
   ];
   const results = groups.flatMap((group) => group.items);
-  const run = (action: (typeof actions)[number]) => {
-    onClose();
-    if (action.view) navigate(action.view);
-    else if (action.label === "Alternar tema") {
-      const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-      setTheme(theme);
-      void client.request("profile.update", { theme }).catch(() => {});
-    } else openShortcuts();
-  };
   return (
     <Dialog
       open={open}
@@ -194,8 +214,13 @@ export function CommandPalette({
                       action.run();
                     }}
                   >
-                    {action.task && <TaskStatus situation={action.task.situation} />}
-                    {action.label}
+                    {action.task ? (
+                      <TaskStatus situation={action.task.situation} />
+                    ) : action.icon ? (
+                      <Icon name={action.icon} />
+                    ) : null}
+                    <span className="od-fill">{action.label}</span>
+                    {action.shortcut && <span className="kbd">{action.shortcut}</span>}
                   </button>
                 );
               })}
