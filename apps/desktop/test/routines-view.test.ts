@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -231,6 +232,46 @@ test("failed manual run reports the daemon error and restores action buttons", a
     await page.close();
   }
 }, 30000);
+
+test("returned run errors are shown without success and allow retry", async () => {
+  const agent = await rpc.request("agents.create", { name: "Retry bot", provider: "devin" });
+  const routine = await rpc.request("routines.create", {
+    agentId: agent.id,
+    name: "Retry report",
+    prompt: "echo:report",
+    private: false,
+    requireApproval: false,
+  });
+  const db = new Database(join(directory, "data", "boto.db"));
+  const page = await browser.newPage();
+  page.setDefaultTimeout(5000);
+  try {
+    db.exec(`CREATE TRIGGER fail_routine_task BEFORE INSERT ON tasks
+      WHEN NEW.routine_id = '${routine.id}'
+      BEGIN SELECT RAISE(ABORT, 'Routine task creation failed'); END`);
+    const failed = await rpc.request("routines.run", { id: routine.id });
+    expect(failed.error).toBe("Routine task creation failed");
+    expect(failed.taskId).toBeNull();
+    await openRoutines(page);
+    const row = page.locator(".rt-row").filter({ hasText: routine.name });
+    const button = row.getByRole("button", { name: "Executar agora", exact: true });
+    await button.click();
+    await page.locator(".toast").filter({ hasText: failed.error! }).waitFor();
+    expect(await page.getByText("Rotina iniciada", { exact: true }).count()).toBe(0);
+    expect(await button.isEnabled()).toBe(true);
+    db.exec("DROP TRIGGER fail_routine_task");
+    await button.click();
+    await page.getByText("Rotina iniciada", { exact: true }).waitFor();
+    const runs = await rpc.request("routines.runs", { id: routine.id });
+    expect(runs.filter((run) => run.error === failed.error)).toHaveLength(2);
+    expect(runs.some((run) => run.error === null && run.taskId !== null)).toBe(true);
+  } finally {
+    db.exec("DROP TRIGGER IF EXISTS fail_routine_task");
+    db.close();
+    await page.close();
+    await rpc.request("routines.delete", { id: routine.id });
+  }
+}, 30_000);
 
 test("manual routines create sidebar tasks whose tools wait for permission", async () => {
   const agent = await rpc.request("agents.create", {
