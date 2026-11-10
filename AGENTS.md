@@ -16,19 +16,19 @@ when the task touches that area — do not preload every reference.
 
 ## Topic reference
 
-| When working on… | Read |
-| --- | --- |
-| Bots, persona, email, connected apps, Pages, group chat / nav | [docs/agents/product.md](docs/agents/product.md) |
-| Approvals, audit, notifications, badges, restart leftovers | [docs/agents/approvals.md](docs/agents/approvals.md) |
-| Chat runtime, queue, config, permission cards | [docs/agents/runtime.md](docs/agents/runtime.md) |
-| Claude / Codex drivers, ACP providers, microVM provider auth | [docs/agents/providers.md](docs/agents/providers.md) |
-| Bridge, channels, usage/compaction, memories/skills, routines, browser | [docs/agents/collaboration.md](docs/agents/collaboration.md) |
-| Vault, connectors, Computer Use, voice | [docs/agents/secrets-platform.md](docs/agents/secrets-platform.md) |
-| Gateways, marketplace, mobile companion, teams/relay | [docs/agents/connectivity.md](docs/agents/connectivity.md) |
-| Hosts, Firecracker placement, subagents (implementation) | [docs/agents/remote.md](docs/agents/remote.md) |
-| Host setup / guest image (operator guide) | [docs/remote-hosts.md](docs/remote-hosts.md) |
-| CI, release, updater, branding | [docs/agents/shipping.md](docs/agents/shipping.md) |
-| Rio Negro design system | [DESIGN.md](DESIGN.md) |
+| When working on…                                                       | Read                                                               |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Bots, persona, email, connected apps, Pages, group chat / nav          | [docs/agents/product.md](docs/agents/product.md)                   |
+| Approvals, audit, notifications, badges, restart leftovers             | [docs/agents/approvals.md](docs/agents/approvals.md)               |
+| Chat runtime, queue, config, permission cards                          | [docs/agents/runtime.md](docs/agents/runtime.md)                   |
+| Claude / Codex drivers, ACP providers, microVM provider auth           | [docs/agents/providers.md](docs/agents/providers.md)               |
+| Bridge, channels, usage/compaction, memories/skills, routines, browser | [docs/agents/collaboration.md](docs/agents/collaboration.md)       |
+| Vault, connectors, Computer Use, voice                                 | [docs/agents/secrets-platform.md](docs/agents/secrets-platform.md) |
+| Gateways, marketplace, mobile companion, teams/relay                   | [docs/agents/connectivity.md](docs/agents/connectivity.md)         |
+| Hosts, Firecracker placement, subagents (implementation)               | [docs/agents/remote.md](docs/agents/remote.md)                     |
+| Host setup / guest image (operator guide)                              | [docs/remote-hosts.md](docs/remote-hosts.md)                       |
+| CI, release, updater, branding                                         | [docs/agents/shipping.md](docs/agents/shipping.md)                 |
+| Rio Negro design system                                                | [DESIGN.md](DESIGN.md)                                             |
 
 ## Layout
 
@@ -65,8 +65,8 @@ when the task touches that area — do not preload every reference.
   `apps/desktop/src-tauri/binaries/` (Tauri externalBin naming);
   `bun scripts/build-daemon.ts --target <rust-triple>` selects a supported cross-build target.
 - `bun run dev` — build the sidecar, then `tauri dev` (Vite on :1420).
-- `bun run build:app` — build the debug desktop bundle for the host platform (macOS app,
-  Linux AppImage/deb, or Windows NSIS).
+- `bun run build:app` — build the debug desktop bundle for the host platform (macOS
+  app/DMG, Linux AppImage/deb, or Windows NSIS).
 - `bun run test` — `bun test packages/daemon packages/host packages/relay apps/desktop/test` (daemon e2e and desktop browser tests).
 - Process-spawning tests need explicit timeouts beyond their internal startup/polling
   deadlines: apps and voice e2e use 30s; updater metadata allows Python 30s and the test
