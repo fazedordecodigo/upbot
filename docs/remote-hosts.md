@@ -80,3 +80,20 @@ talk to each other with `send_message`.
 On a Linux host with Firecracker artifacts installed, run the opt-in host/SSH integration
 suite with `bun run test:firecracker`. It uses temporary host roots and does not modify
 `~/.boto`.
+
+## Guest desktop (Área de trabalho ao vivo)
+
+`build-rootfs.sh` now installs the guest desktop by default: Xvfb, Openbox, xdotool, scrot
+and Chromium, pinned to the Debian bookworm versions (override the list with
+`BOTO_DESKTOP_PACKAGES="pkg=ver …"` when the archive moves on). This adds roughly 700 MiB to
+the image, so the default root filesystem grew from 4096 to **6144 MiB** (plan ~1.5 GiB extra
+per microVM copy on the host, plus the per-agent `workspace.ext4`). Pass `--no-desktop` to
+build the previous 4096 MiB image without a display; the host then runs the agent without
+the live desktop (`desktop.machines` reports the machine but no frames arrive).
+
+Rebuild the image and run **Check** in Settings → Hosts after upgrading: the guest helper
+stamp changed (`boto-host` 0.6.0) and hosts with the old helper will show
+`guestHelperCurrent: false`. The desktop stream uses one extra SSH session per open machine
+(`boto-host desktop`), keeps ≤10 frames/s only while a window is subscribed and otherwise a
+thumbnail every 5 s. `BOTO_DESKTOP_GEOMETRY` (default `1280x800`) in the guest environment
+changes the display size.

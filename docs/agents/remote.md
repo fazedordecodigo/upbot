@@ -63,3 +63,50 @@ creates child agents that inherit the parent's placement, sends each its task, a
 whole batch has ended delivers one `<subagent_results>` message to the parent; non-kept
 children are then deleted (stopping their process/VM). `list_subagents`, `stop_subagent`.
 Tests: `test/remote.e2e.test.ts`, `packages/host/test/host.test.ts`.
+
+## Live guest desktop (`desktop.*`)
+
+Agents placed in a Firecracker microVM get a real desktop: `boto-init` starts `Xvfb :0`
+(`1280x800x24`, override with `BOTO_DESKTOP_GEOMETRY`), Openbox and a `socat` listener on
+vsock **5900** that runs `boto-host guest-desktop`. The guest hostname is the machine name
+passed by `boto-host run` on the kernel command line (`boto.name=<slug>`, `RunSpec.machineName`).
+
+- **Host side** (`packages/host/src/main.ts`): `boto-host desktop` reads `{agentId}` on the
+  first stdin line, waits for the agent's running microVM (`vms/<id>/r*/firecracker.pid`,
+  `BOTO_DESKTOP_CONNECT_TIMEOUT_MS`, default 90 s), connects to vsock 5900 and relays NDJSON
+  both ways. `guest-desktop` captures frames with `scrot` (JPEG q60, ≤10 fps, only while a
+  `stream` message asked for it) plus a 20 % thumbnail every `thumbEveryMs`, drives the
+  display with `xdotool` and emits `cursor {x,y,kind}` after agent actions. It keeps its own
+  controller state (`controller` messages) and refuses `input` (user) unless the controller
+  is the user and `agent`/`screenshot` unless it is the agent, so a stale daemon can never
+  move the pointer behind the user's back. Exported helpers (`encodeDesktopMessage`,
+  `DesktopDecoder`, `validateDesktopEvents`, `DesktopControllerState`) are unit-tested in
+  `packages/host/test/host.test.ts`; the gated real test boots a guest and checks frames,
+  pointer movement and refusal.
+- **Wire** (`daemon → guest`): `stream {fps,thumbEveryMs}`, `controller {controller}`,
+  `input {events}`, `agent {id,events}`, `screenshot {id}`. (`guest → daemon`):
+  `ready {width,height,name}`, `frame {seq,mime,data,width,height}`, `thumb {...}`,
+  `cursor {x,y,kind}`, `done {id,text}`, `error {id?,code}`. Lines are capped at 8 MiB.
+- **Daemon** (`packages/daemon/src/desktop.ts`, `DesktopService`): one `Machine` per agent
+  with a `firecracker` placement, named `<agent-slug>-NN` (persisted in `machines`,
+  migration 23; `HostStore.machineNameFor` feeds the name into the run spec). It spawns
+  `ssh … bun ~/.boto/bin/boto-host.ts desktop` (tests override the command with
+  `BOTO_DESKTOP_COMMAND`, a JSON array) lazily on subscribe/thumbnail/agent action and when
+  `agent.status` turns running. Frames are forwarded only to connections that called
+  `desktop.subscribe` for that machine (`Rpc.handle(raw, {id})` carries the WebSocket
+  connection id; `main.ts` attaches/detaches connections). Throttle: ≤10 fps; the guest only
+  grabs frames while someone is subscribed, thumbnails every 5 s otherwise.
+- **Control**: `controller` is `agent` until a connection calls `desktop.takeover`
+  ("Assumir o controle"); the owning connection alone may `desktop.input`; `desktop.release`
+  ("Devolver ao Boto"), the owner disconnecting or the stream ending hand control back.
+  While the user controls, `ComputerUse` calls routed through `computer.remote` (set to
+  `DesktopService.remoteComputer`) throw so the agent waits, and pending `takeover`
+  approvals are completed with `done` on release (the bridge `request_takeover` flow).
+  Machine events (`desktop.machine`) are broadcast like `placement.updated`; frames and
+  cursors never leave their subscribers.
+- **Agent Computer Use in a microVM**: screenshots are written inside the guest
+  (`/workspace/computer/screen-<ts>.png`) so the provider running there can read them;
+  clicks/typing/keys become `agent` events and surface as `desktop.cursor`.
+- Tests: `packages/daemon/test/desktop.test.ts` (in-process service with
+  `fixtures/fake-desktop-host.ts`), `packages/daemon/test/desktop.e2e.test.ts` (daemon,
+  fake ssh, `fixtures/fake-boto-host-ready.ts` makes preflight report Firecracker ready).

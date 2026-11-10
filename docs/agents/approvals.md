@@ -70,7 +70,9 @@ ignore notification mute, which suppresses popups rather than passive pending st
 Blocked calls are memory-only and die with the daemon. Pending approvals are mirrored in
 `approval_records` (migration 22) with only the audit fields (kind, tool, secretName, app
 id/name, permission, background, expiresAt — never args, detail, bot-written titles or secret
-values); a decision or expiry deletes the row. `ApprovalService.suspend()` runs first on
+values); a decision, expiry or close keeps the row with its status and `resolved_at`
+(migration 29, `Approval.resolvedAt`) so task timelines show the decision and its time after a
+restart; the latest 500 decided rows are kept. `ApprovalService.suspend()` runs first on
 shutdown so closing runtimes do not expire them. On start, `interruptLeftovers()` marks leftover
 rows `interrupted` (`interruptedAt`) and writes `approval.interrupted` (reason `daemon_restart`)
 in one transaction per approval (a failed audit write keeps the row pending for the next
