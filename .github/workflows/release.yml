@@ -74,11 +74,7 @@ jobs:
             bundles: app,dmg
           - os: ubuntu-22.04
             bundles: appimage,deb,rpm
-          - os: ubuntu-22.04-arm
-            bundles: appimage,deb,rpm
           - os: windows-latest
-            bundles: nsis
-          - os: windows-11-arm
             bundles: nsis
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
