@@ -1,0 +1,8 @@
+.dialog.vm-dialog { width: min(calc(100vw - var(--boto-space-12)), var(--boto-size-container)); max-width: none; height: calc(100dvh - var(--boto-space-12)); max-height: none; padding: 0; overflow: hidden; }
+.vm-dialog[open] { display: flex; flex-direction: column; }
+.vm-dialog .vm-head { padding: var(--boto-space-4) var(--boto-space-5); }
+.vm-dialog .vm-head-icon { display: grid; place-items: center; width: var(--boto-size-target); height: var(--boto-size-target); border-radius: var(--boto-radius-md); background: var(--boto-color-secondary); }
+.vm-dialog .vm-title { font-size: var(--boto-font-size-title); }
+.vm-dialog .vm-sub { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
+.vm-dialog #vm-desk { flex: 1; min-height: 0; }
+@media (max-width: 767px) { .dialog.vm-dialog { width: 100vw; height: 100dvh; margin: 0; border: 0; border-radius: 0; } }

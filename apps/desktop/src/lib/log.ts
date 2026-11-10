@@ -1,5 +1,4 @@
 import { error as logError_, info as logInfo_, warn as logWarn_ } from "@tauri-apps/plugin-log";
-import { errorMessage } from "./errors";
 
 export type LogFields = Record<string, unknown>;
 
@@ -51,7 +50,7 @@ export function errorFields(error: unknown): LogFields {
       code: typeof code === "string" && /^[a-z][a-z0-9_.-]{0,63}$/.test(code) ? code : "invalid",
     };
   }
-  const message = errorMessage(error);
+  const message = error instanceof Error ? error.message : String(error);
   if (
     message === DAEMON_NOT_CONNECTED ||
     message === DAEMON_SOCKET_CLOSED ||
