@@ -44,7 +44,9 @@ when the task touches that area — do not preload every reference.
   workspace folders are never removed. Settings use `src/db/settings.ts` (zod-validated;
   invalid rows throw `InvalidSettingError`, surfaced over RPC as `internal` naming the key;
   boot-time mobile/team consumers keep the feature off and log; `default_bot_seeded` is a
-  presence check). Tests: `test/settings.e2e.test.ts`.
+  presence check that only gates the legacy UpBot→Boto migration — no bot is seeded on fresh
+  installs, and the first one created is adopted as `default_bot_id`). Tests:
+  `test/settings.e2e.test.ts`.
 - `apps/desktop` — Tauri 2 + React 19 + Vite. Rust spawns the sidecar via
   `tauri-plugin-shell`, parses the READY line, and exposes `daemon_connection` ->
   `{port, token}`. Frontend WS client: `src/lib/daemon.ts`.

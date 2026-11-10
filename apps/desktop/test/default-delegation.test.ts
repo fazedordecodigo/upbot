@@ -17,7 +17,6 @@ test("composer uses the default marker, preserves valid routes and falls back af
   const token = crypto.randomUUID();
   const command = JSON.stringify([process.execPath, FAKE_AGENT]);
   const daemon = await startDaemon(join(root, "data"), join(root, "agents"), token, {
-    BOTO_DEFAULT_BOT: "on",
     BOTO_PROVIDER_COMMAND_CLAUDE: command,
     BOTO_ACP_COMMAND_GROK: command,
   });
@@ -25,9 +24,11 @@ test("composer uses the default marker, preserves valid routes and falls back af
   const vite = await startVite();
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   try {
-    const original = (await rpc.request("agents.list", {})).find((agent) => agent.isDefault)!;
-    expect(Boolean(original)).toBe(true);
-    await rpc.request("agents.update", { id: original.id, name: "Renamed default" });
+    const original = await rpc.request("agents.create", {
+      name: "Renamed default",
+      provider: "grok",
+    });
+    expect(original.isDefault).toBe(true);
     const older = await rpc.request("agents.create", { name: "Boto", provider: "grok" });
     const deleted = await rpc.request("agents.create", { name: "Deleted", provider: "grok" });
     await rpc.request("agents.delete", { id: deleted.id });

@@ -750,7 +750,7 @@ function TaskSurface() {
                 />
                 <button
                   type="button"
-                  className="btn btn-secondary btn-icon btn-pill"
+                  className="btn btn-primary btn-icon btn-pill composer-send"
                   id="instruct-send"
                   aria-label="Enviar instrução"
                   disabled={!task || !text.trim() || busy || task.outcome === "stopped"}
@@ -758,7 +758,7 @@ function TaskSurface() {
                   title="Enviar instrução"
                   onClick={send}
                 >
-                  <Icon name="send" />
+                  <Icon name="arrow-up" />
                 </button>
               </div>
             </div>

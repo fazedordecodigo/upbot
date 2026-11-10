@@ -38,14 +38,12 @@ beforeAll(async () => {
   const state = tmp("new-task-acp-");
   dirs.push(data, agents, state);
   daemon = await startDaemon(data, agents, token, {
-    BOTO_DEFAULT_BOT: "on",
     BOTO_ACP_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
     FAKE_ACP_STATE_DIR: state,
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  const seeded = (await rpc.request("agents.list", {})).find((agent) => agent.isDefault)!;
-  alpha = await rpc.request("agents.update", { id: seeded.id, name: "Alpha", provider: "devin" });
+  alpha = await rpc.request("agents.create", { name: "Alpha", provider: "devin" });
   beta = await rpc.request("agents.create", { name: "Beta", provider: "devin" });
   base = "http://localhost:1420";
   vite = await startVite();

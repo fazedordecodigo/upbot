@@ -75,7 +75,6 @@ describe("settings consumers e2e", () => {
       marketplace_sources: '"x"',
     });
     daemon = await startDaemon(dataDir, agentsRoot, TOKEN, {
-      BOTO_DEFAULT_BOT: "",
       BOTO_ACP_COMMAND_DEVIN: JSON.stringify(["bun", FAKE_AGENT]),
       FAKE_ACP_STATE_DIR: stateDir,
       BOTO_MOBILE_HOST: "127.0.0.1",

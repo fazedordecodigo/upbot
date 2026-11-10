@@ -28,25 +28,25 @@ its `assets/boto-ui.css` and icon sprite. `DESIGN.md` governs dynamic regions ab
 from the prototype. Visible copy is pt-BR and uses “Bots”; unknown numbers render
 as “a definir”. Product data comes from the daemon, not sample datasets.
 
-| Surface | Daemon methods |
-| --- | --- |
-| Início | `profile.get`, `tasks.list`, `tasks.deliveries`, `tasks.get`, `desktop.machines`, `approvals.list` |
-| Nova tarefa | `agents.list`, `providers.getDefault`, `profile.get`, `templates.use`, `tasks.create`, `routines.create` |
-| Tarefa / Área de trabalho | `tasks.get`, `tasks.history`, `tasks.instruct`, `tasks.pause`, `tasks.resume`, `tasks.stop`; `permissions.respond`, `approvals.list`, `approvals.respond`, `memories.usage`; `desktop.subscribe`, `desktop.input`, `desktop.takeover`, `desktop.release` |
-| Bots / painel / Novo bot | `agents.overview`, `agents.statuses`, `agents.create`, `agents.update`, `agents.delete`, `agents.configOptions`, `agents.setConfig`; `queue.get`, `queue.pause`, `queue.resume`, `queue.remove`, `chat.history`, `tasks.create`, `memories.list`, `desktop.machines`, `desktop.thumbnail` |
-| Rotinas | `routines.list`, `routines.update`, `routines.run`, `routines.delete`; creation uses the scheduled composer and `routines.create` |
-| Modelos | `templates.list`, `templates.use`; prefills Nova tarefa and forwards `templateId` when delegating |
-| Marketplace | `marketplace.list`, `marketplace.install`, `marketplace.uninstall`; tabs, category/search and details use registry data. The daemon preserves shared or modified artifacts on uninstall |
-| Configurações: Provedor de IA | `providers.list`, `providers.scan`, `providers.login`, `providers.setDefault`, `providers.setApiKey`, `providers.deleteApiKey` |
-| Configurações: Você e a memória | `profile.get`, `profile.update`, `profile.forget`, `memories.list`, `memories.update`, `memories.delete` |
-| Configurações: Aparência / Privacidade | `profile.update`, `permissions.list`, `permissions.respond` |
-| Shell / onboarding | `tasks.list`, `tasks.search`, `agents.overview`, `routines.list`, `profile.get`, `profile.update`, `onboarding.complete` |
+| Surface                                | Daemon methods                                                                                                                                                                                                                                                                            |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Início                                 | `profile.get`, `tasks.list`, `tasks.deliveries`, `tasks.get`, `desktop.machines`, `approvals.list`                                                                                                                                                                                        |
+| Nova tarefa                            | `agents.list`, `providers.getDefault`, `profile.get`, `templates.use`, `tasks.create`, `routines.create`                                                                                                                                                                                  |
+| Tarefa / Área de trabalho              | `tasks.get`, `tasks.history`, `tasks.instruct`, `tasks.pause`, `tasks.resume`, `tasks.stop`; `permissions.respond`, `approvals.list`, `approvals.respond`, `memories.usage`; `desktop.subscribe`, `desktop.input`, `desktop.takeover`, `desktop.release`                                  |
+| Bots / painel / Novo bot               | `agents.overview`, `agents.statuses`, `agents.create`, `agents.update`, `agents.delete`, `agents.configOptions`, `agents.setConfig`; `queue.get`, `queue.pause`, `queue.resume`, `queue.remove`, `chat.history`, `tasks.create`, `memories.list`, `desktop.machines`, `desktop.thumbnail` |
+| Rotinas                                | `routines.list`, `routines.update`, `routines.run`, `routines.delete`; creation uses the scheduled composer and `routines.create`                                                                                                                                                         |
+| Modelos                                | `templates.list`, `templates.use`; prefills Nova tarefa and forwards `templateId` when delegating                                                                                                                                                                                         |
+| Marketplace                            | `marketplace.list`, `marketplace.install`, `marketplace.uninstall`; tabs, category/search and details use registry data. The daemon preserves shared or modified artifacts on uninstall                                                                                                   |
+| Configurações: Provedor de IA          | `providers.list`, `providers.scan`, `providers.login`, `providers.setDefault`, `providers.setApiKey`, `providers.deleteApiKey`                                                                                                                                                            |
+| Configurações: Você e a memória        | `profile.get`, `profile.update`, `profile.forget`, `memories.list`, `memories.update`, `memories.delete`                                                                                                                                                                                  |
+| Configurações: Aparência / Privacidade | `profile.update`, `permissions.list`, `permissions.respond`                                                                                                                                                                                                                               |
+| Shell / onboarding                     | `tasks.list`, `tasks.search`, `agents.overview`, `routines.list`, `profile.get`, `profile.update`, `onboarding.complete`                                                                                                                                                                  |
 
 Subscriptions refresh snapshots after daemon events and reconnects. Loading, empty
 and error states remain explicit. Permission and approval cards require real daemon
 decisions; there is no approval bypass. Sidebar and composer privacy share
 `profile.defaults.private`. Guia da marca uses the existing native opener, with a
-browser fallback. Search, shortcuts, theme, account menu and the four-step onboarding
+browser fallback. Search, shortcuts, theme, account menu and the five-step onboarding
 belong to the shell; the sidebar supports resizing, collapse and a mobile drawer.
 
 ### Removed from the UI only

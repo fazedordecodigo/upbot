@@ -1,5 +1,4 @@
 import type { Database } from "bun:sqlite";
-import type { AgentStore } from "./agents";
 import { hasSetting, setSetting } from "./db/settings";
 
 export const DEFAULT_BOT_NAME = "Boto";
@@ -25,35 +24,24 @@ research and browse the web, read and edit files, draft emails and documents, an
 `;
 }
 
-/** Creates the default Boto bot once, on a fresh install. */
-export function seedDefaultBot(db: Database, store: AgentStore): void {
-  if (hasSetting(db, "default_bot_seeded")) {
-    db.query(
-      "UPDATE agents SET name = ?, instructions = ? WHERE name = ? AND instructions = ?",
-    ).run(
-      DEFAULT_BOT_NAME,
-      DEFAULT_BOT_INSTRUCTIONS,
-      "UpBot",
-      DEFAULT_BOT_INSTRUCTIONS.replace("You are Boto", "You are UpBot"),
-    );
-    if (!hasSetting(db, "default_bot_id")) {
-      const oldest = db
-        .query("SELECT id FROM agents ORDER BY created_at ASC, id ASC LIMIT 1")
-        .get() as { id: string } | null;
-      setSetting(db, "default_bot_id", oldest?.id ?? null);
-    }
+/**
+ * Migrates installs that already ran with the seeded default bot: renames an
+ * untouched "UpBot" seed to "Boto" and backfills `default_bot_id` once. Fresh
+ * installs get no bot; the first one the user creates becomes the default
+ * (`AgentStore.create` adopts `default_bot_id` when it is unset).
+ */
+export function migrateDefaultBot(db: Database): void {
+  if (!hasSetting(db, "default_bot_seeded")) return;
+  db.query("UPDATE agents SET name = ?, instructions = ? WHERE name = ? AND instructions = ?").run(
+    DEFAULT_BOT_NAME,
+    DEFAULT_BOT_INSTRUCTIONS,
+    "UpBot",
+    DEFAULT_BOT_INSTRUCTIONS.replace("You are Boto", "You are UpBot"),
+  );
+  if (!hasSetting(db, "default_bot_id")) {
+    const oldest = db
+      .query("SELECT id FROM agents ORDER BY created_at ASC, id ASC LIMIT 1")
+      .get() as { id: string } | null;
+    setSetting(db, "default_bot_id", oldest?.id ?? null);
   }
-  if (process.env.BOTO_DEFAULT_BOT === "off") return;
-  if (hasSetting(db, "default_bot_seeded")) return;
-  const any = db.query("SELECT 1 FROM agents LIMIT 1").get();
-  if (!any) {
-    const bot = store.create({
-      name: DEFAULT_BOT_NAME,
-      provider: "claude",
-      instructions: DEFAULT_BOT_INSTRUCTIONS,
-      avatar: { emoji: "🤖", color: "#0ea5e9" },
-    });
-    setSetting(db, "default_bot_id", bot.id);
-  }
-  setSetting(db, "default_bot_seeded", 1);
 }

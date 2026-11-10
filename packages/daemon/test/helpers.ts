@@ -217,7 +217,7 @@ export async function startDaemon(
   const proc = Bun.spawn(
     [process.execPath, DAEMON, "--data-dir", dataDir, "--agents-root", agentsRoot],
     {
-      env: { ...inherited, BOTO_DEFAULT_BOT: "off", ...env },
+      env: { ...inherited, ...env },
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",

@@ -2,7 +2,6 @@ import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { DEFAULT_BOT_NAME } from "../src/persona";
 import {
   DAEMON,
   DaemonClient,
@@ -216,35 +215,37 @@ describe("daemon e2e", () => {
     expect(existsSync(authAgentsRoot)).toBe(false);
   });
 
-  test("fresh install seeds the default Boto bot once, not again after delete + restart", async () => {
+  test("fresh install starts with no bots; the first created becomes the default and stays so after restart", async () => {
     const freshDataDir = tmp("botod-default-bot-data-");
     const freshAgentsRoot = tmp("botod-default-bot-agents-");
     let freshDaemon: DaemonHandle | undefined;
     let freshClient: DaemonClient | undefined;
 
     try {
-      freshDaemon = await startDaemon(freshDataDir, freshAgentsRoot, TOKEN, {
-        BOTO_DEFAULT_BOT: "on",
-      });
+      freshDaemon = await startDaemon(freshDataDir, freshAgentsRoot, TOKEN);
       freshClient = await DaemonClient.connect(freshDaemon.port, TOKEN);
-      const agents = await freshClient.request("agents.list", {});
-      expect(agents).toHaveLength(1);
-      const defaultBot = agents[0];
-      if (!defaultBot) throw new Error("expected default bot");
-      expect(defaultBot.name).toBe(DEFAULT_BOT_NAME);
-      expect(defaultBot.provider).toBe("claude");
-      expect(defaultBot.workspacePath.startsWith(freshAgentsRoot)).toBe(true);
+      expect(await freshClient.request("agents.list", {})).toEqual([]);
+      const created = await freshClient.request("agents.create", {
+        name: "Boto",
+        provider: "devin",
+      });
+      expect(created.isDefault).toBe(true);
+      expect(created.workspacePath.startsWith(freshAgentsRoot)).toBe(true);
 
-      await freshClient.request("agents.delete", { id: defaultBot.id });
       await stopDaemon(freshDaemon, freshClient, undefined, "SIGTERM");
       freshDaemon = undefined;
       freshClient = undefined;
 
-      freshDaemon = await startDaemon(freshDataDir, freshAgentsRoot, TOKEN, {
-        BOTO_DEFAULT_BOT: "on",
-      });
+      freshDaemon = await startDaemon(freshDataDir, freshAgentsRoot, TOKEN);
       freshClient = await DaemonClient.connect(freshDaemon.port, TOKEN);
-      expect(await freshClient.request("agents.list", {})).toEqual([]);
+      expect(await freshClient.request("agents.list", {})).toEqual([
+        expect.objectContaining({ id: created.id, isDefault: true }),
+      ]);
+
+      await freshClient.request("agents.delete", { id: created.id });
+      expect((await freshClient.request("agents.list", {})).some((agent) => agent.isDefault)).toBe(
+        false,
+      );
     } finally {
       try {
         if (freshDaemon) await stopDaemon(freshDaemon, freshClient);

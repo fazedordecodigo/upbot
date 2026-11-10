@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, AgentsCreateParams, AgentsUpdateParams } from "@boto/protocol";
 import { z } from "zod";
-import { getSetting } from "./db/settings";
+import { getSetting, setSetting } from "./db/settings";
 
 type Row = {
   id: string;
@@ -90,6 +90,10 @@ export class AgentStore {
         params.requireApproval === false ? 0 : 1,
         params.maxInstances ?? null,
       );
+    // The first bot ever created becomes the default delegation target. A
+    // stored id (even one pointing at a deleted bot) is left alone.
+    if (!getSetting(this.db, "default_bot_id", z.string().nullable(), null))
+      setSetting(this.db, "default_bot_id", id);
     return this.get(id)!;
   }
 

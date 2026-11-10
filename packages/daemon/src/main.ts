@@ -25,7 +25,7 @@ import { runMcpBridge } from "./mcp-bridge";
 import { MemoryStore } from "./memories";
 import { MobileServer } from "./mobile";
 import { PageLibrary } from "./pages";
-import { botoContext, seedDefaultBot } from "./persona";
+import { botoContext, migrateDefaultBot } from "./persona";
 import { ProfileService } from "./profile";
 import { ProvidersService } from "./providers-service";
 import { readyLine } from "./ready";
@@ -176,7 +176,7 @@ async function main() {
   chat.interruptRunningTurns();
   migrateLegacyHome(db, agentsRoot, log);
   const store = new AgentStore(db, agentsRoot);
-  seedDefaultBot(db, store);
+  migrateDefaultBot(db);
   const workspaceRoot = process.env.BOTO_WORKSPACE_ROOT || join(dirname(agentsRoot), "Workspace");
   mkdirSync(workspaceRoot, { recursive: true });
   const queue = new QueueStore(db);
