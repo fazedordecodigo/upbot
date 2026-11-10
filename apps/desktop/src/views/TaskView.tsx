@@ -11,6 +11,7 @@ import {
   requiresFullReview,
 } from "../lib/approval-description";
 import { errorFields, logError } from "../lib/log";
+import { attachment, attachmentError } from "../lib/new-task";
 import { readStorage, writeStorage } from "../lib/storage";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
@@ -134,16 +135,20 @@ function TaskSurface() {
   }, [session.error, toast]);
   const confirm = useConfirm();
   const [text, setText] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const scroll = useRef<HTMLDivElement>(null);
   const bottom = useRef(true);
   const input = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const fileIds = useRef(new WeakMap<File, string>());
   const body = useRef<HTMLDivElement>(null);
   const current = useRef(params.id);
   current.current = params.id;
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset task-local controls when routing to another task.
   useEffect(() => {
     setText("");
+    setFiles([]);
     setBusy(false);
     bottom.current = true;
   }, [params.id]);
@@ -151,6 +156,14 @@ function TaskSurface() {
     if (data.items.length && bottom.current)
       scroll.current?.scrollTo({ top: scroll.current.scrollHeight });
   }, [data.items]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: grow the composer to fit the text on every change.
+  useEffect(() => {
+    const el = input.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [text]);
   const act = async (operation: () => Promise<unknown>, success?: () => void, rethrow = false) => {
     const id = params.id;
     setBusy(true);
@@ -167,11 +180,17 @@ function TaskSurface() {
   };
   const send = () => {
     if (!task || !text.trim() || busy || task.outcome === "stopped") return;
+    const pending = files;
     void act(
-      () => client.request("tasks.instruct", { id: task.id, text: text.trim() }),
+      async () =>
+        client.request("tasks.instruct", {
+          id: task.id,
+          text: text.trim(),
+          ...(pending.length ? { attachments: await Promise.all(pending.map(attachment)) } : {}),
+        }),
       () => {
         setText("");
-        if (input.current) input.current.style.height = "auto";
+        setFiles([]);
         bottom.current = true;
       },
     );
@@ -656,6 +675,25 @@ function TaskSurface() {
           </div>
           <div className="tl-compose">
             <div className="composer composer-sm">
+              <div className="composer-files" hidden={!files.length}>
+                {files.map((file) => (
+                  <span className="task-file od-row" key={fileIds.current.get(file)}>
+                    <Icon name="file-text" />
+                    <span className="od-truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-icon btn-sm"
+                      disabled={busy}
+                      aria-label={`Remover ${file.name}`}
+                      onClick={() =>
+                        setFiles((previous) => previous.filter((item) => item !== file))
+                      }
+                    >
+                      <Icon name="x" />
+                    </button>
+                  </span>
+                ))}
+              </div>
               <label className="sr-only" htmlFor="instruct-input">
                 Instrução para o Boto
               </label>
@@ -669,11 +707,7 @@ function TaskSurface() {
                 value={text}
                 disabled={!task || task.outcome === "stopped" || busy}
                 aria-describedby={task?.outcome === "stopped" ? "instruct-help" : undefined}
-                onChange={(event) => {
-                  setText(event.target.value);
-                  event.target.style.height = "auto";
-                  event.target.style.height = `${event.target.scrollHeight}px`;
-                }}
+                onChange={(event) => setText(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
@@ -681,18 +715,52 @@ function TaskSurface() {
                   }
                 }}
               />
-              <button
-                type="button"
-                className="btn btn-secondary btn-icon btn-pill"
-                id="instruct-send"
-                aria-label="Enviar instrução"
-                disabled={!task || !text.trim() || busy || task.outcome === "stopped"}
-                data-tip="Enviar instrução"
-                title="Enviar instrução"
-                onClick={send}
-              >
-                <Icon name="send" />
-              </button>
+              <div className="composer-bar">
+                <button
+                  type="button"
+                  className="btn btn-outline btn-icon btn-pill composer-attach"
+                  data-action="attach"
+                  data-tip="Anexar arquivo"
+                  aria-label="Anexar arquivo"
+                  title="Anexar arquivo"
+                  disabled={!task || task.outcome === "stopped" || busy}
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <Icon name="plus" />
+                </button>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  id="instruct-files"
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  multiple
+                  disabled={!task || task.outcome === "stopped" || busy}
+                  onChange={(event) => {
+                    const added = Array.from(event.target.files ?? []);
+                    for (const file of added) fileIds.current.set(file, crypto.randomUUID());
+                    const next = [...files, ...added];
+                    event.target.value = "";
+                    const invalid = attachmentError(next);
+                    if (invalid) toast(invalid);
+                    else setFiles(next);
+                    input.current?.focus();
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-icon btn-pill"
+                  id="instruct-send"
+                  aria-label="Enviar instrução"
+                  disabled={!task || !text.trim() || busy || task.outcome === "stopped"}
+                  data-tip="Enviar instrução"
+                  title="Enviar instrução"
+                  onClick={send}
+                >
+                  <Icon name="send" />
+                </button>
+              </div>
             </div>
             {task?.outcome === "stopped" && (
               <p className="task-note" id="instruct-help">

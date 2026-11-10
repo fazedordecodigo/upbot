@@ -598,7 +598,11 @@ export class TaskService {
   }
 
   /** Queues an instruction for the task without interrupting it; reopens a finished task. */
-  instruct(id: string, text: string): { queueId: string; task: Task } {
+  instruct(
+    id: string,
+    text: string,
+    attachments?: MethodParsedParams<"tasks.instruct">["attachments"],
+  ): { queueId: string; task: Task } {
     const r = this.mustRow(id);
     if (r.situation === "done" && r.outcome === "stopped")
       throw new RpcError("bad_request", "this task was stopped and cannot continue");
@@ -606,10 +610,19 @@ export class TaskService {
     if (reopened) this.setState(id, "run", null, null);
     let queueId: string;
     try {
+      let saved: ChatAttachment[] = [];
+      if (attachments?.length) {
+        const agent = this.agents.get(r.agent_id);
+        if (!agent) throw new RpcError("not_found", "agent not found");
+        saved = saveAttachments(agent.workspacePath, attachments);
+      }
       ({ queueId } = this.runtimes().sendFrom(r.agent_id, text, {
         agentId: null,
         hops: 0,
         taskId: id,
+        ...(saved.length
+          ? { prompt: attachmentsBlock(saved) + text, meta: { attachments: saved } }
+          : {}),
       }));
     } catch (e) {
       if (reopened) this.setState(id, "done", r.outcome as TaskOutcome, r.ended_at);

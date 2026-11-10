@@ -723,7 +723,7 @@ export class Rpc {
         return this.extras.tasks.history(params as MethodParsedParams<typeof method>);
       case "tasks.instruct": {
         const p = params as MethodParsedParams<typeof method>;
-        return this.extras.tasks.instruct(p.id, p.text);
+        return this.extras.tasks.instruct(p.id, p.text, p.attachments);
       }
       case "tasks.pause":
         return this.extras.tasks.pause((params as MethodParsedParams<typeof method>).id);

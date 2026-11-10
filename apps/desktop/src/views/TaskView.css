@@ -26,9 +26,14 @@
 .task .task-error { color: var(--boto-color-destructive); }
 .task .task-empty { display: grid; justify-items: start; gap: var(--boto-space-4); padding-block: var(--boto-space-10); }
 .task .tl-compose { padding: var(--boto-space-4) var(--boto-space-5); background: var(--boto-color-background); }
-.task .composer { display: flex; align-items: flex-end; gap: var(--boto-space-2); background: var(--boto-color-card); border: var(--boto-size-focus-offset) solid var(--boto-color-input); border-radius: var(--boto-radius-lg); padding: var(--boto-space-3); }
+.task .composer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--boto-space-2); background: var(--boto-color-card); border: var(--boto-size-focus-offset) solid var(--boto-color-input); border-radius: var(--boto-radius-lg); padding: var(--boto-space-3); }
 .task .composer:focus-within { border-color: var(--boto-color-ring); }
-.task .composer-input { flex: 1; min-width: 0; max-height: var(--boto-size-textarea); resize: none; border: 0; background: transparent; color: var(--boto-color-foreground); font: inherit; font-size: var(--boto-font-size-sm); }
+.task .composer-bar { display: contents; }
+.task .composer-attach { order: -1; }
+.task .composer-files { order: -2; flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: var(--boto-space-2); }
+.task .task-file { max-width: 100%; padding-inline-start: var(--boto-space-2); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-sm); font-size: var(--boto-font-size-sm); }
+.task .composer-input { flex: 1; min-width: 0; max-height: var(--boto-size-textarea); padding-block-end: calc((var(--boto-space-10) - 1.6em) / 2); overflow-y: auto; resize: none; border: 0; background: transparent; color: var(--boto-color-foreground); font: inherit; font-size: var(--boto-font-size-sm); }
+.task .composer-input:focus { outline: none; }
 .task .composer-input::placeholder { color: var(--boto-color-muted-foreground); }
 .task .split { width: var(--boto-space-2); flex-shrink: 0; cursor: col-resize; touch-action: none; background: var(--boto-color-border); }
 .task .split:hover { background: var(--boto-color-input); }

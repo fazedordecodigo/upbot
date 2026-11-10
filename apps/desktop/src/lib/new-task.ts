@@ -21,7 +21,7 @@ export function attachmentError(files: File[]): string | null {
   return null;
 }
 
-async function attachment(file: File) {
+export async function attachment(file: File) {
   const dataBase64 = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
