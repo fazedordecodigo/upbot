@@ -32,8 +32,7 @@ export function RoutinesView() {
     try {
       if (action === "run") {
         const run = await client.request("routines.run", { id: routine.id });
-        if (run.error !== null)
-          throw new Error(run.error || "Não foi possível iniciar a rotina.");
+        if (run.error !== null) throw new Error(run.error || "Não foi possível iniciar a rotina.");
         toast("Rotina iniciada");
       } else if (action === "toggle") {
         await client.request("routines.update", { id: routine.id, enabled: !routine.enabled });
