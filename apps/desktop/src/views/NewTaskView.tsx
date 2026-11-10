@@ -260,16 +260,15 @@ function NewTaskComposer() {
                 input.current?.focus();
               }}
             />{" "}
-            <span className="composer-spacer" />
             <button
               type="button"
-              className="btn btn-primary btn-icon composer-send"
+              className="btn btn-primary btn-pill composer-send"
               id="send"
-              aria-label={submitting ? "Delegando…" : "Delegar"}
               disabled={busy || !connected || invalid !== null}
               onClick={() => void submit()}
             >
-              <Icon name={submitting ? "loader" : "send"} />
+              <span id="send-label">{submitting ? "Delegando…" : "Delegar"}</span>
+              <Icon name={submitting ? "loader" : "arrow-right"} />
             </button>
           </div>
         </div>
