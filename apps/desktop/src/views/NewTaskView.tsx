@@ -51,6 +51,14 @@ function NewTaskComposer() {
       alive.current = false;
     };
   }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: grow the composer to fit the text on every change.
+  useEffect(() => {
+    const el = input.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [text]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry explicitly reloads a failed request.
   useEffect(() => {
@@ -206,7 +214,7 @@ function NewTaskComposer() {
             ref={input}
             className="composer-input"
             id="composer-input"
-            rows={2}
+            rows={1}
             placeholder="Descreva a tarefa e o resultado esperado"
             autoComplete="off"
             maxLength={100_000}

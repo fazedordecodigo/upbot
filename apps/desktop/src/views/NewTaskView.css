@@ -1,5 +1,5 @@
 .composer { display: grid; gap: var(--boto-space-3); padding: var(--boto-space-4); border: 1px solid var(--boto-color-input); border-radius: var(--boto-radius-lg); background: var(--boto-color-card); }
-.composer-input { width: 100%; resize: vertical; background: transparent; border: 0; }
+.composer-input { width: 100%; resize: none; background: transparent; border: 0; }
 .chat-greet, .chat-compose { margin-block: var(--boto-space-8); }
 
 #main[data-view="new"] { display: flex; flex-direction: column; min-height: 100dvh; }
@@ -12,7 +12,9 @@
 #view-new .chat-greeting, #view-new .chat-text { color: var(--boto-color-muted-foreground); }
 #view-new .chat-link { margin-block-start: var(--boto-space-4); }
 #view-new .composer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--boto-space-3) var(--boto-space-2); }
-#view-new .composer-input { flex: 1 1 0; min-width: 0; }
+#view-new .composer:focus-within { border-color: var(--boto-color-ring); }
+#view-new .composer-input { flex: 1 1 0; min-width: 0; max-height: var(--boto-size-textarea); padding-block-end: calc((var(--boto-space-10) - 1.6em) / 2); overflow-y: auto; }
+#view-new .composer-input:focus { outline: none; }
 #view-new .composer-bar { display: contents; }
 #view-new .composer-attach { order: -1; }
 #view-new .composer-files { order: -2; flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: var(--boto-space-2); }
