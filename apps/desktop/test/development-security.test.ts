@@ -29,8 +29,13 @@ test("preview credentials are never expanded into an external browser command", 
   expect(readme).not.toMatch(/(?:xdg-open|\bopen)\s+["'][^\n]*token=/);
 });
 
-for (const contents of ["preview-canary", "", null]) {
-  test(`documented preview launch reads private credentials (${contents === null ? "missing" : contents ? "valid" : "empty"})`, async () => {
+for (const { name, contents, navigationError = false } of [
+  { name: "valid", contents: "preview-canary" },
+  { name: "empty", contents: "" },
+  { name: "missing", contents: null },
+  { name: "navigation error", contents: "preview-canary", navigationError: true },
+]) {
+  test(`documented preview launch reads private credentials (${name})`, async () => {
     const script = readme.match(
       /PREVIEW_STATE="\$STATE" PREVIEW_PORT="\$PORT" bun -e '([\s\S]*?)'/,
     )?.[1];
@@ -38,8 +43,10 @@ for (const contents of ["preview-canary", "", null]) {
     if (!script) return;
     const fakeBrowser = `export const chromium = { launch: async (options) => {
       console.log(JSON.stringify({options, argv: process.argv}));
-      return { newPage: async () => ({ goto: async (url) => console.log(JSON.stringify({url})) }),
-        once: (_event, resolve) => resolve() };
+      return { newPage: async () => ({ goto: async (url) => {
+        if (process.env.FAKE_PREVIEW_NAVIGATION_ERROR) throw new Error(url);
+        console.log(JSON.stringify({url}));
+      } }), close: async () => {}, once: (_event, resolve) => resolve() };
     } };`;
     const state = mkdtempSync(join(tmpdir(), "preview-security-"));
     try {
@@ -52,7 +59,12 @@ for (const contents of ["preview-canary", "", null]) {
       if (contents !== null) writeFileSync(join(state, "token"), contents, { mode: 0o600 });
       const command = [process.execPath, "-e", program];
       const child = Bun.spawn(command, {
-        env: { ...process.env, PREVIEW_STATE: state, PREVIEW_PORT: "12345" },
+        env: {
+          ...process.env,
+          PREVIEW_STATE: state,
+          PREVIEW_PORT: "12345",
+          FAKE_PREVIEW_NAVIGATION_ERROR: navigationError ? "1" : "",
+        },
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -63,7 +75,11 @@ for (const contents of ["preview-canary", "", null]) {
           new Response(child.stderr).text(),
           child.exited,
         ]);
-        if (contents) {
+        if (navigationError) {
+          expect(exit).not.toBe(0);
+          expect(stderr).toContain("Preview navigation failed");
+          expect(stdout + stderr).not.toContain("preview-canary");
+        } else if (contents) {
           expect(exit).toBe(0);
           const [launch, navigation] = stdout
             .trim()

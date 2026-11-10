@@ -102,9 +102,16 @@ import { chromium } from "playwright-core";
 const token = readFileSync(join(process.env.PREVIEW_STATE, "token"), "utf8").trim();
 if (!token) throw new Error("Preview token file is empty");
 const browser = await chromium.launch({ channel: "chrome", headless: false });
-const page = await browser.newPage();
-await page.goto("http://localhost:1420/#" + new URLSearchParams({ port: process.env.PREVIEW_PORT, token }));
-await new Promise((resolve) => browser.once("disconnected", resolve));
+try {
+  const page = await browser.newPage();
+  await page.goto("http://localhost:1420/#" + new URLSearchParams({ port: process.env.PREVIEW_PORT, token }));
+  await new Promise((resolve) => browser.once("disconnected", resolve));
+} catch {
+  process.stderr.write("Preview navigation failed. Check Vite on port 1420.\n");
+  process.exitCode = 1;
+} finally {
+  await browser.close();
+}
 '
 ```
 
