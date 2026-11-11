@@ -2,6 +2,7 @@ import {
   type ComponentPropsWithoutRef,
   cloneElement,
   createContext,
+  type KeyboardEvent,
   type ReactElement,
   type ReactNode,
   useContext,
@@ -13,6 +14,33 @@ import {
 } from "react";
 
 const CloseMenu = createContext(() => {});
+
+/** Roving-tabindex navigation shared by Dropdown and ContextMenu panels. */
+export function menuKeyDown(event: KeyboardEvent<HTMLElement>, close: () => void) {
+  if (event.key === "Escape" || event.key === "Tab") {
+    if (event.key === "Escape") event.preventDefault();
+    close();
+    return;
+  }
+  const items = [
+    ...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)'),
+  ];
+  const index = items.indexOf(document.activeElement as HTMLButtonElement);
+  const next =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? items.length - 1
+        : event.key === "ArrowDown"
+          ? (index + 1) % items.length
+          : event.key === "ArrowUp"
+            ? (index - 1 + items.length) % items.length
+            : -1;
+  if (next >= 0) {
+    event.preventDefault();
+    items[next]?.focus();
+  }
+}
 export function Dropdown({
   trigger,
   children,
@@ -89,33 +117,7 @@ export function Dropdown({
             role="menu"
             aria-label={label}
             style={position}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" || event.key === "Tab") {
-                if (event.key === "Escape") event.preventDefault();
-                close();
-                return;
-              }
-              const items = [
-                ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
-                  '[role^="menuitem"]:not(:disabled)',
-                ),
-              ];
-              const index = items.indexOf(document.activeElement as HTMLButtonElement);
-              const next =
-                event.key === "Home"
-                  ? 0
-                  : event.key === "End"
-                    ? items.length - 1
-                    : event.key === "ArrowDown"
-                      ? (index + 1) % items.length
-                      : event.key === "ArrowUp"
-                        ? (index - 1 + items.length) % items.length
-                        : -1;
-              if (next >= 0) {
-                event.preventDefault();
-                items[next]?.focus();
-              }
-            }}
+            onKeyDown={(event) => menuKeyDown(event, close)}
           >
             {children}
           </div>

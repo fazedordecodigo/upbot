@@ -104,7 +104,8 @@ export class ChatStore {
     if (!data || typeof data !== "object") return [];
     const value = data as Record<string, unknown>;
     let taskId = typeof value.taskId === "string" ? value.taskId : null;
-    if (event === "task.created" || event === "task.updated") taskId = String(value.id);
+    if (event === "task.created" || event === "task.updated" || event === "task.deleted")
+      taskId = String(value.id);
     if (!taskId && typeof value.turnId === "string") taskId = this.taskForTurn(value.turnId);
     if (!taskId && (event === "turn.started" || event === "turn.ended"))
       taskId = this.taskForTurn(String(value.id));
@@ -145,16 +146,17 @@ export class ChatStore {
     return r ? rowToTurn(r) : null;
   }
 
+  /** Null when the turn's row is already gone (its task was deleted mid-run). */
   endTurn(
     id: string,
     status: Exclude<TurnStatus, "running">,
     stopReason: string | null,
     error: string | null,
-  ): Turn {
+  ): Turn | null {
     this.db
       .query("UPDATE turns SET status = ?, stop_reason = ?, error = ?, ended_at = ? WHERE id = ?")
       .run(status, stopReason, error, Date.now(), id);
-    return this.getTurn(id)!;
+    return this.getTurn(id);
   }
 
   turnsByIds(ids: string[]): Turn[] {

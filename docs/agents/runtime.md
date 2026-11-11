@@ -15,6 +15,7 @@ children must not see it). Missing/empty token or no line within 10 s -> exit 2.
 stdin EOF afterwards = shutdown. `spawnEnv` strips all `BOTO_*` vars.
 
 Env vars (daemon):
+
 - `BOTO_ACP_COMMAND_<PROVIDER>` — JSON array overriding the spawn command per
   provider (e.g. `BOTO_ACP_COMMAND_DEVIN='["bun","path/to/agent.ts"]'`).
 - `BOTO_CANCEL_GRACE_MS` — ms after `chat.cancel` before the process is killed
@@ -61,6 +62,7 @@ New (non-resumed) sessions with prior history get a `<conversation_history>` blo
 (`src/runtime/handoff.ts`, pure fn) before the first prompt.
 
 `spikes/mode-probe.ts` — per provider x mode permission probe -> `spikes/out/mode-probe.json`.
+
 - `BOTO_DEBUG_PROMPTS_DIR` — when set, the daemon writes every outgoing prompt to
   `<dir>/<agentId>-<turnId>.txt` (debugging only).
 
@@ -95,7 +97,9 @@ its own) and resumes it from `tasks.session_id`. Situation: `run` (turn running 
 `wait` (permission or approval pending for the task's running turn), `muted` (`tasks.pause`:
 cancels the turn without pausing the agent queue; muted entries are skipped by
 `QueueStore.peek`) and `done` (`completed|stopped|failed`). `tasks.resume` re-prompts in the
-same session; `tasks.stop` never continues. A daemon restart turns live tasks without queued
+same session; `tasks.stop` never continues. `tasks.delete` stops live work and removes the
+task row plus its items, turns, queue entries, deliveries and stored session, emitting
+`task.deleted` (routed to watchers for private tasks). A daemon restart turns live tasks without queued
 entries into `muted`. `src/task-policy.ts` enforces "Onde" (`toolMode`) in bridge
 `tools/list`/`tools/call` and rejects forbidden ACP permission kinds (provider-native tools
 that never ask cannot be blocked: the task preamble asks the agent not to use them), and

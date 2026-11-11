@@ -112,7 +112,7 @@ export function HomeView() {
     client,
     "tasks.deliveries",
     { limit: 6 },
-    { enabled: connected },
+    { enabled: connected, events: { "task.deleted": true } },
   );
   const permissions = useDaemonQuery(
     client,

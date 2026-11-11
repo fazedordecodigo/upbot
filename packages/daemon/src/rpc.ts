@@ -755,6 +755,9 @@ export class Rpc {
         return this.extras.tasks.resume((params as MethodParsedParams<typeof method>).id);
       case "tasks.stop":
         return this.extras.tasks.stop((params as MethodParsedParams<typeof method>).id);
+      case "tasks.delete":
+        this.extras.tasks.delete((params as MethodParsedParams<typeof method>).id);
+        return { ok: true };
       case "tasks.rename": {
         const p = params as MethodParsedParams<typeof method>;
         return this.extras.tasks.rename(p.id, p.title);

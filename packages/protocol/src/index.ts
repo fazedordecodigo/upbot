@@ -1338,6 +1338,7 @@ export const methodMap = {
   "tasks.pause": { params: TasksIdParams, result: Task },
   "tasks.resume": { params: TasksIdParams, result: Task },
   "tasks.stop": { params: TasksIdParams, result: Task },
+  "tasks.delete": { params: TasksIdParams, result: z.object({ ok: z.literal(true) }) },
   "tasks.rename": { params: TasksRenameParams, result: Task },
   "tasks.search": {
     params: TasksSearchParams,
@@ -1399,5 +1400,6 @@ export type DaemonEventMap = AgentsCockpitEventMap & {
   "task.created": Task;
   "task.updated": Task;
   "task.delivery": TaskDelivery;
+  "task.deleted": { id: string };
   "task.event": { taskId: string; event: string; data: unknown };
 } & DesktopEventMap;

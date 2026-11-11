@@ -613,7 +613,7 @@ export class AgentRuntime {
     }
     this.cancelAllPending();
     const ended = this.store.endTurn(turn.id, status, stopReason, error);
-    this.broadcast("turn.ended", ended);
+    if (ended) this.broadcast("turn.ended", ended);
     if (this.turn === turn) this.turn = null;
     this.opts.onTurnFinished?.();
     this.closeTextItem();

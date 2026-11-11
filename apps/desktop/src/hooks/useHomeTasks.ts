@@ -49,6 +49,7 @@ export function useHomeTasks(client: DaemonClient, enabled: boolean) {
     const offs = [
       client.on("task.created", reload),
       client.on("task.updated", reload),
+      client.on("task.deleted", reload),
       client.onReconnect(reload),
     ];
     return () => {

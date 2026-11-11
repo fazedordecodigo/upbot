@@ -164,6 +164,9 @@ function TaskSurface() {
     writeStorage("boto.task-split", String(split));
   }, [split]);
   useEffect(() => {
+    if (data.deleted) navigate("home");
+  }, [data.deleted, navigate]);
+  useEffect(() => {
     if (session.error) toast(session.error);
   }, [session.error, toast]);
   const confirm = useConfirm();

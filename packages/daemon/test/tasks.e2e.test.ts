@@ -457,6 +457,50 @@ describe("tasks e2e", () => {
   );
 
   test(
+    "delete stops a live task, removes its rows and emits task.deleted",
+    async () => {
+      const done = await c.request("tasks.create", {
+        agentId: a.id,
+        text: "echo:apagar",
+        requireApproval: false,
+      });
+      await waitTask(done.id, (t) => t.situation === "done");
+      const deleted = c.waitForEventWhere("task.deleted", (d) => d.id === done.id, 10_000);
+      await c.request("tasks.delete", { id: done.id });
+      await deleted;
+      await expect(c.request("tasks.get", { id: done.id })).rejects.toMatchObject({
+        code: "not_found",
+      });
+      await expect(c.request("tasks.history", { id: done.id })).rejects.toMatchObject({
+        code: "not_found",
+      });
+      expect((await c.request("tasks.list", {})).items.map((t) => t.id)).not.toContain(done.id);
+      expect(await c.request("tasks.deliveries", { taskId: done.id })).toEqual([]);
+      const chat = await c.request("chat.history", { agentId: a.id });
+      expect(chat.items.some((i) => i.taskId === done.id)).toBe(false);
+
+      // deleting a running task cancels its turn and frees the agent for new work
+      const running = await c.request("tasks.create", {
+        agentId: a.id,
+        text: "slow",
+        requireApproval: false,
+      });
+      await waitTask(running.id, (t) => t.sessionId !== null);
+      await c.request("tasks.delete", { id: running.id });
+      await expect(c.request("tasks.get", { id: running.id })).rejects.toMatchObject({
+        code: "not_found",
+      });
+      const next = await c.request("tasks.create", {
+        agentId: a.id,
+        text: "echo:depois",
+        requireApproval: false,
+      });
+      await waitTask(next.id, (t) => t.situation === "done");
+    },
+    T,
+  );
+
+  test(
     "a pending permission makes the task wait; an instruction queues without cancelling",
     async () => {
       const task = await c.request("tasks.create", {

@@ -688,6 +688,24 @@ export class TaskService {
     return this.emit(id) ?? this.get(id);
   }
 
+  /** Deletes the task and its rows for good; live work is stopped first. */
+  delete(id: string): void {
+    const r = this.mustRow(id);
+    if (r.situation !== "done") {
+      this.runtimes().removeTaskQueue(r.agent_id, id);
+      this.runtimes().cancelTask(r.agent_id, id);
+    }
+    // Broadcast ahead of the row delete so a private task still routes the
+    // event to the connections watching it (the row backs isPrivateTask).
+    this.broadcast("task.deleted", { id });
+    this.chat.purgeTaskItems(id);
+    this.db.query("DELETE FROM task_deliveries WHERE task_id = ?").run(id);
+    this.db.query("DELETE FROM queue WHERE task_id = ?").run(id);
+    this.db.query("DELETE FROM agent_sessions WHERE task_id = ?").run(id);
+    this.db.query("DELETE FROM turns WHERE task_id = ?").run(id);
+    this.db.query("DELETE FROM tasks WHERE id = ?").run(id);
+  }
+
   /** Command palette search over non-private tasks (title, prompt, agent) and routines. */
   search(query: string, limit = 20): { tasks: Task[]; routines: Routine[] } {
     const tokens = fold(query).split(/\s+/).filter(Boolean);
