@@ -163,3 +163,66 @@ test.skipIf(process.platform === "win32")(
   },
   30000,
 );
+
+test.skipIf(process.platform === "win32")(
+  "a Devin login is imported as an API key usable on every placement",
+  async () => {
+    const root = tmp("boto-devin-login-");
+    const secret = "devin-harvested-key-987654";
+    const credentials = join(root, "credentials.toml");
+    const login = join(root, "devin-login");
+    writeFileSync(
+      login,
+      `#!/bin/sh\nprintf 'windsurf_api_key = "${secret}"\\n' > '${credentials}'\n`,
+    );
+    chmodSync(login, 0o755);
+    const missing = JSON.stringify([join(root, "missing")]);
+    const daemon = await startDaemon(
+      root,
+      join(root, "agents"),
+      "devin-login-test",
+      {
+        HOME: root,
+        BOTO_VAULT_KEY: "34".repeat(32),
+        BOTO_PROVIDER_COMMAND_CLAUDE: missing,
+        BOTO_PROVIDER_COMMAND_CODEX: missing,
+        BOTO_PROVIDER_COMMAND_GEMINI: missing,
+        BOTO_PROVIDER_COMMAND_OPENCODE: missing,
+        BOTO_PROVIDER_COMMAND_CURSOR: missing,
+        BOTO_PROVIDER_COMMAND_DEVIN: missing,
+        BOTO_PROVIDER_COMMAND_GROK: missing,
+        BOTO_PROVIDER_LOGIN_COMMAND_DEVIN: JSON.stringify([login]),
+        BOTO_PROVIDER_TERMINAL_COMMAND: JSON.stringify(["/bin/sh", "-c", 'exec "$@"', "login"]),
+        BOTO_DEVIN_CREDENTIALS_PATH: credentials,
+        BOTO_DEVIN_LOGIN_POLL_MS: "50",
+      },
+      true,
+    );
+    const client = await DaemonClient.connect(daemon.port, "devin-login-test");
+    try {
+      expect(
+        (await client.request("providers.list", {})).find((p) => p.id === "devin"),
+      ).toMatchObject({ canLogin: true, hasApiKey: false, loggedIn: false });
+      await client.request("providers.login", { provider: "devin" });
+      const deadline = Date.now() + 5000;
+      let devin = (await client.request("providers.list", {})).find((p) => p.id === "devin");
+      while (!devin?.hasApiKey && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        devin = (await client.request("providers.list", {})).find((p) => p.id === "devin");
+      }
+      expect(devin).toMatchObject({
+        hasApiKey: true,
+        apiKeyMasked: "••••7654",
+        loggedIn: true,
+      });
+      expect(await client.request("vmCredentials.list", {})).toContainEqual(
+        expect.objectContaining({ provider: "devin", kind: "api_key" }),
+      );
+    } finally {
+      await stopDaemon(daemon, client);
+      expect(await daemon.stderrText).not.toContain(secret);
+      await removeDir(root);
+    }
+  },
+  30000,
+);

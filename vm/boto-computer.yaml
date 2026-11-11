@@ -73,26 +73,38 @@ provision:
         install -m 0755 "/tmp/bun-dist/${bzip%.zip}/bun" /usr/local/bin/bun
         ln -sf /usr/local/bin/bun /usr/local/bin/bunx
         rm -rf /tmp/bun-dist
-        # Provider CLIs spawned by name in process placement — the same set the full guest
-        # image carries (see the `case "$p"` block in packages/host/rootfs/build-rootfs.sh).
-        npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli opencode-ai
-        HOME=/opt/cursor-agent-home bash -c 'curl -fsS https://cursor.com/install | bash'
-        ln -sf /opt/cursor-agent-home/.local/bin/agent /usr/local/bin/agent
-        mkdir -p /opt/devin-home
-        curl -fsSL https://static.devin.ai/cli/3000.12.43/setup.sh -o /tmp/devin-setup.sh
-        HOME=/opt/devin-home bash /tmp/devin-setup.sh || true
-        ln -sf "$(readlink -f /opt/devin-home/.local/bin/devin)" /usr/local/bin/devin
-        devin --version | grep -F 'devin 3000.12.43 ('
-        mkdir -p /opt/grok-home
-        mv /usr/local/bin/agent /tmp/boto-saved-agent
-        curl -fsSL https://x.ai/cli/install.sh -o /tmp/grok-install.sh
-        HOME=/opt/grok-home GROK_BIN_DIR=/opt/grok-home/.grok/bin bash /tmp/grok-install.sh 1.0.77
-        rm -f /usr/local/bin/agent
-        mv /tmp/boto-saved-agent /usr/local/bin/agent
-        ln -sf "$(readlink -f /opt/grok-home/.grok/bin/grok)" /usr/local/bin/grok
-        grok --no-auto-update --version | grep -F 'grok 1.0.77 ('
         touch /var/lib/boto-computer-provisioned
       fi
+      # Provider CLIs spawned by name in process placement — the same set the full guest
+      # image carries (see the `case "$p"` block in packages/host/rootfs/build-rootfs.sh).
+      # These run on every boot, each guarded by command -v: a guest provisioned before a
+      # CLI joined the recipe picks it up on the next start instead of needing recreation.
+      # Every install is failure-tolerant — a broken download must not skip the desktop
+      # session setup below; a genuinely missing CLI is reported at bot launch time.
+      command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code || true
+      command -v codex >/dev/null 2>&1 || npm install -g @openai/codex || true
+      command -v gemini >/dev/null 2>&1 || npm install -g @google/gemini-cli || true
+      command -v opencode >/dev/null 2>&1 || npm install -g opencode-ai || true
+      command -v agent >/dev/null 2>&1 || {
+        mkdir -p /opt/cursor-agent-home
+        HOME=/opt/cursor-agent-home bash -c 'curl -fsS https://cursor.com/install | bash'
+        ln -sf /opt/cursor-agent-home/.local/bin/agent /usr/local/bin/agent
+      } || true
+      command -v devin >/dev/null 2>&1 || {
+        mkdir -p /opt/devin-home
+        curl -fsSL https://static.devin.ai/cli/3000.12.43/setup.sh -o /tmp/devin-setup.sh &&
+          HOME=/opt/devin-home bash /tmp/devin-setup.sh &&
+          ln -sf "$(readlink -f /opt/devin-home/.local/bin/devin)" /usr/local/bin/devin
+      } || true
+      command -v grok >/dev/null 2>&1 || {
+        mkdir -p /opt/grok-home
+        [ -f /usr/local/bin/agent ] && mv /usr/local/bin/agent /tmp/boto-saved-agent
+        curl -fsSL https://x.ai/cli/install.sh -o /tmp/grok-install.sh &&
+          HOME=/opt/grok-home GROK_BIN_DIR=/opt/grok-home/.grok/bin bash /tmp/grok-install.sh 1.0.77
+        rm -f /usr/local/bin/agent
+        [ -f /tmp/boto-saved-agent ] && mv /tmp/boto-saved-agent /usr/local/bin/agent
+        ln -sf "$(readlink -f /opt/grok-home/.grok/bin/grok)" /usr/local/bin/grok 2>/dev/null
+      } || true
       # /run is tmpfs and this script re-runs on every boot: recreate the scratch dir the
       # guest desktop agent and CODEX_HOME write to (boto-init does the same on Firecracker).
       install -d -o "$u" -g "$u" -m 0755 /run/boto

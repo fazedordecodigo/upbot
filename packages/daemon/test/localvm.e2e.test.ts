@@ -72,6 +72,8 @@ describe.skipIf(process.platform === "win32")("local VM (Lima) e2e", () => {
       BOTO_LIMA_COMMAND: JSON.stringify(["bun", FAKE_LIMA]),
       BOTO_LIMA_INSTANCE: "boto-test",
       BOTO_VM_READY_FILE: marker,
+      BOTO_VM_READY_TIMEOUT_MS: "4000",
+      BOTO_VM_READY_POLL_MS: "100",
       FAKE_ACP_STATE_DIR: stateDir,
       FAKE_SSH_HOME: sshHome,
       FAKE_SSH_LOG: sshLog,
@@ -104,6 +106,18 @@ describe.skipIf(process.platform === "win32")("local VM (Lima) e2e", () => {
     expect(host.port).toBeGreaterThan(0);
     // materialized under the daemon data dir and the shared home dirs
     expect(existsSync(join(dataDir, "vm", "boto-test.yaml"))).toBe(true);
+  });
+
+  test("install refuses to run before provisioning finishes", async () => {
+    vm = await c.request("localvm.start", {});
+    expect(vm.state).toBe("running");
+    // The marker isn't written yet: prepare() polls it in the background and gives
+    // up; a manual helper install must fail the same way, since an installed helper
+    // would accept runs while the provider CLIs are still missing.
+    vm = await waitStatus((s) => s.busy === null && s.detail !== null);
+    await expect(c.request("localvm.install", {})).rejects.toThrow("preparar");
+    const h = (await c.request("hosts.list", {})).find((x) => x.id === vm.hostId);
+    expect(h?.root ?? null).toBeNull();
   });
 
   test("start runs provisioning wait then installs the helper", async () => {

@@ -122,6 +122,9 @@ export function startupAuthError(
   return null;
 }
 
+/** boto-host's signature when the RunSpec command is missing on the remote host. */
+const REMOTE_MISSING_CLI_RE = /cannot start (\S+):[^\n]*Executable not found/;
+
 /** Translates a provider startup failure into a ProviderError the same way for
  * every driver: a rejected microVM credential or a sign-in hint in the detail
  * or a stderr tail line becomes `auth_required` (quoting only that line); anything else becomes
@@ -133,6 +136,13 @@ export function classifyStartupError(
   credential: string | null,
   fallbackCode: "provider_unavailable" | "internal" = "provider_unavailable",
 ): ProviderError {
+  const missingCli = detail.match(REMOTE_MISSING_CLI_RE) ?? tail.match(REMOTE_MISSING_CLI_RE);
+  if (missingCli) {
+    return new ProviderError(
+      fallbackCode,
+      `${provider}: \`${missingCli[1]}\` is not installed on the remote host. Install it there or pick a different placement.`,
+    );
+  }
   const authLine = tail
     .split("\n")
     .map((line) => line.trim())

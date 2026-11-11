@@ -13,15 +13,21 @@ import type { LocalVmStatus, RemoteHost } from "@boto/protocol";
 import vmRecipe from "../../../../vm/boto-computer.yaml" with { type: "text" };
 import { spawnEnv } from "../env/login-path";
 import { spawnChild } from "../env/spawn";
-import { envOverride } from "../env/vars";
+import { envOverride, envPositiveNumber } from "../env/vars";
 import type { HostStore } from "./hosts";
 import { sshExec } from "./hosts";
 
-// BOTO_VM_READY_FILE overrides the guest's provisioned marker for tests (the probe runs `test -f`
-// on the host side, where a fake ssh resolves it against a fake home).
-const PROVISION_MARKER = process.env.BOTO_VM_READY_FILE || "/var/lib/boto-computer-provisioned";
-const READY_TIMEOUT_MS = 15 * 60_000;
-const READY_POLL_MS = 3_000;
+// The guest is provisioned when both files exist: /var/lib/boto-computer-provisioned is
+// touched once the recipe's first-boot install finishes, and Lima's boot.sh rewrites
+// /run/lima-boot-done (tmpfs) every boot after all provision scripts ran — including the
+// every-boot provider installs, so a reboot that upgrades CLIs still gates launches.
+// BOTO_VM_READY_FILE replaces the whole probe for tests (a fake ssh runs `test -f`
+// against a fake home).
+const PROVISION_PROBE = process.env.BOTO_VM_READY_FILE
+  ? `test -f ${process.env.BOTO_VM_READY_FILE} || exit 3`
+  : "test -f /var/lib/boto-computer-provisioned -a -f /run/lima-boot-done || exit 3";
+const READY_TIMEOUT_MS = envPositiveNumber("BOTO_VM_READY_TIMEOUT_MS", 15 * 60_000);
+const READY_POLL_MS = envPositiveNumber("BOTO_VM_READY_POLL_MS", 3_000);
 
 type Send = (event: string, data: unknown) => void;
 
@@ -118,14 +124,22 @@ export class LocalVmService {
     return !!h?.root && !!h.preflight;
   }
 
-  /** VM done provisioning (marker written by vm/boto-computer.yaml). Cached in `prepared`. */
+  /** VM done provisioning this boot (see PROVISION_PROBE). Cached in `prepared`. */
   private async provisioned(host: RemoteHost): Promise<boolean> {
     if (this.prepared) return true;
     try {
-      const r = await sshExec(host, `test -f ${PROVISION_MARKER} || exit 3`, undefined, 8_000);
+      const r = await sshExec(host, PROVISION_PROBE, undefined, 8_000);
       if (r.code === 0) this.prepared = true;
     } catch {}
     return this.prepared;
+  }
+
+  private async waitProvisioned(host: RemoteHost): Promise<void> {
+    const deadline = Date.now() + READY_TIMEOUT_MS;
+    while (!(await this.provisioned(host))) {
+      if (Date.now() > deadline) throw new Error("a VM não terminou de se preparar");
+      await Bun.sleep(READY_POLL_MS);
+    }
   }
 
   async status(): Promise<LocalVmStatus> {
@@ -257,11 +271,7 @@ export class LocalVmService {
     this.busy = "Preparando a VM…";
     this.emit();
     try {
-      const deadline = Date.now() + READY_TIMEOUT_MS;
-      while (!(await this.provisioned(host))) {
-        if (Date.now() > deadline) throw new Error("a VM não terminou de se preparar");
-        await Bun.sleep(READY_POLL_MS);
-      }
+      await this.waitProvisioned(host);
       await this.hosts.install(host.id);
       this.onHostChanged?.();
     } catch (e) {
@@ -279,6 +289,10 @@ export class LocalVmService {
       if (inst.status !== "Running") throw new Error("a VM está desligada");
       const host = await this.syncHost(inst);
       if (!host) throw new Error("não foi possível localizar o acesso SSH da VM");
+      // Helper installed implies provisioning done: without this the VM accepts runs
+      // while provider CLIs are still being installed (or never were, on a guest
+      // created by an older recipe).
+      await this.waitProvisioned(host);
       await this.hosts.install(host.id);
       this.onHostChanged?.();
       return this.status();

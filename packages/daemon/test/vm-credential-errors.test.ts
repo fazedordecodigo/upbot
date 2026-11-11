@@ -165,6 +165,17 @@ describe("classifyStartupError", () => {
     );
   });
 
+  test("maps a remote missing provider CLI to a not-installed error", () => {
+    const error = classifyStartupError(
+      "devin",
+      "ACP connection closed",
+      'boto-host: cannot start devin: Executable not found in $PATH: "devin"',
+      null,
+    );
+    expect(error.code).toBe("provider_unavailable");
+    expect(error.message).toContain("`devin` is not installed on the remote host");
+  });
+
   test("honors the internal fallback code for resume attempts", () => {
     const error = classifyStartupError("claude", "boom", "", null, "internal");
     expect(error.code).toBe("internal");

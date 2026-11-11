@@ -25,9 +25,12 @@ helper** and **Apagar**. The same operations exist over RPC as
   (`kind: "localvm"`, `lima@127.0.0.1:<sshLocalPort>`) so the VM can be a placement target.
 - **Ligar** boots the instance (creating it first when needed) and, in the background, waits
   for provisioning to finish — first boot installs Debian packages, Node 22, Bun and the
-  provider CLIs — then uploads `boto-host` and runs its preflight. The marker
-  `/var/lib/boto-computer-provisioned` records a finished provision.
-- **Instalar helper** re-uploads the host helper after an upgrade.
+  provider CLIs — then uploads `boto-host` and runs its preflight. The guest counts as
+  provisioned when `/var/lib/boto-computer-provisioned` (first-boot install done) and
+  `/run/lima-boot-done` (Lima's per-boot signal that all provision scripts ran; `/run` is
+  tmpfs, so a reboot that installs newly-added CLIs still gates) both exist.
+- **Instalar helper** re-uploads the host helper after an upgrade, waiting for
+  provisioning first — an installed helper implies the provider CLIs are in place.
 - **Apagar** stops (if running), deletes the Lima instance and removes the hosts row and any
   placements pointing at it. The shared folders under `~/Boto/computer/` are kept.
 
@@ -63,7 +66,10 @@ placements on ordinary SSH hosts are unchanged — they keep the host's login.
 - The seven provider CLIs (`claude`, `codex`, `gemini`, `opencode`, `agent` for Cursor,
   `devin`, `grok` — same set as the full guest image), Node 22 and Bun, all
   checksum-verified at provision time; git, curl, jq, python3, ffmpeg, ImageMagick,
-  build tools.
+  build tools. The CLIs are checked on every boot, so a guest provisioned before a
+  provider joined the recipe installs it on the next start instead of needing
+  recreation (guests created by older daemon recipes keep their baked-in scripts and
+  still need **Apagar** + **Criar**).
 
 ## Storage and sharing
 
@@ -95,7 +101,8 @@ agent Computer Use all work identically. noVNC remains available at
 - **"Lima não está instalada"** — `brew install lima`, then reopen Settings → Computador.
 - **"Preparando a VM…"** stuck — first boot provisioning can take several minutes; watch
   `limactl shell boto-computer -- sudo journalctl -u cloud-final -f`. If it never finishes,
-  `limactl stop`/`start` re-runs the provision step (it's guarded by the marker file).
+  `limactl stop`/`start` re-runs the provision step (the base install is guarded by the
+  marker file; provider CLIs install on every boot).
 - **State "broken"** — Lima reports an unexpected status; `limactl list` shows the raw
   value. `Apagar` + `Criar` rebuilds the instance (shared folders survive).
 - **Provider won't launch / machine shows error** — the helper may be missing or stale;
@@ -104,7 +111,9 @@ agent Computer Use all work identically. noVNC remains available at
   folders under `~/Boto/computer/` survive), or install the missing piece inside the
   guest by hand.
 - **"cannot start \<cli\>: Executable not found in $PATH"** — that provider CLI isn't
-  installed in the guest; current recipes install all seven.
+  installed in the guest; current recipes install all seven. Reported to the user as
+  "\<provider\>: `\<cli\>` is not installed on the remote host".
 - Tests override the pieces: `BOTO_LIMA_COMMAND` (fake `limactl`, JSON array),
-  `BOTO_LIMA_INSTANCE` (instance name), `BOTO_VM_READY_FILE` (provision marker),
+  `BOTO_LIMA_INSTANCE` (instance name), `BOTO_VM_READY_FILE` (provisioned probe),
+  `BOTO_VM_READY_TIMEOUT_MS` / `BOTO_VM_READY_POLL_MS` (provisioning wait),
   `BOTO_SSH_COMMAND` (fake ssh). See `packages/daemon/test/localvm.e2e.test.ts`.

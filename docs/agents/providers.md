@@ -75,7 +75,13 @@ call `authenticate` on every spawned process, so `devin auth login` signs in onl
 REPL. With the saved API key (Settings → Providers, `vmcred.devin`, also delivered to
 microVMs as `WINDSURF_API_KEY`) Boto sends `authenticate {methodId, _meta:{api_key}}`
 after initialize — `methodId` is the advertised browser method (`devin-browser`,
-falling back to the first advertised id). With no key, a local `session/new` or
+falling back to the first advertised id). A Settings → Providers **Entrar** for Devin
+does more than open `devin auth login`: the daemon watches
+`~/.local/share/devin/credentials.toml` for the `windsurf_api_key` the CLI stores and
+imports it into `vmcred.devin` (`BOTO_DEVIN_LOGIN_WATCH_MS`/`BOTO_DEVIN_LOGIN_POLL_MS`
+bound the watch, `BOTO_DEVIN_CREDENTIALS_PATH` overrides the file for tests), so one
+sign-in reaches local sessions and remote placements alike. Devin's `loggedIn` reads
+the saved key or that file. With no key, a local `session/new` or
 `session/load` failing -32000 triggers `authenticate` on that browser method (PKCE
 opens the user's browser and blocks; `BOTO_ACP_BROWSER_AUTH_MS` overrides the
 five-minute bound) and retries once. Remote sessions without a key fail straight to
