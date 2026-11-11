@@ -698,9 +698,14 @@ export class TaskService {
     // Broadcast ahead of the row delete so a private task still routes the
     // event to the connections watching it (the row backs isPrivateTask).
     this.broadcast("task.deleted", { id });
+    const turns = "SELECT id FROM turns WHERE task_id = ?";
     this.chat.purgeTaskItems(id);
+    // Rows predating the task_id column still point at the task's turns;
+    // items, queue and turn_memory_usage hold REFERENCES turns(id).
+    this.db.query(`DELETE FROM items WHERE turn_id IN (${turns})`).run(id);
+    this.db.query(`DELETE FROM queue WHERE task_id = ? OR turn_id IN (${turns})`).run(id, id);
+    this.db.query(`DELETE FROM turn_memory_usage WHERE turn_id IN (${turns})`).run(id);
     this.db.query("DELETE FROM task_deliveries WHERE task_id = ?").run(id);
-    this.db.query("DELETE FROM queue WHERE task_id = ?").run(id);
     this.db.query("DELETE FROM agent_sessions WHERE task_id = ?").run(id);
     this.db.query("DELETE FROM turns WHERE task_id = ?").run(id);
     this.db.query("DELETE FROM tasks WHERE id = ?").run(id);
