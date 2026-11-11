@@ -5,7 +5,6 @@ import { readSidebarWidth, setSidebarWidth } from "../lib/sidebar-width";
 import { readStorage } from "../lib/storage";
 import { setThemePreference, useThemePref } from "../lib/theme";
 import { LocalVm } from "../settings/LocalVm";
-import { Memories } from "../settings/Memories";
 import { Permissions } from "../settings/Permissions";
 import { Providers } from "../settings/Providers";
 import { QueryState } from "../settings/QueryState";
@@ -295,7 +294,6 @@ export function SettingsView() {
                   </div>
                 </QueryState>
               </div>
-              <Memories />
               <div className="st-note">
                 <h3 className="st-subtitle">Como o Boto usa a memória</h3>
                 <ul className="st-points">

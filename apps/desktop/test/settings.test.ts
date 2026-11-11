@@ -110,7 +110,7 @@ async function tab(p: Page, id: string) {
   await p.locator(`#st-tab-${id}`).click();
 }
 
-test("real settings: provider catalog, masked keys, profile, memories, appearance and permissions", async () => {
+test("real settings: provider catalog, masked keys, profile, appearance and permissions", async () => {
   const p = await settings();
   try {
     const catalog = await rpc.request("providers.list", {});
@@ -176,41 +176,6 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
       about: "Prefiro respostas curtas.",
     });
     expect(await p.locator("#st-about-count").innerText()).toBe("25/600");
-    expect(await p.locator("#st-memories").innerText()).toContain(
-      "Nenhum bot guardou memórias ainda.",
-    );
-    const agent = await rpc.request("agents.create", { name: "Memória UI", provider: "devin" });
-    const memory = await rpc.request("memories.add", {
-      agentId: agent.id,
-      text: "Gosta de TypeScript.",
-    });
-    await p.locator("#st-memories .st-row").filter({ hasText: memory.text }).waitFor();
-    await p.locator("#st-memories").getByRole("button", { name: "Editar", exact: true }).click();
-    await p.getByRole("textbox", { name: "Texto da memória" }).fill("x".repeat(10000));
-    await p.locator("#st-memories").getByRole("button", { name: "Salvar", exact: true }).click();
-    await p.locator("#st-memories .st-error").waitFor();
-    expect(await p.locator("#st-memories .st-error").innerText()).toBe(
-      "Não foi possível atualizar a memória.",
-    );
-    await p.getByRole("textbox", { name: "Texto da memória" }).fill("Prefere Bun.");
-    await p.locator("#st-memories").getByRole("button", { name: "Salvar", exact: true }).click();
-    await until(
-      async () =>
-        (await rpc.request("memories.list", { agentId: agent.id }))[0]?.text === "Prefere Bun.",
-    );
-    await p.locator("#st-memories").getByRole("button", { name: "Apagar", exact: true }).click();
-    await p.getByRole("dialog").getByRole("button", { name: "Apagar", exact: true }).click();
-    await until(
-      async () => (await rpc.request("memories.list", { agentId: agent.id })).length === 0,
-    );
-    const stale = await rpc.request("memories.add", {
-      agentId: agent.id,
-      text: "Memória removida em outra sessão.",
-    });
-    await p.locator("#st-memories").getByRole("button", { name: "Editar", exact: true }).click();
-    await p.getByRole("textbox", { name: "Texto da memória" }).fill("Nova versão.");
-    await rpc.request("memories.delete", { id: stale.id });
-    await until(async () => (await p.locator("#st-memories .st-row").count()) === 0);
     await p.locator("#st-forget").click();
     await p.getByRole("dialog").getByRole("button", { name: "Cancelar", exact: true }).click();
     expect((await rpc.request("profile.get", {})).name).toBe("Iara");
