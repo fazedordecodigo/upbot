@@ -44,6 +44,9 @@ h1[tabindex="-1"]:focus-visible, #main:focus-visible { outline: none; }
 .badge-secondary { background: var(--boto-color-secondary); }
 .badge-success { color: var(--boto-color-success); }
 .badge-outline { background: transparent; }
+.progress { display: block; height: var(--boto-space-1); border-radius: var(--boto-radius-full); background: var(--boto-color-muted-surface); overflow: hidden; }
+.progress > span { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--boto-color-success); transform-origin: left center; transform: scaleX(var(--p, 0)); transition: transform var(--boto-duration-slow) var(--boto-easing-out); }
+.progress[data-indeterminate="true"] > span { width: 40%; transform: none; transition: none; animation: progress-slide calc(var(--boto-duration-slow) * 3) var(--boto-easing-standard) infinite; }
 .input, .textarea, select { width: 100%; min-height: var(--boto-space-10); padding: var(--boto-space-2) var(--boto-space-3); border: 1px solid var(--boto-color-input); border-radius: var(--boto-radius-md); background: var(--boto-color-background); font-size: var(--boto-font-size-sm); }
 .textarea { resize: vertical; }
 .label { display: block; font-size: var(--boto-font-size-sm); font-weight: 500; }
@@ -70,6 +73,7 @@ dialog::backdrop { background: var(--boto-color-overlay); }
 .dropdown-separator { border-top: 1px solid var(--boto-color-border); margin-block: var(--boto-space-2); }
 .toaster { position: fixed; bottom: var(--boto-space-6); right: var(--boto-space-6); z-index: 60; max-width: calc(100% - var(--boto-space-12)); padding: var(--boto-space-5); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-lg); background: var(--boto-color-popover); box-shadow: var(--boto-shadow-lg); }
 @keyframes eye-pulse { 50% { opacity: .4; } }
+@keyframes progress-slide { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
 
 .input:focus-visible, .textarea:focus-visible { border-color: var(--boto-color-ring); box-shadow: 0 0 0 var(--boto-size-input-halo) color-mix(in srgb, var(--boto-color-ring) 20%, transparent); }
 .tooltip { position: fixed; max-width: calc(var(--boto-space-20) * 3); padding: var(--boto-space-2) var(--boto-space-3); border-radius: var(--boto-radius-sm); background: var(--boto-color-foreground); color: var(--boto-color-background); font-size: var(--boto-size-icon-status); pointer-events: none; }

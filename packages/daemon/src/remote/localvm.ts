@@ -75,6 +75,7 @@ export class LocalVmService {
   private busy: string | null = null;
   private detail: string | null = null;
   private prepared = false;
+  private emitQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private hosts: HostStore,
@@ -194,11 +195,12 @@ export class LocalVmService {
   }
 
   private emit() {
-    queueMicrotask(() => {
-      void this.status()
-        .then((s) => this.send("localvm.changed", s))
-        .catch(() => {});
-    });
+    // Status calls run several seconds (limactl + ssh probes); serializing them keeps
+    // broadcasts ordered — a slow snapshot can never land after a newer one.
+    this.emitQueue = this.emitQueue
+      .then(() => this.status())
+      .then((s) => this.send("localvm.changed", s))
+      .catch(() => {});
   }
 
   private materialize() {
@@ -237,6 +239,7 @@ export class LocalVmService {
     const host = await this.run("Ligando a VM…", async () => {
       if (!(await this.limaAvailable())) throw new Error("Lima não está instalada");
       if (!(await this.inspect())) await this.createInner();
+      await this.syncHost();
       const r = await limaExec(["start", this.instance], 15 * 60_000);
       if (r.code !== 0) throw new Error(`limactl start falhou: ${limactlError(r)}`);
       return this.syncHost();
@@ -309,11 +312,16 @@ export class LocalVmService {
     });
   }
 
-  /** Boot-time sync: refresh the host row when the instance already exists. */
+  /** Boot-time sync: refresh the host row and resume a prepare cut short by a restart. */
   async sync(): Promise<void> {
     try {
       if (!(await this.limaAvailable())) return;
-      await this.syncHost();
+      const host = await this.syncHost();
+      if (host && (await this.inspect())?.status === "Running" && !this.installed()) {
+        void this.prepare(host).catch((e) =>
+          this.log("localvm prepare failed", { error: e instanceof Error ? e.message : String(e) }),
+        );
+      }
     } catch (e) {
       this.log("localvm sync failed", { error: e instanceof Error ? e.message : String(e) });
     }

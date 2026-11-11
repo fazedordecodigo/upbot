@@ -11,10 +11,10 @@
 .st-block { display: grid; gap: var(--boto-space-4); }
 .st-panels, .st-panel, .st-row > .od-fill { min-width: 0; }
 .st-panel[hidden] { display: none; }
-:is(#st-clis, #st-accounts, #st-keys, #st-memories, #st-perms) .st-row { padding-block: var(--boto-space-4); border-bottom: calc(var(--boto-space-1) / 4) solid var(--boto-color-border); gap: var(--boto-space-3); }
-:is(#st-clis, #st-accounts, #st-keys, #st-memories, #st-perms) .st-row-name { font-weight: var(--boto-font-weight-semibold); }
-:is(#st-clis, #st-accounts, #st-keys, #st-memories, #st-perms) .st-row-help, .st-scan-status, .st-empty { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); overflow-wrap: anywhere; }
-:is(#st-clis, #st-accounts, #st-keys, #st-memories, #st-perms) .st-row-help { display: block; }
+:is(#st-clis, #st-accounts, #st-keys, #st-memories, #st-perms, #st-computer) .st-row { padding-block: var(--boto-space-4); border-bottom: calc(var(--boto-space-1) / 4) solid var(--boto-color-border); gap: var(--boto-space-3); }
+:is(#st-clis, #st-accounts, #st-keys, #st-memories, #st-perms, #st-computer) .st-row-name { font-weight: var(--boto-font-weight-semibold); }
+:is(#st-clis, #st-accounts, #st-keys, #st-memories, #st-perms, #st-computer) .st-row-help, .st-scan-status, .st-empty { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); overflow-wrap: anywhere; }
+:is(#st-clis, #st-accounts, #st-keys, #st-memories, #st-perms, #st-computer) .st-row-help { display: block; }
 .st-accounts, .st-list { display: grid; }
 .st-list { list-style: none; padding: 0; margin: 0; }
 .st-error { color: var(--boto-color-destructive); }
@@ -29,7 +29,7 @@
 #st-keys .st-row > .od-fill { flex: 0 0 calc(var(--boto-space-20) * 2); }
 #st-keys .input { flex: 1; width: auto; min-width: 0; }
 @media (max-width: 767px) {
-  :is(#st-clis, #st-accounts, #st-keys, #st-memories, #st-perms) .st-row { flex-wrap: wrap; }
+  :is(#st-clis, #st-accounts, #st-keys, #st-memories, #st-perms, #st-computer) .st-row { flex-wrap: wrap; }
   #st-keys .st-row > .od-fill { flex: 1; }
   #st-memories .st-row > .od-fill { flex-basis: 100%; }
 }

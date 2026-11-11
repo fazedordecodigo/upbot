@@ -38,6 +38,7 @@
 .ap-sec-title { font-size: var(--boto-font-size-lg); }
 .ap-row { padding-block: var(--boto-space-3); border-bottom: calc(var(--boto-space-1) / 4) solid var(--boto-color-border); gap: var(--boto-space-2); overflow-wrap: anywhere; }
 .ap-row.od-row { justify-content: space-between; }
+.ap-row.od-row > select { width: auto; max-width: 60%; }
 .ap-row-name { font-size: var(--boto-font-size-sm); font-weight: var(--boto-font-weight-medium); }
 .agent-panel .field, .agent-new .field { display: grid; gap: var(--boto-space-2); }
 .agent-panel .field-help, .agent-new .field-help, .agent-panel .ap-row-help, .agent-new .ap-row-help, .agent-new .label-opt { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }

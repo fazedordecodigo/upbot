@@ -82,15 +82,28 @@ export function LocalVm() {
                 <span className="st-row-name">VM {vm.name}</span>
                 <span className="st-row-help">
                   {vm.busy ??
-                    (vm.installed
-                      ? "Pronta para receber bots."
-                      : vm.state === "running"
-                        ? "Ligada, ainda sem o helper do Boto."
-                        : (vm.detail ?? ""))}
+                    (acting
+                      ? "Aguarde…"
+                      : vm.installed
+                        ? "Pronta para receber bots."
+                        : vm.state === "running"
+                          ? "Ligada, ainda sem o helper do Boto."
+                          : (vm.detail ?? ""))}
                 </span>
               </span>
               <span className="od-nowrap">{stateLabel[vm.state]}</span>
             </div>
+            {busy && (
+              <span
+                className="progress"
+                data-indeterminate="true"
+                role="progressbar"
+                aria-label="Progresso da operação na VM"
+                aria-valuetext={vm.busy ?? "Aguarde…"}
+              >
+                <span />
+              </span>
+            )}
             {vm.detail && !vm.busy && (
               <p className="st-error od-row" role="alert">
                 <Icon name="circle-alert" />
@@ -106,7 +119,7 @@ export function LocalVm() {
                   onClick={() => void act("localvm.create")}
                 >
                   <Icon name="download" />
-                  {busy ? (vm.busy ?? "Criando…") : "Criar a VM"}
+                  Criar a VM
                 </button>
               )}
               {vm.state === "stopped" && (
@@ -117,7 +130,7 @@ export function LocalVm() {
                   onClick={() => void act("localvm.start")}
                 >
                   <Icon name="play" />
-                  {busy ? (vm.busy ?? "Ligando…") : "Ligar a VM"}
+                  Ligar a VM
                 </button>
               )}
               {vm.state === "running" && (
@@ -129,7 +142,7 @@ export function LocalVm() {
                     onClick={() => void act("localvm.stop")}
                   >
                     <Icon name="power" />
-                    {busy ? (vm.busy ?? "Desligando…") : "Desligar"}
+                    Desligar
                   </button>
                   {!vm.installed && (
                     <button
@@ -139,7 +152,7 @@ export function LocalVm() {
                       onClick={() => void act("localvm.install")}
                     >
                       <Icon name="download" />
-                      {busy ? (vm.busy ?? "Instalando…") : "Instalar o Boto nela"}
+                      Instalar o Boto nela
                     </button>
                   )}
                 </>
