@@ -79,6 +79,7 @@ describe.skipIf(process.platform === "win32")("local VM (Lima) e2e", () => {
       FAKE_SSH_LOG: sshLog,
       FAKE_LIMA_HOME: limaHome,
       FAKE_LIMA_LOG: limaLog,
+      FAKE_LIMA_SSH_ADDRESS: "10.203.0.17",
     });
     c = await DaemonClient.connect(daemon.port, TOKEN);
     bot = await c.request("agents.create", { name: "Vera", provider: "devin", instructions: "" });
@@ -102,7 +103,8 @@ describe.skipIf(process.platform === "win32")("local VM (Lima) e2e", () => {
     expect(vm.hostId).toBeTruthy();
     host = (await c.request("hosts.list", {})).find((h) => h.id === vm.hostId)!;
     expect(host.kind).toBe("localvm");
-    expect(host.target).toBe("lima@127.0.0.1");
+    // wsl2 instances report a distro IP as sshAddress; vz/qemu report 127.0.0.1
+    expect(host.target).toBe("lima@10.203.0.17");
     expect(host.port).toBeGreaterThan(0);
     // materialized under the daemon data dir and the shared home dirs
     expect(existsSync(join(dataDir, "vm", "boto-test.yaml"))).toBe(true);

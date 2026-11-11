@@ -5,6 +5,7 @@ import type { AgentPlacement } from "@boto/protocol";
 import { openDatabase } from "../src/db";
 import { VmCredentials } from "../src/remote/credentials";
 import { HostStore, remoteLaunch } from "../src/remote/hosts";
+import { recipeFor } from "../src/remote/localvm";
 import { Vault } from "../src/vault";
 import { tmp } from "./helpers";
 
@@ -15,6 +16,51 @@ const placement: AgentPlacement = {
   vcpus: 2,
   memMib: 2048,
 };
+
+describe("recipeFor", () => {
+  test("macOS keeps the embedded vz recipe verbatim", () => {
+    const y = recipeFor({ platform: "darwin" });
+    expect(y).toContain("vmType: vz");
+    expect(y).toContain("mountType: virtiofs");
+    expect(y).toContain('location: "~/Boto/computer/workspace"');
+  });
+
+  test("linux swaps vz for qemu and picks the mount type", () => {
+    const y = recipeFor({ platform: "linux", linuxMountType: "virtiofs" });
+    expect(y).toContain("vmType: qemu");
+    expect(y).toContain("mountType: virtiofs");
+    expect(recipeFor({ platform: "linux" })).toContain("mountType: reverse-sshfs");
+    // mounts keep ~ expansion — limactl resolves it against the same home
+    expect(y).toContain('location: "~/Boto/computer/workspace"');
+    expect(y).toContain("debian-12-genericcloud-amd64.qcow2");
+  });
+
+  test("win32 becomes a wsl2 distro with Windows mount paths and a local rootfs", () => {
+    const y = recipeFor({
+      platform: "win32",
+      windowsDirs: {
+        workspace: "C:\\Users\\a b\\Boto\\computer\\workspace",
+        shared: "C:\\Users\\a b\\Boto\\computer\\shared",
+      },
+      image: {
+        location: "C:\\botod\\vm\\debian-wsl-amd64.tar.gz",
+        arch: "x86_64",
+        digest: "abc123",
+      },
+    });
+    expect(y).toContain("vmType: wsl2");
+    expect(y).toContain("mountType: wsl2");
+    expect(y).toContain('location: "C:/Users/a b/Boto/computer/workspace"');
+    expect(y).toContain('location: "C:/Users/a b/Boto/computer/shared"');
+    expect(y).toContain('location: "C:/botod/vm/debian-wsl-amd64.tar.gz"');
+    expect(y).toContain('digest: "sha256:abc123"');
+    expect(y).not.toContain("qcow2");
+    // Port forwards tunnel via the guest agent's in-distro dial — loopback stays
+    expect(y).toContain("--remote-debugging-address=127.0.0.1");
+    expect(y).toContain("guestIP: 127.0.0.1");
+    expect(y).not.toContain('location: "~');
+  });
+});
 
 describe("local VM host", () => {
   const prevSsh = process.env.BOTO_SSH_COMMAND;

@@ -48,7 +48,7 @@ export function LocalVm() {
     const ok = await confirm({
       title: "Apagar a VM local?",
       description:
-        "A máquina virtual e o disco dela são removidos. Os bots que trabalham nela voltam a usar este Mac. A pasta ~/Boto/computer/workspace fica no computador.",
+        "A máquina virtual e o disco dela são removidos. Os bots que trabalham nela voltam a usar este computador. A pasta ~/Boto/computer/workspace fica no computador.",
       action: "Apagar VM",
     });
     if (!ok) return;
@@ -66,14 +66,13 @@ export function LocalVm() {
     <div className="st-block" aria-busy={!status.loaded && !status.error}>
       <BlockHead
         title="Computador Linux"
-        description="Uma máquina virtual Linux completa neste Mac, com área de trabalho, navegador e ferramentas. Bots colocados nela trabalham dentro da VM — veja a tela ao vivo na tarefa. Os arquivos compartilhados ficam em ~/Boto/computer/workspace."
+        description="Uma máquina virtual Linux completa neste computador, com área de trabalho, navegador e ferramentas. Bots colocados nela trabalham dentro da VM — veja a tela ao vivo na tarefa. Os arquivos compartilhados ficam em ~/Boto/computer/workspace."
       />
       <QueryState query={status}>
         {vm && !vm.available ? (
           <p className="st-empty">
             <Icon name="circle-alert" />
-            {vm.detail ?? "O Lima não está instalado neste Mac."} Instale com{" "}
-            <code>brew install lima</code> e recarregue esta página.
+            {vm.detail ?? "O Lima não está instalado neste computador."}
           </p>
         ) : vm ? (
           <>
@@ -192,7 +191,8 @@ export function LocalVm() {
           <li>
             <Icon name="check" />
             <span>
-              A VM não alcança este Mac pela rede; a ponte com o Boto passa pelo canal SSH dela.
+              A VM não alcança este computador pela rede; a ponte com o Boto passa pelo canal SSH
+              dela.
             </span>
           </li>
         </ul>

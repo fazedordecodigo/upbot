@@ -50,7 +50,8 @@ when the task touches that area — do not preload every reference.
   `test/settings.e2e.test.ts`.
 - `vm/boto-computer.yaml` — Lima recipe for the local Linux VM (embedded into the daemon;
   `LocalVmService` in `packages/daemon/src/remote/localvm.ts` drives `limactl`, synced as a
-  `kind: "localvm"` hosts row). See [docs/local-vm.md](docs/local-vm.md).
+  `kind: "localvm"` hosts row). vz on macOS, qemu on Linux, wsl2 on Windows — the recipe is
+  rewritten per host OS at materialize time. See [docs/local-vm.md](docs/local-vm.md).
 - `apps/desktop` — Tauri 2 + React 19 + Vite. Rust spawns the sidecar via
   `tauri-plugin-shell`, parses the READY line, and exposes `daemon_connection` ->
   `{port, token}`. Frontend WS client: `src/lib/daemon.ts`.

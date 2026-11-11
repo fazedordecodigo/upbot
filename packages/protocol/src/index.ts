@@ -525,7 +525,7 @@ export type LocalVmStatus = z.infer<typeof LocalVmStatus>;
 const IdentityFile = z
   .string()
   .max(1000)
-  .regex(/^(?:\/|~\/)[^\n\r]*$/, "absolute path to a private key file")
+  .regex(/^(?:\/|~\/|[A-Za-z]:[\\/])[^\n\r]*$/, "absolute path to a private key file")
   .nullable();
 // VmCredentialProvider, VmCredentialKind and VmCredential live in
 // providers-catalog.ts and are re-exported through `export *` above.

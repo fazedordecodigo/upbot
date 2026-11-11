@@ -12,6 +12,7 @@ const stateFile = join(home, "state.json");
 type Instance = {
   name: string;
   status: string;
+  sshAddress?: string;
   sshLocalPort: number;
   IdentityFile: string;
   config: { user: { name: string } };
@@ -48,6 +49,7 @@ if (cmd === "--version") {
   put({
     name,
     status: "Stopped",
+    ...(process.env.FAKE_LIMA_SSH_ADDRESS ? { sshAddress: process.env.FAKE_LIMA_SSH_ADDRESS } : {}),
     sshLocalPort: 64000 + (name.length % 100),
     IdentityFile: join(home, "id_fake"),
     config: { user: { name: "lima" } },

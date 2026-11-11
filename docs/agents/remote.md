@@ -64,12 +64,16 @@ Tests: `test/remote.e2e.test.ts`, `packages/host/test/host.test.ts`.
 Operator guide: [docs/local-vm.md](../local-vm.md). `src/remote/localvm.ts`
 (`LocalVmService`) manages one Lima instance (default `boto-computer`,
 `BOTO_LIMA_INSTANCE` to rename) from the recipe `vm/boto-computer.yaml`, embedded into the
-daemon binary and materialized under `<dataDir>/vm/` on create. RPC
+daemon binary and materialized under `<dataDir>/vm/` on create after `recipeFor` rewrites
+it for the host OS — vz/virtiofs on macOS, qemu plus virtiofs-or-reverse-sshfs on Linux,
+wsl2 mounts and a downloaded Debian WSL rootfs on Windows (`BOTO_LIMA_WSL_IMAGE`
+overrides the image location). RPC
 `localvm.status/create/start/stop/delete/install`, event `localvm.changed`;
 `LocalVmStatus` carries `available` (limactl works), `state`
 (`absent|stopped|running|broken`), `busy`, `installed`, `hostId` and the last error
 `detail`. The instance registers as a hosts row via `HostStore.upsertLocalVm`
-(`kind: "localvm"`, `instance`, `lima@127.0.0.1:<sshLocalPort>`, Lima's IdentityFile —
+(`kind: "localvm"`, `instance`, `lima@<sshAddress>:<sshLocalPort>` — `sshAddress` is the
+distro IP under wsl2, `127.0.0.1` otherwise — Lima's IdentityFile;
 migration 33 adds `hosts.kind`/`hosts.instance`, defaulting to `"ssh"`); `syncHost`
 re-reads `limactl list --json` after every lifecycle call and once at boot (`localvm.sync`,
 failures logged, never fatal). Placements on that row use `isolation: "none"` — the whole

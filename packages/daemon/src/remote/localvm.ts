@@ -1,17 +1,18 @@
-// The local Linux VM ("VM Linux local"): a complete Lima instance (vz / Apple
-// Virtualization) the daemon manages so bots can run inside a full VM on this Mac.
-// The instance registers as a hosts row (kind "localvm"); bots placed on it launch
+// The local Linux VM ("VM Linux local"): a complete Lima instance the daemon manages
+// so bots can run inside a full VM on this machine — vz (Apple Virtualization) on
+// macOS, qemu on Linux, wsl2 on Windows (the instance is then a WSL distro). The
+// instance registers as a hosts row (kind "localvm"); bots placed on it launch
 // through the usual ssh + `boto-host run` path (isolation "none" — the VM itself is
 // the isolation boundary) and stream the Xvfb desktop via `boto-host guest-desktop`.
 // Overrides for tests: BOTO_LIMA_COMMAND (JSON array), BOTO_LIMA_INSTANCE.
 
-import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { LocalVmStatus, RemoteHost } from "@boto/protocol";
 import vmRecipe from "../../../../vm/boto-computer.yaml" with { type: "text" };
-import { spawnEnv } from "../env/login-path";
+import { resolveCommand, spawnEnv } from "../env/login-path";
 import { spawnChild } from "../env/spawn";
 import { envOverride, envPositiveNumber } from "../env/vars";
 import type { HostStore } from "./hosts";
@@ -34,18 +35,99 @@ type Send = (event: string, data: unknown) => void;
 type LimaInstance = {
   name: string;
   status?: string;
+  /** Guest address Lima's ssh uses: 127.0.0.1 on vz/qemu, the distro IP on wsl2. */
+  sshAddress?: string;
   sshLocalPort?: number;
   IdentityFile?: string;
   config?: { user?: { name?: string } };
 };
 
-async function limaExec(
+// Debian's official WSL rootfs (a .wsl is a gzip'd tar) for vmType wsl2 — Lima
+// can't import qcow2 as a WSL distro and its filename check rejects the ".wsl"
+// suffix, so the daemon downloads it to the data dir as .tar.gz at create time.
+// URLs and digests are pinned from Microsoft's WSL DistributionInfo.json.
+const WSL_IMAGES: Record<string, { url: string; sha256: string; tag: string }> = {
+  x64: {
+    url: "https://salsa.debian.org/debian/WSL/-/jobs/9606244/artifacts/raw/Debian_WSL_AMD64_v1.26.0.0.wsl",
+    sha256: "5ec7dc68216e75d1d4d4761474e99d8461a98d316537110314b137122a879e0f",
+    tag: "amd64",
+  },
+  arm64: {
+    url: "https://salsa.debian.org/debian/WSL/-/jobs/9606244/artifacts/raw/Debian_WSL_ARM64_v1.26.0.0.wsl",
+    sha256: "09120df4fadc36fb2a0f7298e197785e6f599f12aaf95d43cba07a8ac7fb316b",
+    tag: "arm64",
+  },
+};
+
+type RecipeImage = { location: string; arch: "x86_64" | "aarch64"; digest?: string };
+
+const winPath = (p: string) => p.replaceAll("\\", "/");
+
+/**
+ * Rewrites the embedded macOS recipe (vmType vz) for the host OS. The result is
+ * written to the data dir and handed to `limactl create`.
+ * - linux: qemu; virtiofs mounts when a virtiofsd is installed, else reverse-sshfs.
+ * - win32: wsl2 (the guest is a WSL distro), wsl2 mounts with Windows paths and
+ *   the downloaded Debian WSL rootfs as the image. Port forwards tunnel through
+ *   the guest agent, which dials inside the distro — loopback services work.
+ */
+export function recipeFor(opts: {
+  platform: NodeJS.Platform;
+  linuxMountType?: string | undefined;
+  windowsDirs?: { workspace: string; shared: string } | undefined;
+  image?: RecipeImage | undefined;
+}): string {
+  const y = vmRecipe as string;
+  if (opts.platform === "darwin") return y;
+  if (opts.platform === "win32") {
+    const dirs = opts.windowsDirs;
+    const image = opts.image;
+    if (!dirs || !image) throw new Error("recipeFor win32 needs windowsDirs and image");
+    const images =
+      `images:\n` +
+      `  - location: "${winPath(image.location)}"\n` +
+      `    arch: "${image.arch}"\n` +
+      (image.digest ? `    digest: "sha256:${image.digest}"\n` : "");
+    const t = y
+      .replace("vmType: vz", "vmType: wsl2")
+      .replace("mountType: virtiofs", "mountType: wsl2")
+      .replace('location: "~/Boto/computer/workspace"', `location: "${winPath(dirs.workspace)}"`)
+      .replace('location: "~/Boto/computer/shared"', `location: "${winPath(dirs.shared)}"`);
+    const i = t.indexOf("\nimages:");
+    if (i < 0) throw new Error("recipe has no images block");
+    return t.slice(0, i + 1).concat(images);
+  }
+  return y
+    .replace("vmType: vz", "vmType: qemu")
+    .replace("mountType: virtiofs", `mountType: ${opts.linuxMountType ?? "reverse-sshfs"}`);
+}
+
+function limaInstallHint(): string {
+  if (process.platform === "win32")
+    return "instale o Lima para Windows (github.com/lima-vm/lima/releases) e mantenha o WSL2 ativo (wsl --install)";
+  if (process.platform === "linux")
+    return "instale o Lima e o QEMU (brew install lima qemu ou os pacotes lima/qemu-system-x86 da sua distribuição)";
+  return "brew install lima";
+}
+
+/** virtiofs needs a virtiofsd on the host; falls back to reverse-sshfs mounts. */
+function linuxMountType(): string {
+  for (const p of [
+    "/usr/libexec/virtiofsd",
+    "/usr/lib/qemu/virtiofsd",
+    "/usr/lib/virtiofsd/virtiofsd",
+  ]) {
+    if (existsSync(p)) return "virtiofs";
+  }
+  return resolveCommand("virtiofsd") ? "virtiofs" : "reverse-sshfs";
+}
+
+async function execCmd(
+  bin: string,
   args: string[],
   timeoutMs = 60_000,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  const base = envOverride("BOTO_LIMA_COMMAND") ?? ["limactl"];
-  const [bin, ...pre] = base as [string, ...string[]];
-  const proc = spawnChild(bin, [...pre, ...args], {
+  const proc = spawnChild(bin, args, {
     cwd: homedir(),
     env: spawnEnv(),
     stdio: ["ignore", "pipe", "pipe"],
@@ -73,6 +155,15 @@ async function limaExec(
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function limaExec(
+  args: string[],
+  timeoutMs = 60_000,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const base = envOverride("BOTO_LIMA_COMMAND") ?? ["limactl"];
+  const [bin, ...pre] = base as [string, ...string[]];
+  return execCmd(bin, [...pre, ...args], timeoutMs);
 }
 
 export class LocalVmService {
@@ -154,7 +245,7 @@ export class LocalVmService {
       detail: this.detail,
     };
     if (!(await this.limaAvailable())) {
-      return { ...base, detail: this.detail ?? "Lima não está instalada (brew install lima)" };
+      return { ...base, detail: this.detail ?? `Lima não está instalada (${limaInstallHint()})` };
     }
     base.available = true;
     let inst: LimaInstance | null = null;
@@ -182,7 +273,7 @@ export class LocalVmService {
     const h = this.hosts.upsertLocalVm({
       instance: this.instance,
       name: "VM local",
-      target: `${user}@127.0.0.1`,
+      target: `${user}@${i.sshAddress ?? "127.0.0.1"}`,
       port: i.sshLocalPort,
       identityFile: i.IdentityFile ?? null,
     });
@@ -217,7 +308,7 @@ export class LocalVmService {
       .catch(() => {});
   }
 
-  private materialize() {
+  private materialize(image?: RecipeImage) {
     const workspace = join(homedir(), "Boto", "computer", "workspace");
     const shared = join(homedir(), "Boto", "computer", "shared");
     mkdirSync(workspace, { recursive: true });
@@ -229,12 +320,63 @@ export class LocalVmService {
     const dir = join(this.dataDir, "vm");
     mkdirSync(dir, { recursive: true });
     const yaml = join(dir, `${this.instance}.yaml`);
-    writeFileSync(yaml, vmRecipe as string);
+    writeFileSync(
+      yaml,
+      recipeFor({
+        platform: process.platform,
+        linuxMountType: process.platform === "linux" ? linuxMountType() : undefined,
+        windowsDirs: process.platform === "win32" ? { workspace, shared } : undefined,
+        image,
+      }),
+    );
     return yaml;
   }
 
+  /** The guest image entry for vmType wsl2; downloads the Debian WSL rootfs once. */
+  private async ensureGuestImage(): Promise<RecipeImage> {
+    const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
+    const override = process.env.BOTO_LIMA_WSL_IMAGE?.trim();
+    if (override) return { location: override, arch };
+    const img = WSL_IMAGES[process.arch];
+    if (!img) throw new Error(`a VM local não suporta a arquitetura ${process.arch} no Windows`);
+    const file = join(this.dataDir, "vm", `debian-wsl-${img.tag}.tar.gz`);
+    if (!existsSync(file)) {
+      mkdirSync(join(this.dataDir, "vm"), { recursive: true });
+      const tmp = `${file}.part`;
+      const res = await fetch(img.url);
+      if (!res.ok || !res.body) throw new Error(`falha ao baixar a imagem da VM (${res.status})`);
+      await Bun.write(tmp, res);
+      const digest = createHash("sha256").update(readFileSync(tmp)).digest("hex");
+      if (digest !== img.sha256) {
+        rmSync(tmp, { force: true });
+        throw new Error("o checksum da imagem da VM não confere");
+      }
+      renameSync(tmp, file);
+    }
+    return { location: file, arch, digest: img.sha256 };
+  }
+
+  /** wsl2 runs on the WSL platform itself; a missing wsl.exe fails here with a clear hint. */
+  private async wslCheck(): Promise<void> {
+    let r: { code: number; stdout: string; stderr: string };
+    try {
+      r = await execCmd("wsl.exe", ["--status"], 15_000);
+    } catch {
+      throw new Error("o WSL2 não está instalado (wsl --install)");
+    }
+    if (r.code !== 0) {
+      const out = `${r.stderr || r.stdout}`.replace(/\0/g, "").trim();
+      throw new Error(`o WSL2 não está disponível${out ? `: ${out}` : " (wsl --install)"}`);
+    }
+  }
+
   private async createInner(): Promise<void> {
-    const yaml = this.materialize();
+    let image: RecipeImage | undefined;
+    if (process.platform === "win32") {
+      await this.wslCheck();
+      image = await this.ensureGuestImage();
+    }
+    const yaml = this.materialize(image);
     const r = await limaExec(["create", "--name", this.instance, "--tty=false", yaml], 20 * 60_000);
     if (r.code !== 0) throw new Error(`limactl create falhou: ${limactlError(r)}`);
   }
