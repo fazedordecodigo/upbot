@@ -17,6 +17,7 @@ const host: RemoteHost = {
   root: "/home/me/.boto",
   preflight: null,
   createdAt: 0,
+  kind: "ssh",
 };
 const placement = (isolation: AgentPlacement["isolation"]): AgentPlacement => ({
   agentId: "a1",

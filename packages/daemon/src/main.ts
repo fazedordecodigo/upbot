@@ -31,6 +31,7 @@ import { ProvidersService } from "./providers-service";
 import { readyLine } from "./ready";
 import { VmCredentials } from "./remote/credentials";
 import { HostStore } from "./remote/hosts";
+import { LocalVmService } from "./remote/localvm";
 import { RoutineService } from "./routines";
 import { Rpc } from "./rpc";
 import { errorFields } from "./runtime/agent-runtime";
@@ -357,6 +358,9 @@ async function main() {
   const team = new TeamClient(db, store, chat, () => runtimes, vault, broadcast);
   const gateways = new GatewayService(db, store, chat, () => runtimes, vault, broadcast);
   gatewaysRef = gateways;
+  const localvm = new LocalVmService(hosts, dataDir, broadcast, log);
+  localvm.onHostChanged = () => broadcast("hosts.changed", {});
+  void localvm.sync();
   const rpc = new Rpc(
     store,
     chat,
@@ -385,6 +389,7 @@ async function main() {
       mobile,
       team,
       hosts,
+      localvm,
       subagents,
       tasks: taskService,
       profile: new ProfileService(db, memories, broadcast),

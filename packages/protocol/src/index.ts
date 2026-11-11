@@ -479,6 +479,8 @@ export const SshTarget = z
   .string()
   .max(255)
   .regex(/^(?:[A-Za-z0-9._][A-Za-z0-9._-]*@)?[A-Za-z0-9][A-Za-z0-9.-]*$/, "expected user@host");
+export const HostKind = z.enum(["ssh", "localvm"]);
+export type HostKind = z.infer<typeof HostKind>;
 export const RemoteHost = z.object({
   id: z.string(),
   name: z.string(),
@@ -488,8 +490,26 @@ export const RemoteHost = z.object({
   root: z.string().nullable(),
   preflight: HostPreflight.nullable(),
   createdAt: z.number(),
+  kind: HostKind.default("ssh"),
 });
 export type RemoteHost = z.infer<typeof RemoteHost>;
+/** The local Lima VM ("VM Linux local") the daemon manages on this machine. */
+export const LocalVmStatus = z.object({
+  /** limactl is installed and callable. */
+  available: z.boolean(),
+  /** Lima instance name. */
+  name: z.string(),
+  state: z.enum(["absent", "stopped", "running", "broken"]),
+  /** In-flight operation description ("Criando…"), null when idle. */
+  busy: z.string().nullable(),
+  /** Synced hosts row (kind "localvm"), null until the VM first runs. */
+  hostId: z.string().nullable(),
+  /** boto-host installed and preflight answered on the VM. */
+  installed: z.boolean(),
+  /** Last error or progress note. */
+  detail: z.string().nullable(),
+});
+export type LocalVmStatus = z.infer<typeof LocalVmStatus>;
 const IdentityFile = z
   .string()
   .max(1000)
@@ -976,6 +996,12 @@ export const methodMap = {
   },
   "hosts.install": { params: z.object({ id: z.string() }).strict(), result: RemoteHost },
   "hosts.check": { params: z.object({ id: z.string() }).strict(), result: RemoteHost },
+  "localvm.status": { params: z.object({}).strict(), result: LocalVmStatus },
+  "localvm.create": { params: z.object({}).strict(), result: LocalVmStatus },
+  "localvm.start": { params: z.object({}).strict(), result: LocalVmStatus },
+  "localvm.stop": { params: z.object({}).strict(), result: LocalVmStatus },
+  "localvm.delete": { params: z.object({}).strict(), result: LocalVmStatus },
+  "localvm.install": { params: z.object({}).strict(), result: LocalVmStatus },
   "vmCredentials.list": { params: z.object({}).strict(), result: z.array(VmCredential) },
   "vmCredentials.set": {
     params: z
@@ -1361,6 +1387,7 @@ export type DaemonEventMap = AgentsCockpitEventMap & {
   "team.updated": TeamStatus;
   "team.message": TeamMessage;
   "hosts.changed": Record<string, never>;
+  "localvm.changed": LocalVmStatus;
   "placement.updated": AgentPlacement;
   "subagent.updated": Subagent;
   "gateway.deleted": { id: string };

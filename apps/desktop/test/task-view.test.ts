@@ -72,7 +72,7 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
       "Este bot não tem uma área de trabalho",
     );
     expect(await page.locator("#task-desk").innerText()).toContain(
-      "Este bot trabalha sem área de trabalho. Ela está disponível para bots em uma microVM.",
+      "Este bot trabalha sem área de trabalho. Ela está disponível para bots em uma máquina virtual.",
     );
     await page.locator("#instruct-input").fill("echo: oi");
     await page.locator("#instruct-input").press("Enter");

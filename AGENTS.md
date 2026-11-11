@@ -25,8 +25,9 @@ when the task touches that area — do not preload every reference.
 | Bridge, channels, usage/compaction, memories/skills, routines, browser | [docs/agents/collaboration.md](docs/agents/collaboration.md)       |
 | Vault, connectors, Computer Use, voice                                 | [docs/agents/secrets-platform.md](docs/agents/secrets-platform.md) |
 | Gateways, marketplace, mobile companion, teams/relay                   | [docs/agents/connectivity.md](docs/agents/connectivity.md)         |
-| Hosts, Firecracker placement, subagents (implementation)               | [docs/agents/remote.md](docs/agents/remote.md)                     |
+| Hosts, local VM, Firecracker placement, subagents (implementation)     | [docs/agents/remote.md](docs/agents/remote.md)                     |
 | Host setup / guest image (operator guide)                              | [docs/remote-hosts.md](docs/remote-hosts.md)                       |
+| Local Linux VM via Lima (operator guide)                               | [docs/local-vm.md](docs/local-vm.md)                               |
 | CI, release, updater, branding                                         | [docs/agents/shipping.md](docs/agents/shipping.md)                 |
 | Rio Negro design system                                                | [DESIGN.md](DESIGN.md)                                             |
 
@@ -47,6 +48,9 @@ when the task touches that area — do not preload every reference.
   presence check that only gates the legacy UpBot→Boto migration — no bot is seeded on fresh
   installs, and the first one created is adopted as `default_bot_id`). Tests:
   `test/settings.e2e.test.ts`.
+- `vm/boto-computer.yaml` — Lima recipe for the local Linux VM (embedded into the daemon;
+  `LocalVmService` in `packages/daemon/src/remote/localvm.ts` drives `limactl`, synced as a
+  `kind: "localvm"` hosts row). See [docs/local-vm.md](docs/local-vm.md).
 - `apps/desktop` — Tauri 2 + React 19 + Vite. Rust spawns the sidecar via
   `tauri-plugin-shell`, parses the READY line, and exposes `daemon_connection` ->
   `{port, token}`. Frontend WS client: `src/lib/daemon.ts`.

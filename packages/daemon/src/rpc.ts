@@ -22,6 +22,7 @@ import { ProviderError } from "./providers/types";
 import type { ProvidersService } from "./providers-service";
 import type { VmCredentials } from "./remote/credentials";
 import type { HostStore } from "./remote/hosts";
+import type { LocalVmService } from "./remote/localvm";
 import type { RoutineService } from "./routines";
 import { asBadRequest, RpcError } from "./runtime/agent-runtime";
 import type { RuntimeManager } from "./runtime/runtime-manager";
@@ -100,6 +101,7 @@ export class Rpc {
       mobile: MobileServer;
       team: TeamClient;
       hosts: HostStore;
+      localvm: LocalVmService;
       subagents: SubagentService;
       tasks: TaskService;
       profile: ProfileService;
@@ -406,6 +408,18 @@ export class Rpc {
         queueMicrotask(() => this.broadcast("hosts.changed", {}));
         return h;
       }
+      case "localvm.status":
+        return this.extras.localvm.status();
+      case "localvm.create":
+        return asBadRequest(() => this.extras.localvm.create());
+      case "localvm.start":
+        return asBadRequest(() => this.extras.localvm.start());
+      case "localvm.stop":
+        return asBadRequest(() => this.extras.localvm.stop());
+      case "localvm.delete":
+        return asBadRequest(() => this.extras.localvm.remove());
+      case "localvm.install":
+        return asBadRequest(() => this.extras.localvm.install());
       case "vmCredentials.list":
         return this.extras.vmCredentials.list();
       case "vmCredentials.set": {

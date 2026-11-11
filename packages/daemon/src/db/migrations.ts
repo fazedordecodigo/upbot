@@ -396,4 +396,7 @@ export const migrations: string[] = [
   // 32: retain explicit uninstall state and registry skill identity
   `ALTER TABLE marketplace_installations ADD COLUMN active INTEGER NOT NULL DEFAULT 1;
   ALTER TABLE marketplace_artifacts ADD COLUMN registry_id TEXT`,
+  // 33: the local Lima VM registers as a daemon-managed host (kind "localvm")
+  `ALTER TABLE hosts ADD COLUMN kind TEXT NOT NULL DEFAULT 'ssh';
+  ALTER TABLE hosts ADD COLUMN instance TEXT`,
 ];

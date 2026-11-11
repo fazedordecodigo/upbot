@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import type {
   Agent,
+  AgentPlacement,
   DesktopCursorEvent,
   DesktopFrameEvent,
   DesktopInputEvent,
@@ -121,10 +122,17 @@ export class DesktopService {
     this.machineFor(agentId);
   }
 
+  /** Machines exist for Firecracker placements and for bots placed on the local VM. */
+  private machineCapable(placement: AgentPlacement): boolean {
+    if (placement.isolation === "firecracker") return true;
+    if (!placement.hostId) return false;
+    return this.hosts.get(placement.hostId)?.kind === "localvm";
+  }
+
   list(): Machine[] {
     const out: Machine[] = [];
     for (const p of this.hosts.placements()) {
-      if (p.isolation !== "firecracker") continue;
+      if (!this.machineCapable(p)) continue;
       const st = this.machineFor(p.agentId);
       if (st) out.push(this.view(st));
     }
@@ -135,7 +143,7 @@ export class DesktopService {
     const placement = this.hosts.placement(agentId);
     const existing = this.stateFor(agentId);
     const agent = this.agentById(agentId);
-    if (placement.isolation !== "firecracker" || !agent) {
+    if (!this.machineCapable(placement) || !agent) {
       if (existing) {
         this.closeChild(existing);
         existing.hostId = placement.hostId;
@@ -435,7 +443,12 @@ export class DesktopService {
     const placement = this.hosts.placement(st.agentId);
     const host = placement.hostId ? this.hosts.get(placement.hostId) : null;
     if (!host?.root) return null;
-    return sshArgs(host, [], `${BUN_PATH} exec bun ${shq(`${host.root}/${HELPER}`)} desktop`);
+    const helper = shq(`${host.root}/${HELPER}`);
+    // On the local VM the desktop agent runs inside the guest itself (no vsock relay),
+    // so it is spawned directly instead of `boto-host desktop` on the host.
+    if (host.kind === "localvm")
+      return sshArgs(host, [], `DISPLAY=:0 ${BUN_PATH} exec bun ${helper} guest-desktop`);
+    return sshArgs(host, [], `${BUN_PATH} exec bun ${helper} desktop`);
   }
 
   private ensure(st: MachineState) {
@@ -471,7 +484,10 @@ export class DesktopService {
     this.emitMachine(st);
     child.on("error", () => {});
     child.stdin?.on("error", () => {});
-    child.stdin?.write(`${JSON.stringify({ agentId: st.agentId })}\n`);
+    // `boto-host desktop` reads {agentId} to locate the running microVM; the local VM's
+    // in-guest `guest-desktop` speaks only the NDJSON message protocol, no intro line.
+    if (this.hosts.get(st.hostId ?? "")?.kind !== "localvm")
+      child.stdin?.write(`${JSON.stringify({ agentId: st.agentId })}\n`);
     let buffer: Buffer = Buffer.alloc(0);
     child.stdout?.on("data", (chunk: Buffer) => {
       buffer = buffer.length ? Buffer.concat([buffer, chunk]) : chunk;

@@ -126,7 +126,10 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
     expect(await p.locator("#st-tab-privacy").getAttribute("aria-selected")).toBe("true");
     await p.keyboard.press("Home");
     await p.keyboard.press("ArrowDown");
+    expect(await p.locator("#st-tab-computer").getAttribute("aria-selected")).toBe("true");
+    await p.keyboard.press("ArrowDown");
     expect(await p.locator("#st-tab-memory").getAttribute("aria-selected")).toBe("true");
+    await p.keyboard.press("ArrowLeft");
     await p.keyboard.press("ArrowLeft");
     const secret = "settings-test-secret-never-rendered-123456";
     const keyRow = p.locator("#st-keys .st-row").filter({ has: p.locator("#st-key-devin") });
