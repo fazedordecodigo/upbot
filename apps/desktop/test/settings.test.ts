@@ -114,9 +114,11 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
   const p = await settings();
   try {
     const catalog = await rpc.request("providers.list", {});
-    expect(await p.locator("#st-clis .st-row-name").allTextContents()).toEqual(
-      catalog.map((provider) => provider.name),
-    );
+    const expectedClis = [
+      ...catalog.filter((provider) => provider.installed),
+      ...catalog.filter((provider) => !provider.installed),
+    ].map((provider) => provider.name);
+    expect(await p.locator("#st-clis .st-row-name").allTextContents()).toEqual(expectedClis);
     await p.locator("#st-tab-provider").focus();
     await p.keyboard.press("ArrowUp");
     expect(await p.locator("#st-tab-privacy").getAttribute("aria-selected")).toBe("true");
@@ -132,7 +134,8 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
     await p.keyboard.press("ArrowLeft");
     await p.keyboard.press("ArrowLeft");
     const secret = "settings-test-secret-never-rendered-123456";
-    const keyRow = p.locator("#st-keys .st-row").filter({ has: p.locator("#st-key-devin") });
+    const keyRow = p.locator("#st-keys .st-row").filter({ hasText: "Devin" });
+    await keyRow.getByRole("button", { name: "Adicionar chave" }).click();
     await p.locator("#st-key-devin").fill(secret);
     await keyRow.getByRole("button", { name: "Salvar", exact: true }).click();
     const savedRow = p.locator("#st-keys .st-row").filter({ hasText: "Devin" });
@@ -152,12 +155,12 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
         ),
     ).toBe(false);
     await savedRow.getByRole("button", { name: "Remover" }).click();
-    await p.locator("#st-key-devin").waitFor();
+    await savedRow.getByRole("button", { name: "Adicionar chave" }).waitFor();
     await p.locator("#st-scan").click();
     await until(async () =>
-      (await p.locator("#st-scan-status").innerText()).includes("CLIs encontradas."),
+      (await p.locator("#st-scan-status").innerText()).includes("Última busca"),
     );
-    await p.locator("#st-default select").selectOption("devin");
+    await p.locator('#st-default [role="radio"]').filter({ hasText: "Devin" }).click();
     await until(async () => (await rpc.request("providers.getDefault", {})).provider === "devin");
     expect(
       (await rpc.request("providers.list", {})).find((provider) => provider.id === "devin")
@@ -265,16 +268,19 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
 test("installed CLIs with a login command can sign in and show the waiting state", async () => {
   const p = await settings();
   try {
-    const row = p.locator("#st-accounts .st-row").filter({ hasText: "Devin" });
+    const row = p.locator("#st-accounts .st-account-card").filter({ hasText: "Devin" });
     await row.waitFor();
-    expect(await row.locator(".badge").count()).toBe(0);
+    const devinInfo = (await rpc.request("providers.list", {})).find(
+      (provider) => provider.id === "devin",
+    );
+    expect(await row.locator(".badge").count()).toBe(devinInfo?.loggedIn === true ? 1 : 0);
     const button = row.getByRole("button");
-    expect(await button.innerText()).toBe("Entrar");
+    expect(await button.innerText()).toBe("Entrar com Devin");
     await button.click();
     await until(async () => (await button.innerText()) === "Aguardando o navegador…");
     await until(async () => await button.isDisabled());
     await until(
-      async () => (await button.innerText()) === "Entrar" && !(await button.isDisabled()),
+      async () => (await button.innerText()) === "Entrar com Devin" && !(await button.isDisabled()),
     );
   } finally {
     await p.close();

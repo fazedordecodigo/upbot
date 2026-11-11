@@ -8,6 +8,7 @@ export const PROVIDER_NAMES: Record<ProviderId, string> = {
   gemini: "Gemini",
   claude: "Claude",
   codex: "Codex",
+  aider: "Aider",
   "openai-compatible": "Compatível com OpenAI",
 };
 

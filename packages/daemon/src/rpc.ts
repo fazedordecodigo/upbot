@@ -237,6 +237,16 @@ export class Rpc {
         return this.extras.providers.scan();
       case "providers.login":
         return this.extras.providers.login((params as MethodParsedParams<typeof method>).provider);
+      case "providers.install":
+        return this.extras.providers.install(
+          (params as MethodParsedParams<typeof method>).provider,
+        );
+      case "providers.listApiKeys":
+        return this.extras.providers.listApiKeys();
+      case "providers.setEndpoint": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.providers.setEndpoint(p.url, p.apiKey);
+      }
       case "providers.setApiKey": {
         const p = params as MethodParsedParams<typeof method>;
         return this.extras.providers.setApiKey(p.provider, p.value);

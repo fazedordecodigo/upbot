@@ -14,6 +14,7 @@ export const iconNames = [
   "circle-pause",
   "circle-slash",
   "clock",
+  "copy",
   "cpu",
   "download",
   "eye-off",

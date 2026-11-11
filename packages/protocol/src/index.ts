@@ -12,6 +12,9 @@ import {
   providersCatalogMethods,
   providersCreateParams,
   toolPermissionMethods,
+  VmCredential,
+  VmCredentialKind,
+  VmCredentialProvider,
 } from "./providers-catalog";
 import {
   Task,
@@ -46,6 +49,7 @@ export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   gemini: "~/.gemini/settings.json",
   claude: "~/.claude/settings.json",
   codex: "~/.codex/config.toml",
+  aider: "~/.aider.conf.yml",
   "openai-compatible": null,
 };
 
@@ -57,6 +61,7 @@ export const ProviderId = z.enum([
   "gemini",
   "claude",
   "codex",
+  "aider",
   "openai-compatible",
 ]);
 export type ProviderId = z.infer<typeof ProviderId>;
@@ -515,24 +520,8 @@ const IdentityFile = z
   .max(1000)
   .regex(/^(?:\/|~\/)[^\n\r]*$/, "absolute path to a private key file")
   .nullable();
-/** Provider logins injected into Firecracker microVM sessions (values never leave the daemon). */
-export const VmCredentialProvider = z.enum([
-  "claude",
-  "codex",
-  "gemini",
-  "cursor",
-  "devin",
-  "grok",
-]);
-export type VmCredentialProvider = z.infer<typeof VmCredentialProvider>;
-export const VmCredentialKind = z.enum(["oauth_token", "api_key"]);
-export type VmCredentialKind = z.infer<typeof VmCredentialKind>;
-export const VmCredential = z.object({
-  provider: VmCredentialProvider,
-  kind: VmCredentialKind,
-  updatedAt: z.number(),
-});
-export type VmCredential = z.infer<typeof VmCredential>;
+// VmCredentialProvider, VmCredentialKind and VmCredential live in
+// providers-catalog.ts and are re-exported through `export *` above.
 
 export const AgentPlacement = z.object({
   agentId: z.string(),

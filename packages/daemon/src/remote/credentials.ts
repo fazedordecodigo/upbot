@@ -18,6 +18,8 @@ export const VM_CREDENTIAL_ENV: Record<
   cursor: { api_key: ["CURSOR_API_KEY"] },
   devin: { api_key: ["WINDSURF_API_KEY"] },
   grok: { api_key: ["XAI_API_KEY"] },
+  openrouter: { api_key: ["OPENROUTER_API_KEY"] },
+  "openai-compatible": { api_key: ["OPENAI_API_KEY"] },
 };
 
 const isProvider = (p: string): p is VmCredentialProvider => p in VM_CREDENTIAL_ENV;

@@ -4,11 +4,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   DefaultProvider,
+  OpenAiCompatibleEndpoint,
   type ProviderId,
   type ProviderInfo,
+  type ProviderKeyInfo,
   VmCredentialProvider,
 } from "@boto/protocol";
-import { getSetting, setSetting } from "./db/settings";
+import { deleteSetting, getSetting, setSetting } from "./db/settings";
 import { resolveCommand, spawnEnv } from "./env/login-path";
 import { spawnChild, waitForChildSpawn } from "./env/spawn";
 import { envOverride, envPositiveNumber } from "./env/vars";
@@ -19,14 +21,42 @@ import type { Broadcast } from "./rpc";
 import { RpcError } from "./runtime/agent-runtime";
 
 const CATALOG = {
-  claude: ["Claude Code", "npm install -g @anthropic-ai/claude-code"],
-  codex: ["Codex", "npm install -g @openai/codex"],
-  gemini: ["Gemini CLI", "npm install -g @google/gemini-cli"],
-  opencode: ["OpenCode", "npm install -g opencode-ai"],
-  cursor: ["Cursor", "curl -fsS https://cursor.com/install | bash"],
-  devin: ["Devin", "https://docs.devin.ai/work-with-devin/devin-cli"],
-  grok: ["Grok", "curl -fsSL https://x.ai/cli/install.sh | bash"],
+  claude: {
+    name: "Claude Code",
+    vendor: "Anthropic",
+    installHint: "npm install -g @anthropic-ai/claude-code",
+  },
+  codex: { name: "Codex CLI", vendor: "OpenAI", installHint: "npm install -g @openai/codex" },
+  gemini: {
+    name: "Gemini CLI",
+    vendor: "Google",
+    installHint: "npm install -g @google/gemini-cli",
+  },
+  cursor: {
+    name: "Cursor CLI",
+    vendor: "Cursor",
+    installHint: "curl -fsS https://cursor.com/install | bash",
+  },
+  opencode: {
+    name: "OpenCode",
+    vendor: "Código aberto",
+    installHint: "npm install -g opencode-ai",
+  },
+  aider: { name: "Aider", vendor: "Código aberto", installHint: "pipx install aider-chat" },
+  devin: {
+    name: "Devin",
+    vendor: "Cognition",
+    installHint: "https://docs.devin.ai/work-with-devin/devin-cli",
+  },
+  grok: {
+    name: "Grok",
+    vendor: "xAI",
+    installHint: "curl -fsSL https://x.ai/cli/install.sh | bash",
+  },
 } as const;
+
+const ENDPOINT_SETTING = "openai_compatible_endpoint";
+const DEFAULT_INSTALL_TIMEOUT_MS = 600_000;
 
 const DEVIN_API_KEY_RE = /windsurf_api_key\s*=\s*["']([^"'\n]+)["']/;
 const DEFAULT_DEVIN_LOGIN_WATCH_MS = 600_000;
@@ -63,6 +93,8 @@ function readDevinApiKey(): string | null {
 export class ProvidersService {
   private detected: Promise<ProviderInfo[]> | undefined;
   private running = new Set<ProviderId>();
+  private installing = new Set<ProviderId>();
+  private installErrors = new Map<ProviderId, string>();
   private devinWatch: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -107,7 +139,7 @@ export class ProvidersService {
 
   private async detect(): Promise<ProviderInfo[]> {
     return Promise.all(
-      Object.entries(CATALOG).map(async ([id, [name, installHint]]) => {
+      Object.entries(CATALOG).map(async ([id, { name, vendor, installHint }]) => {
         const provider = id as ProviderId;
         const command = commandFor(provider);
         const path = command?.[0] ? resolveCommand(command[0]) : null;
@@ -118,9 +150,12 @@ export class ProvidersService {
         return {
           id: provider,
           name,
+          vendor,
           installed: path !== null,
           path,
           installHint,
+          installRunning: false,
+          installError: null,
           version: path && !overridden ? await this.version(path) : null,
           loggedIn: null,
           canLogin: loginOverride !== null || (path !== null && !!LOGIN_COMMANDS[provider]),
@@ -159,6 +194,8 @@ export class ProvidersService {
         apiKeyMasked,
         hasApiKey: apiKeyMasked !== null,
         loginRunning: this.running.has(info.id),
+        installRunning: this.installing.has(info.id),
+        installError: this.installErrors.get(info.id) ?? null,
         ready: info.installed && (loggedIn !== false || apiKeyMasked !== null),
       };
     });
@@ -216,6 +253,97 @@ export class ProvidersService {
     return this.info(provider);
   }
 
+  /** Runs the catalog install command in the background (no terminal window) and
+   * rescans when it exits. URL-only hints (docs links) cannot be installed. */
+  async install(provider: ProviderId): Promise<ProviderInfo> {
+    const info = await this.info(provider);
+    if (info.installed || this.installing.has(provider)) return info;
+    const hint = info.installHint.trim();
+    if (!hint || /^https?:\/\//i.test(hint))
+      throw new RpcError("bad_request", "provider install unavailable");
+    const override = envOverride(
+      `BOTO_PROVIDER_INSTALL_COMMAND_${provider.toUpperCase().replace(/-/g, "_")}`,
+    );
+    const command =
+      override ??
+      (process.platform === "win32"
+        ? ["powershell.exe", "-NoProfile", "-Command", hint]
+        : ["sh", "-c", hint]);
+    const [bin, ...args] = command;
+    if (!bin) throw new RpcError("bad_request", "provider install unavailable");
+    this.installing.add(provider);
+    this.installErrors.delete(provider);
+    try {
+      const child = spawnChild(bin, args, {
+        env: spawnEnv(),
+        stdio: "ignore",
+      });
+      const timer = setTimeout(
+        () => {
+          this.installErrors.set(provider, "install timed out");
+          child.kill("SIGKILL");
+        },
+        envPositiveNumber("BOTO_PROVIDER_INSTALL_MS", DEFAULT_INSTALL_TIMEOUT_MS),
+      );
+      timer.unref();
+      let finished = false;
+      const finish = (error: string | null) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        this.installing.delete(provider);
+        if (error) this.installErrors.set(provider, error);
+        void this.scan().catch(() => {});
+      };
+      child.once("error", (e) => finish(`install failed to start: ${e.message}`));
+      child.once("close", (code) =>
+        finish(code === 0 ? null : `install exited with code ${code ?? "unknown"}`),
+      );
+      await waitForChildSpawn(child);
+      child.unref();
+    } catch {
+      this.installing.delete(provider);
+      throw new RpcError("bad_request", "provider install unavailable");
+    }
+    this.broadcast("providers.changed", {});
+    return this.info(provider);
+  }
+
+  private endpoint(): string {
+    return getSetting(this.db, ENDPOINT_SETTING, OpenAiCompatibleEndpoint, "");
+  }
+
+  private keyInfo(provider: VmCredentialProvider): ProviderKeyInfo {
+    const apiKeyMasked = this.credentials.maskedApiKey(provider);
+    return {
+      provider,
+      hasApiKey: apiKeyMasked !== null,
+      apiKeyMasked,
+      endpoint: provider === "openai-compatible" ? this.endpoint() : null,
+    };
+  }
+
+  listApiKeys(): ProviderKeyInfo[] {
+    return VmCredentialProvider.options.map((provider) => this.keyInfo(provider));
+  }
+
+  /** Saves the OpenAI-compatible base URL and, when given, its API key. Local
+   * servers often take no key, and an omitted key keeps the stored one. */
+  async setEndpoint(url: string, apiKey?: string): Promise<ProviderKeyInfo> {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new RpcError("bad_request", "invalid endpoint url");
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+      throw new RpcError("bad_request", "invalid endpoint url");
+    if (apiKey !== undefined) this.credentials.set("openai-compatible", "api_key", apiKey);
+    setSetting(this.db, ENDPOINT_SETTING, parsed.toString());
+    this.broadcast("providers.changed", {});
+    return this.keyInfo("openai-compatible");
+  }
+
   /** `devin acp` ignores the CLI's own credential store, so a terminal sign-in alone
    * reaches no session. After a Devin login, watch credentials.toml and mirror its
    * API key into the vault: the stored `vmcred.devin` key is handed to every `devin
@@ -249,13 +377,19 @@ export class ProvidersService {
     return true;
   }
 
-  async setApiKey(provider: VmCredentialProvider, value?: string): Promise<ProviderInfo> {
+  async setApiKey(
+    provider: VmCredentialProvider,
+    value?: string,
+  ): Promise<ProviderInfo | ProviderKeyInfo> {
     if (provider === "devin") this.disarmDevinCredentialHarvest();
     if (value !== undefined) this.credentials.set(provider, "api_key", value);
     else if (this.credentials.list().some((c) => c.provider === provider && c.kind === "api_key"))
       this.credentials.delete(provider);
+    if (provider === "openai-compatible" && value === undefined)
+      deleteSetting(this.db, ENDPOINT_SETTING);
     this.broadcast("providers.changed", {});
-    return this.info(provider);
+    const info = (await this.list()).find((p) => p.id === provider);
+    return info ?? this.keyInfo(provider);
   }
 
   getDefault(): { provider: ProviderId | null } {

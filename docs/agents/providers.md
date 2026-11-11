@@ -15,6 +15,24 @@ API keys use the encrypted VM credential store and only masked suffixes reach th
 new bots without an explicit provider use it. With no saved default, creation still
 requires a provider, as before.
 
+The catalog covers eight providers: claude, codex, gemini, cursor, opencode, aider
+(`aider --acp`), devin and grok. Each entry carries the display `name`, `vendor`
+and `installHint` shown in Settings. `providers.install` runs a supported
+provider's install hint in the background (`sh -c` on Unix, PowerShell on Windows;
+URL-only hints like Devin's docs link are rejected) while `installRunning` /
+`installError` track it, then rescans and broadcasts `providers.changed`.
+`BOTO_PROVIDER_INSTALL_COMMAND_<PROVIDER>` accepts a JSON command array for tests
+and `BOTO_PROVIDER_INSTALL_MS` bounds the run.
+`providers.listApiKeys` reports masked-key state for every `VmCredentialProvider`
+— the six CLI providers plus `openrouter` (`OPENROUTER_API_KEY`) and
+`openai-compatible`. `providers.setApiKey`/`deleteApiKey` accept the same set;
+results are `ProviderInfo` for catalog providers and `ProviderKeyInfo` for the
+non-catalog ones. `providers.setEndpoint {url, apiKey?}` stores the
+OpenAI-compatible base URL in settings (`openai_compatible_endpoint`) and the
+optional key in the vault; deleting the key also clears the URL. The
+`openai-compatible` driver itself is still unsupported, so a configured endpoint
+cannot run sessions or become the default yet.
+
 ## Native Claude + Codex (Phase 4)
 
 `src/providers/index.ts` routes providers: `claude` -> `ClaudeDriver` (`claude.ts`),

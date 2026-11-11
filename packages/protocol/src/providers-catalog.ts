@@ -14,16 +14,19 @@ const CatalogProvider = z.enum([
   "devin",
   "grok",
   "openai-compatible",
+  "aider",
 ]);
-const KeyProvider = CatalogProvider.exclude(["opencode", "openai-compatible"]);
 export const DefaultProvider = CatalogProvider.nullable();
 export const ProviderInfo = z.object({
   id: CatalogProvider,
   name: z.string(),
+  vendor: z.string(),
   installed: z.boolean(),
   version: z.string().nullable(),
   path: z.string().nullable(),
   installHint: z.string(),
+  installRunning: z.boolean(),
+  installError: z.string().nullable(),
   loggedIn: z.boolean().nullable(),
   hasApiKey: z.boolean(),
   apiKeyMasked: z.string().nullable(),
@@ -32,6 +35,36 @@ export const ProviderInfo = z.object({
   ready: z.boolean(),
 });
 export type ProviderInfo = z.infer<typeof ProviderInfo>;
+/** Provider logins injected into Firecracker microVM sessions (values never leave the daemon). */
+export const VmCredentialProvider = z.enum([
+  "claude",
+  "codex",
+  "gemini",
+  "cursor",
+  "devin",
+  "grok",
+  "openrouter",
+  "openai-compatible",
+]);
+export type VmCredentialProvider = z.infer<typeof VmCredentialProvider>;
+export const VmCredentialKind = z.enum(["oauth_token", "api_key"]);
+export type VmCredentialKind = z.infer<typeof VmCredentialKind>;
+export const VmCredential = z.object({
+  provider: VmCredentialProvider,
+  kind: VmCredentialKind,
+  updatedAt: z.number(),
+});
+export type VmCredential = z.infer<typeof VmCredential>;
+/** Saved-key status for one credential provider; `endpoint` is the configured
+ * OpenAI-compatible base URL and stays null for every other provider. */
+export const ProviderKeyInfo = z.object({
+  provider: VmCredentialProvider,
+  hasApiKey: z.boolean(),
+  apiKeyMasked: z.string().nullable(),
+  endpoint: z.string().nullable(),
+});
+export type ProviderKeyInfo = z.infer<typeof ProviderKeyInfo>;
+export const OpenAiCompatibleEndpoint = z.string().trim().max(2048);
 const empty = z.object({}).strict();
 const PermissionLevel = z.enum(["ask", "allow", "off"]);
 export const ToolPermission = z.object({
@@ -54,17 +87,24 @@ export const toolPermissionMethods = {
   },
 };
 const provider = z.object({ provider: CatalogProvider }).strict();
+const apiKey = z.string().trim().min(8).max(4096);
 export const providersCatalogMethods = {
   "providers.list": { params: empty, result: z.array(ProviderInfo) },
   "providers.scan": { params: empty, result: z.array(ProviderInfo) },
   "providers.login": { params: provider, result: ProviderInfo },
+  "providers.install": { params: provider, result: ProviderInfo },
+  "providers.listApiKeys": { params: empty, result: z.array(ProviderKeyInfo) },
   "providers.setApiKey": {
-    params: z.object({ provider: KeyProvider, value: z.string().trim().min(8).max(4096) }).strict(),
-    result: ProviderInfo,
+    params: z.object({ provider: VmCredentialProvider, value: apiKey }).strict(),
+    result: z.union([ProviderInfo, ProviderKeyInfo]),
   },
   "providers.deleteApiKey": {
-    params: z.object({ provider: KeyProvider }).strict(),
-    result: ProviderInfo,
+    params: z.object({ provider: VmCredentialProvider }).strict(),
+    result: z.union([ProviderInfo, ProviderKeyInfo]),
+  },
+  "providers.setEndpoint": {
+    params: z.object({ url: OpenAiCompatibleEndpoint.min(8), apiKey: apiKey.optional() }).strict(),
+    result: ProviderKeyInfo,
   },
   "providers.getDefault": { params: empty, result: z.object({ provider: DefaultProvider }) },
   "providers.setDefault": { params: provider, result: provider },

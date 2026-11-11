@@ -32,6 +32,13 @@ test.skipIf(process.platform === "win32")(
       `#!/bin/sh\n/bin/sleep 0.3\n/bin/mkdir -p '${root}/.codex'\nprintf '{}' > '${root}/.codex/auth.json'\n`,
     );
     chmodSync(login, 0o755);
+    const aiderBin = join(bin, "aider");
+    const installer = join(root, "install-aider");
+    writeFileSync(
+      installer,
+      `#!/bin/sh\nprintf '#!/bin/sh\\nprintf "aider 0.1.0\\\\n"\\n' > '${aiderBin}'\n/bin/chmod +x '${aiderBin}'\n`,
+    );
+    chmodSync(installer, 0o755);
     const missing = JSON.stringify([join(root, "missing")]);
     const daemon = await startDaemon(
       root,
@@ -48,6 +55,7 @@ test.skipIf(process.platform === "win32")(
         BOTO_PROVIDER_COMMAND_CURSOR: missing,
         BOTO_PROVIDER_COMMAND_DEVIN: missing,
         BOTO_PROVIDER_COMMAND_GROK: missing,
+        BOTO_PROVIDER_INSTALL_COMMAND_AIDER: JSON.stringify([installer]),
         BOTO_PROVIDER_LOGIN_COMMAND_CODEX: JSON.stringify([login]),
         BOTO_PROVIDER_TERMINAL_COMMAND: JSON.stringify(["/bin/sh", "-c", 'exec "$@"', "login"]),
       },
@@ -67,7 +75,7 @@ test.skipIf(process.platform === "win32")(
     const secret = "test-provider-private-key-1234";
     try {
       const initial = await client.request("providers.list", {});
-      expect(initial).toHaveLength(7);
+      expect(initial).toHaveLength(8);
       expect(initial.find((p) => p.id === "codex")).toMatchObject({
         installed: true,
         path: codex,
@@ -154,6 +162,63 @@ test.skipIf(process.platform === "win32")(
       expect(await client.request("vmCredentials.list", {})).toContainEqual(
         expect.objectContaining({ provider: "claude", kind: "oauth_token" }),
       );
+      const keyRows = await client.request("providers.listApiKeys", {});
+      expect(keyRows).toHaveLength(8);
+      expect(keyRows.find((k) => k.provider === "openrouter")).toMatchObject({
+        hasApiKey: false,
+        apiKeyMasked: null,
+        endpoint: null,
+      });
+      expect(keyRows.find((k) => k.provider === "openai-compatible")).toMatchObject({
+        hasApiKey: false,
+        endpoint: "",
+      });
+      await client.request("providers.setApiKey", { provider: "openrouter", value: secret });
+      expect(
+        (await client.request("providers.listApiKeys", {})).find(
+          (k) => k.provider === "openrouter",
+        ),
+      ).toMatchObject({ hasApiKey: true, apiKeyMasked: "••••1234" });
+      await client.request("providers.setEndpoint", {
+        url: "http://localhost:11434/v1",
+        apiKey: secret,
+      });
+      expect(
+        (await client.request("providers.listApiKeys", {})).find(
+          (k) => k.provider === "openai-compatible",
+        ),
+      ).toMatchObject({
+        hasApiKey: true,
+        apiKeyMasked: "••••1234",
+        endpoint: "http://localhost:11434/v1",
+      });
+      await expect(
+        client.request("providers.setEndpoint", { url: "ftp://example.com/v1", apiKey: secret }),
+      ).rejects.toMatchObject({ code: "bad_request" });
+      await client.request("providers.deleteApiKey", { provider: "openai-compatible" });
+      expect(
+        (await client.request("providers.listApiKeys", {})).find(
+          (k) => k.provider === "openai-compatible",
+        ),
+      ).toMatchObject({ hasApiKey: false, apiKeyMasked: null, endpoint: "" });
+      await expect(
+        client.request("providers.install", { provider: "devin" }),
+      ).rejects.toMatchObject({ code: "bad_request" });
+      expect(
+        (await client.request("providers.list", {})).find((p) => p.id === "aider"),
+      ).toMatchObject({ installed: false });
+      await client.request("providers.install", { provider: "aider" });
+      const installDeadline = Date.now() + 5000;
+      let aider = (await client.request("providers.list", {})).find((p) => p.id === "aider");
+      while (!aider?.installed && Date.now() < installDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        aider = (await client.request("providers.list", {})).find((p) => p.id === "aider");
+      }
+      expect(aider).toMatchObject({
+        installed: true,
+        installRunning: false,
+        installError: null,
+      });
     } finally {
       await stopDaemon(daemon, client);
       expect(await daemon.stderrText).not.toContain(secret);

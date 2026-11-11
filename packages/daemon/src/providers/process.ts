@@ -15,6 +15,7 @@ export const DEFAULT_COMMANDS: Record<ProviderId, string[] | null> = {
   gemini: ["gemini", "--acp"],
   claude: ["claude"],
   codex: ["codex", "app-server", "--listen", "stdio://"],
+  aider: ["aider", "--acp"],
   "openai-compatible": null,
 };
 
