@@ -1,15 +1,16 @@
-# The bots' computer: a complete local Linux VM on this Mac (Lima + Apple Virtualization).
-# The daemon materializes this file under the data dir and runs
+# The bots' computer: a complete local Linux VM on this machine (Lima; vz on macOS,
+# qemu on Linux, wsl2 on Windows — the daemon rewrites vmType/mountType/mounts/images
+# for the host OS when it materializes this file under the data dir, then runs
 # `limactl create --name <instance>` with it; override the instance name with
 # BOTO_LIMA_INSTANCE (default "boto-computer").
 #
 # Manual use from the repo root:
 #   limactl create --name boto-computer vm/boto-computer.yaml && limactl start boto-computer
 #
-# Inside: Debian 12, Xvfb :0 + Openbox (live desktop via `boto-host guest-desktop`),
-# Chromium (DevTools on 127.0.0.1:9222, forwarded to the Mac as :47222), noVNC on
+# Inside: Debian, Xvfb :0 + Openbox (live desktop via `boto-host guest-desktop`),
+# Chromium (DevTools on 127.0.0.1:9222, forwarded to the host as :47222), noVNC on
 # 127.0.0.1:47080 for direct access, the seven provider CLIs, Bun, Node 22.
-# The bot's files shared with the Mac live at /workspace (~/Boto/computer/workspace).
+# The bot's files shared with the host live at /workspace (~/Boto/computer/workspace).
 minimumLimaVersion: 2.0.0
 vmType: vz
 cpus: 2
@@ -38,6 +39,18 @@ containerd:
   system: false
   user: false
 provision:
+  # Runs before Lima's own dependency install. WSL-imported rootfs images
+  # (vmType: wsl2 on Windows — Debian_WSL ships no sshd) need openssh-server or
+  # Lima never gets its SSH channel into the guest; no-op on cloud images.
+  - mode: dependency
+    script: |
+      if ! command -v sshd >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y --no-install-recommends openssh-server
+      fi
+      # Debian's postinst starts sshd when systemd is up; cover the rest.
+      systemctl enable --now ssh 2>/dev/null || service ssh start 2>/dev/null || true
   - mode: system
     script: |
       set -eux
@@ -111,7 +124,7 @@ provision:
       install -d -o "$u" -g "$u" "$h/.config/openbox" "$h/.vnc" "$h/.boto-chrome"
       cat > "$h/.config/openbox/autostart" <<'AUTOSTART'
       # Desktop session: compositor, backdrop color, dock, then Chromium maximized with DevTools
-      # on 127.0.0.1:9222 (forwarded to the Mac for Playwright/CDP).
+      # on 127.0.0.1:9222 (forwarded to the host for Playwright/CDP).
       xcompmgr -n &
       xsetroot -solid "#101418" &
       (sleep 1; plank) &
@@ -169,16 +182,29 @@ provision:
       [Install]
       WantedBy=multi-user.target
       UNIT
-      systemctl daemon-reload
-      systemctl enable --now boto-xvfb boto-desktop boto-vnc boto-novnc
-  # The VM can't reach this Mac: host.lima.internal is the Mac's own 127.0.0.1 (its admin panel,
+      # systemd units cover real VMs; a rootfs booted without systemd (some WSL
+      # imports) gets the same daemons spawned directly instead.
+      if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+        systemctl enable --now boto-xvfb boto-desktop boto-vnc boto-novnc
+      else
+        x11vnc -storepasswd "$(cat /mnt/boto/vnc-password)" "$h/.vnc/passwd"
+        su - "$u" -c 'nohup Xvfb :0 -screen 0 1280x800x24 -nolisten tcp >/tmp/boto-xvfb.log 2>&1 &'
+        sleep 1
+        su - "$u" -c 'DISPLAY=:0 LANG=pt_BR.UTF-8 nohup dbus-launch --exit-with-session openbox-session >/tmp/boto-desktop.log 2>&1 &'
+        su - "$u" -c 'nohup x11vnc -display :0 -rfbauth "$HOME/.vnc/passwd" -localhost -forever -shared -rfbport 5901 -noxdamage -quiet >/tmp/boto-vnc.log 2>&1 &'
+        su - "$u" -c 'nohup websockify --web /usr/share/novnc 0.0.0.0:6080 127.0.0.1:5901 >/tmp/boto-novnc.log 2>&1 &'
+      fi
+  # The VM can't reach this host: host.lima.internal is the host's own 127.0.0.1 (its admin panel,
   # voice server...). Replies, DNS and DHCP pass; the rest is refused. Re-applied every boot
-  # because the rules don't survive one.
+  # because the rules don't survive one. Under vmType wsl2 host.lima.internal may not
+  # resolve; there the host is simply the guest's default gateway, so both are blocked.
   - mode: system
     script: |
       set -eu
       command -v iptables-restore >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends iptables
-      h=$(getent ahostsv4 host.lima.internal | awk 'NR==1{print $1}'); [ -n "$h" ] || h=192.168.5.2
+      h=$(getent ahostsv4 host.lima.internal | awk 'NR==1{print $1}')
+      gw=$(ip -4 route show default | awk '{print $3; exit}')
       iptables-restore --noflush <<'RULES'
       *filter
       :BOTO-HOST - [0:0]
@@ -190,7 +216,10 @@ provision:
       -A BOTO-HOST -j REJECT
       COMMIT
       RULES
-      iptables -C OUTPUT -d "$h" -j BOTO-HOST 2>/dev/null || iptables -I OUTPUT 1 -d "$h" -j BOTO-HOST
+      for b in "$h" "$gw" 192.168.5.2; do
+        [ -n "$b" ] || continue
+        iptables -C OUTPUT -d "$b" -j BOTO-HOST 2>/dev/null || iptables -I OUTPUT 1 -d "$b" -j BOTO-HOST
+      done
 images:
   - location: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2
     arch: aarch64
