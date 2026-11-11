@@ -221,6 +221,7 @@ export class AgentRuntime {
     private sharedDirs: () => string[] = () => [],
     private tasks: () => TaskRuntimeHooks | null = () => null,
     private memoryUsage: (turnId: string) => MemoryUsage = () => ({ count: 0, kinds: [] }),
+    private apiKeyFor: (provider: string) => string | null = () => null,
     private opts: RuntimeOptions = {},
   ) {}
 
@@ -432,6 +433,7 @@ export class AgentRuntime {
         resumeSessionId,
         hooks: this.hooks(tag, scope),
         mcpServers: remote ? servers.map((s) => remote.mcp(s)) : servers,
+        apiKey: this.apiKeyFor(this.agent.provider),
         ...(remote ? { remote } : { extraDirs: this.sharedDirs() }),
       });
       this.sessionTag = tag;

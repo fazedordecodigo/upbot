@@ -22,7 +22,7 @@ requires a provider, as before.
 stderr tail, JSONL and auth helpers live in `process.ts`.
 
 - Claude: `claude --output-format stream-json --input-format stream-json --verbose
-  --include-partial-messages --permission-prompt-tool stdio --permission-mode default`
+--include-partial-messages --permission-prompt-tool stdio --permission-mode default`
   plus `--session-id <uuid>` (new) or `--resume <id>`; a failed resume falls back to a
   new session. Approvals arrive as `can_use_tool` control requests; cancel sends an
   `interrupt` control request. Config: `mode` (default/acceptEdits/plan, never bypass) and
@@ -70,6 +70,15 @@ Cursor's link so only `grok` is exposed there for Grok.
 Remote Grok runs `grok --no-auto-update agent stdio`; with a VM key the client sends
 `authenticate {methodId:"xai.api_key", _meta:{headless:true}}` after initialize, before
 session/new or load, even though initialize advertises only grok.com authentication.
-Devin runs `devin acp`. Both credentials are configured in Settings → Hosts. Signed-out
-sessions report `devin auth login` / `grok login`; fake API keys report a rejected VM
-credential. Real-provider tests cover delivery, placement isolation and plaintext leaks.
+Devin runs `devin acp`. Its ACP server never reads local CLI credentials: the host must
+call `authenticate` on every spawned process, so `devin auth login` signs in only the
+REPL. With the saved API key (Settings → Providers, `vmcred.devin`, also delivered to
+microVMs as `WINDSURF_API_KEY`) Boto sends `authenticate {methodId, _meta:{api_key}}`
+after initialize — `methodId` is the advertised browser method (`devin-browser`,
+falling back to the first advertised id). With no key, a local `session/new` or
+`session/load` failing -32000 triggers `authenticate` on that browser method (PKCE
+opens the user's browser and blocks; `BOTO_ACP_BROWSER_AUTH_MS` overrides the
+five-minute bound) and retries once. Remote sessions without a key fail straight to
+`auth_required` — a VM has no browser. Signed-out sessions report the Settings →
+Providers guidance / `grok login`; fake API keys report a rejected VM credential.
+Real-provider tests cover delivery, placement isolation and plaintext leaks.

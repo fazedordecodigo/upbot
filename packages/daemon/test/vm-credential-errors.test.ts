@@ -63,11 +63,11 @@ describe("microVM credential rejection messages", () => {
     expect(isVmCredentialRejection("network connection timed out")).toBe(false);
   });
 
-  test("maps signed-out Devin and Grok messages to login commands", () => {
+  test("maps signed-out Devin and Grok messages to login guidance", () => {
     expect(
       mapAcpAuthError("devin", new Error("Please log in to use Devin. Use `/login`"), null)
         ?.message,
-    ).toContain("devin auth login");
+    ).toContain("Save a Devin API key under Settings → Providers");
     expect(
       mapAcpAuthError(
         "grok",

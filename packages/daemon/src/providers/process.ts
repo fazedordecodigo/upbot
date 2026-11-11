@@ -33,6 +33,12 @@ const LOGIN_HINTS: Partial<Record<ProviderId, string>> = {
   gemini: "and choose Sign in with Google, Use Gemini API Key or Vertex AI",
 };
 
+/** Sign-in instructions for providers whose terminal login does not cover agent sessions. */
+const AUTH_GUIDANCE: Partial<Record<ProviderId, string>> = {
+  devin:
+    "Save a Devin API key under Settings → Providers, or approve the browser sign-in that opens when a session starts",
+};
+
 export const AUTH_RE =
   /\b(auth(entication)?[ _-]?(required|failed)|failed to authenticate|unauthori[sz]ed|not (logged|signed) in|log ?in required|sign ?in required|please run \/login|please log in)\b/i;
 
@@ -42,7 +48,9 @@ const VM_CREDENTIAL_REJECTION_RE =
 export function authMessage(provider: ProviderId, detail = ""): string {
   const loginCmd = LOGIN_COMMANDS[provider] ?? "its login command";
   const hint = LOGIN_HINTS[provider];
-  return `${provider} requires sign-in. Run \`${loginCmd}\` in a terminal${hint ? ` ${hint}` : ""}.${detail ? ` (${detail})` : ""}`;
+  const how =
+    AUTH_GUIDANCE[provider] ?? `Run \`${loginCmd}\` in a terminal${hint ? ` ${hint}` : ""}`;
+  return `${provider} requires sign-in. ${how}.${detail ? ` (${detail})` : ""}`;
 }
 
 export function redactSecrets(s: string): string {

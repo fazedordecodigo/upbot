@@ -77,6 +77,9 @@ export type StartOpts = {
   hooks: ProviderHooks;
   mcpServers?: McpServerSpec[];
   remote?: RemoteLaunch;
+  /** Provider API key saved in Settings → Providers, for drivers that authenticate
+   * in-band (ACP `authenticate`). MicroVM credentials arrive via remote.credentials. */
+  apiKey?: string | null;
   /** Extra writable directories (local sessions only), e.g. the shared bot workspace. */
   extraDirs?: string[];
 };

@@ -62,7 +62,12 @@ for (const behavior of ["resume", "unknown", "error", "close", "auth", "new-erro
       const log = readLog(stateDir);
       expect(
         log.filter((entry) => entry.method === "session/load").map((entry) => entry.params),
-      ).toMatchObject([{ sessionId: oldSessionId }]);
+      ).toMatchObject(
+        // -32000 retries once after the browser sign-in attempt
+        behavior === "auth"
+          ? [{ sessionId: oldSessionId }, { sessionId: oldSessionId }]
+          : [{ sessionId: oldSessionId }],
+      );
       const prompts = log
         .filter((entry) => entry.method === "session/prompt")
         .map((entry) => entry.params as { sessionId: string; prompt: { text: string }[] });
@@ -81,7 +86,7 @@ for (const behavior of ["resume", "unknown", "error", "close", "auth", "new-erro
       if (behavior === "auth" || behavior === "new-error") {
         expect(turn.status).toBe("failed");
         expect(turn.error).toContain(
-          behavior === "auth" ? "devin auth login" : "new session unavailable",
+          behavior === "auth" ? "Save a Devin API key" : "new session unavailable",
         );
         expect(prompts).toHaveLength(1);
         expect(log.filter((entry) => entry.method === "session/new")).toHaveLength(

@@ -231,6 +231,8 @@ async function main() {
   const bridge = new Bridge(store, () => runtimes, sharedRoot);
   const memories = new MemoryStore(db);
   const skills = new SkillLibrary(sharedRoot);
+  const vault = new Vault(db, dataDir);
+  const vmCredentials = new VmCredentials(vault);
   const runtimes = new RuntimeManager(
     store,
     chat,
@@ -244,6 +246,7 @@ async function main() {
     (id) => hosts.launchFor(id, bridge.port),
     () => [workspaceRoot],
     (turnId) => memories.usage(turnId),
+    (provider) => vmCredentials.apiKey(provider),
   );
   const subagents = new SubagentService(db, store, chat, queue, () => runtimes, hosts, broadcast);
   bridge.subagents = subagents;
@@ -256,8 +259,6 @@ async function main() {
   const routines = new RoutineService(db, store, () => runtimes, broadcast);
   const browser = new BrowserService(join(dataDir, "browser-profile"), broadcast);
   bridge.browser = browser;
-  const vault = new Vault(db, dataDir);
-  const vmCredentials = new VmCredentials(vault);
   const providers = new ProvidersService(db, vmCredentials, broadcast);
   hosts.credentialEnv = (provider) => vmCredentials.env(provider);
   const computer = new ComputerUse(db);

@@ -91,6 +91,8 @@ const state = {
     effort: undefined as string | undefined,
   },
 };
+// Per-process like a real ACP agent (never persisted to state.json).
+let authenticated = false;
 try {
   Object.assign(state, JSON.parse(readFileSync(join(STATE_DIR, "state.json"), "utf8")));
 } catch {}
@@ -464,7 +466,9 @@ acp
         promptCapabilities: { image: false, audio: false, embeddedContext: true },
         mcpCapabilities: { http: false, sse: false },
       },
-      authMethods: [],
+      authMethods: process.env.FAKE_ACP_AUTH_METHODS
+        ? JSON.parse(process.env.FAKE_ACP_AUTH_METHODS)
+        : [],
     } as never;
   })
   .onRequest("authenticate", async (ctx) => {
@@ -472,10 +476,14 @@ acp
     if (process.env.FAKE_ACP_AUTH_ERROR) {
       throw new acp.RequestError(-32603, process.env.FAKE_ACP_AUTH_ERROR);
     }
+    authenticated = true;
     return {};
   })
   .onRequest("session/new", async (ctx) => {
     logRequest("session/new", ctx.params);
+    if (process.env.FAKE_ACP_REQUIRE_AUTH && !authenticated) {
+      throw new acp.RequestError(-32000, "ACP host has not authenticated");
+    }
     if (process.env.FAKE_ACP_NEW_ERROR) {
       const code = Number.parseInt(process.env.FAKE_ACP_NEW_ERROR_CODE ?? "", 10) || -32603;
       throw new acp.RequestError(code, process.env.FAKE_ACP_NEW_ERROR);
@@ -495,6 +503,9 @@ acp
   .onRequest("session/load", async (ctx) => {
     const params = ctx.params as { sessionId: string; cwd?: string; mcpServers?: McpSpec[] };
     logRequest("session/load", params);
+    if (process.env.FAKE_ACP_REQUIRE_AUTH && !authenticated) {
+      throw new acp.RequestError(-32000, "ACP host has not authenticated");
+    }
     if (process.env.FAKE_ACP_LOAD_BEHAVIOR === "close") process.exit(1);
     if (process.env.FAKE_ACP_LOAD_BEHAVIOR === "error") throw new Error("session load failed");
     if (process.env.FAKE_ACP_LOAD_BEHAVIOR === "auth") throw acp.RequestError.authRequired();
