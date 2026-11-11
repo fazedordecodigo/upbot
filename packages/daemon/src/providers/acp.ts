@@ -70,6 +70,7 @@ const PROMPT_PROGRESS_UPDATES = new Set([
   "tool_call",
   "tool_call_update",
   "plan",
+  "plan_update",
 ]);
 
 function isPromptProgressUpdate(params: unknown): boolean {
@@ -268,6 +269,7 @@ type SessionUpdatePayload = {
   content2?: never;
   locations?: { path?: string }[];
   entries?: { content?: unknown; status?: unknown; priority?: unknown }[];
+  plan?: { planId?: unknown; type?: unknown; entries?: unknown; content?: unknown };
   currentModeId?: string;
   configOptions?: unknown;
 };
@@ -324,9 +326,16 @@ function mapUpdate(params: unknown): NormalizedUpdate {
       if (d !== null) out.detail = d;
       return out;
     }
-    case "plan": {
+    case "plan":
+    case "plan_update": {
+      const raw =
+        u.sessionUpdate === "plan"
+          ? u.entries
+          : u.plan?.type === "items" && Array.isArray(u.plan?.entries)
+            ? (u.plan.entries as unknown[])
+            : [];
       const entries: PlanEntry[] = [];
-      for (const e of Array.isArray(u.entries) ? u.entries : []) {
+      for (const e of raw as { content?: unknown; status?: unknown }[]) {
         const content = typeof e?.content === "string" ? e.content.trim() : "";
         if (!content) continue;
         entries.push({
@@ -339,7 +348,9 @@ function mapUpdate(params: unknown): NormalizedUpdate {
                 : "pending",
         });
       }
-      return entries.length ? { type: "plan", entries } : { type: "ignored", kind: "plan" };
+      return entries.length
+        ? { type: "plan", entries }
+        : { type: "ignored", kind: u.sessionUpdate };
     }
     case "config_option_update":
       return { type: "config_update", configOptions: normalizeConfigOptions(u) };
