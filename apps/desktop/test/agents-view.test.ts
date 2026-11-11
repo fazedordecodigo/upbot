@@ -302,6 +302,7 @@ test("machine thumbnails refresh, survive RPC errors and do not leak between age
     height: 800,
     taskId: null,
     thumbnailAt: null,
+    apps: [],
   }));
   let failure = false;
   let brokenImage = false;

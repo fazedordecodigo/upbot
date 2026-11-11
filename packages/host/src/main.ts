@@ -1175,6 +1175,35 @@ export function performDesktopEvents(display: string, events: DesktopInputEvent[
   return kind;
 }
 
+/** GUI apps installed in the guest, as a launcher menu would list them (.desktop entries). */
+function installedApps(): string[] {
+  const dirs = [
+    "/usr/local/share/applications",
+    "/usr/share/applications",
+    join(homedir(), ".local/share/applications"),
+  ];
+  const names = new Set<string>();
+  for (const dir of dirs) {
+    let files: string[];
+    try {
+      files = readdirSync(dir).filter((f) => f.endsWith(".desktop"));
+    } catch {
+      continue;
+    }
+    for (const file of files.sort()) {
+      try {
+        const text = readFileSync(join(dir, file), "utf8");
+        if (/^\s*(NoDisplay|Hidden)\s*=\s*true\s*$/im.test(text)) continue;
+        const type = /^\s*Type\s*=\s*(.+?)\s*$/im.exec(text)?.[1];
+        if (type && type !== "Application") continue;
+        const name = /^\s*Name\s*=\s*(.+?)\s*$/im.exec(text)?.[1];
+        if (name) names.add(name);
+      } catch {}
+    }
+  }
+  return [...names].sort((a, b) => a.localeCompare(b)).slice(0, 64);
+}
+
 /** Guest side (vsock 5900 via socat): drives DISPLAY :0 with xdotool and grabs frames with scrot. */
 async function guestDesktop() {
   const display = process.env.DISPLAY || ":0";
@@ -1302,7 +1331,7 @@ async function guestDesktop() {
         send({ type: "error", code: "unknown_message" });
     }
   };
-  send({ type: "ready", width, height, name: hostname });
+  send({ type: "ready", width, height, name: hostname, apps: installedApps() });
   const decoder = new DesktopDecoder();
   process.stdin.on("data", (chunk: Buffer) =>
     decoder.push(chunk, handle, (code) => send({ type: "error", code })),

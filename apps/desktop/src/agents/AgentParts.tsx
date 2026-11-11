@@ -105,7 +105,7 @@ export function TaskRows({ overview }: { overview: AgentOverview }) {
   );
 }
 
-export function MachineThumb({ machine }: { machine: Machine }) {
+export function MachineThumb({ machine, caption = true }: { machine: Machine; caption?: boolean }) {
   const { client } = useDaemon();
   const [src, setSrc] = useState<string>();
   useEffect(() => {
@@ -147,16 +147,18 @@ export function MachineThumb({ machine }: { machine: Machine }) {
           <Icon name="monitor" />
         </div>
       )}
-      <figcaption>
-        <span className="od-truncate">{machine.name}</span>
-        <span>
-          {
-            { starting: "Ligando", ready: "Pronta", stopped: "Desligada", error: "Com erro" }[
-              machine.status
-            ]
-          }
-        </span>
-      </figcaption>
+      {caption && (
+        <figcaption>
+          <span className="od-truncate">{machine.name}</span>
+          <span>
+            {
+              { starting: "Ligando", ready: "Pronta", stopped: "Desligada", error: "Com erro" }[
+                machine.status
+              ]
+            }
+          </span>
+        </figcaption>
+      )}
     </figure>
   );
 }

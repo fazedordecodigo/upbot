@@ -1,10 +1,18 @@
-import type { Approval, PendingPermission, Task } from "@boto/protocol";
+import type {
+  Approval,
+  ChatItem,
+  Machine,
+  PendingPermission,
+  Task,
+  TaskDelivery,
+} from "@boto/protocol";
 import { useEffect, useState } from "react";
 import { MachineThumb } from "../agents/AgentParts";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { useHomeTasks } from "../hooks/useHomeTasks";
 import { dayGreeting } from "../lib/greeting";
 import { addDelivery, taskLanes } from "../lib/tasks";
+import { fmtTime } from "../lib/ui";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
 import { Icon, type IconName } from "../ui/icons";
@@ -41,6 +49,115 @@ function relative(at: number, now: number) {
     : Math.abs(minutes) < 1440
       ? formatter.format(Math.round(minutes / 60), "hour")
       : formatter.format(Math.round(minutes / 1440), "day");
+}
+function delivered(at: number, now: number) {
+  const t = fmtTime(at, now);
+  return t === "ontem"
+    ? "Concluída ontem"
+    : t.includes(":")
+      ? `Concluída às ${t}`
+      : `Concluída em ${t}`;
+}
+function deliveryIcon(delivery: TaskDelivery): IconName {
+  if (delivery.kind === "file") return "file-text";
+  if (delivery.kind === "message") return "send";
+  return delivery.url && /\/pull\/|\/merge_requests\//.test(delivery.url)
+    ? "git-pull-request"
+    : "globe";
+}
+function MachineCard({ machine, taskTitle }: { machine: Machine; taskTitle: string | null }) {
+  const { client, connected } = useDaemon();
+  const { navigate } = useRouter();
+  const taskId = machine.taskId;
+  const permissions = useDaemonQuery(
+    client,
+    "permissions.list",
+    { taskId: taskId ?? "" },
+    {
+      enabled: connected && !!taskId,
+      events: { "permission.requested": true, "permission.resolved": true },
+    },
+  );
+  const approvals = useDaemonQuery(
+    client,
+    "approvals.list",
+    { taskId: taskId ?? "" },
+    { enabled: connected && !!taskId, events: { "approval.updated": true } },
+  );
+  const history = useDaemonQuery(
+    client,
+    "tasks.history",
+    { id: taskId ?? "", limit: 500 },
+    {
+      enabled: connected && !!taskId,
+      events: {
+        "item.created": (item) => item.kind === "plan" && item.taskId === taskId,
+        "item.updated": (item) => item.kind === "plan" && item.taskId === taskId,
+      },
+    },
+  );
+  const plan = history.data?.items.findLast(
+    (item): item is Extract<ChatItem, { kind: "plan" }> => item.kind === "plan",
+  );
+  const step = plan?.entries.findIndex((entry) => entry.status !== "completed") ?? -1;
+  const approval = approvals.data?.find((entry) => entry.status === "pending");
+  const permission = permissions.data?.[0];
+  let tone: "run" | "wait" | "muted" | "done" = "muted";
+  let icon: IconName = "circle-pause";
+  let text = "Desligada";
+  let tip: string | undefined;
+  if (machine.status === "error") {
+    icon = "circle-alert";
+    text = "Com erro";
+  } else if (approval) {
+    tone = "wait";
+    icon = "circle-alert";
+    text = "Pede aprovação";
+    tip = approval.title;
+  } else if (permission) {
+    tone = "wait";
+    icon = "circle-alert";
+    text = "Pede permissão";
+    tip = permission.title;
+  } else if (machine.controller === "user") {
+    icon = "user-check";
+    text = "Você está no controle";
+  } else if (machine.status === "starting") {
+    icon = "loader";
+    text = "Ligando…";
+  } else if (machine.status === "stopped") {
+    tone = "done";
+    text = "Desligada";
+  } else if (!taskId) {
+    tone = "done";
+    icon = "circle-check";
+    text = "Livre";
+  } else {
+    tone = "run";
+    icon = "loader";
+    text = plan && step >= 0 ? `Etapa ${step + 1} de ${plan.entries.length}` : "Em execução";
+  }
+  const body = (
+    <>
+      <MachineThumb machine={machine} caption={false} />
+      <span className="pc-name">
+        <span className="pc-dot" data-tone={tone} aria-hidden="true" />
+        <span className="od-truncate">{machine.name}</span>
+      </span>
+      <span className="pc-task od-truncate">{taskTitle ?? "Sem tarefa em andamento"}</span>
+      <span className="status" data-tone={tone} title={tip}>
+        <Icon name={icon} />
+        {text}
+      </span>
+    </>
+  );
+  return taskId ? (
+    <button type="button" className="pc-machine" onClick={() => navigate("task", { id: taskId })}>
+      {body}
+    </button>
+  ) : (
+    <div className="pc-machine">{body}</div>
+  );
 }
 function WaitingContext({
   task,
@@ -188,6 +305,9 @@ export function HomeView() {
     wait: ["circle-alert", "Aguardando você"],
   } satisfies Record<string, [IconName, string]>;
   const activeMachines = (machines.data ?? []).filter((machine) => machine.status !== "stopped");
+  const installedApps = [...new Set(activeMachines.flatMap((machine) => machine.apps))].sort(
+    (a, b) => a.localeCompare(b),
+  );
   return (
     <section className="view home od-scroll" id="view-home" aria-labelledby="home-title">
       <div className="home-inner">
@@ -286,7 +406,7 @@ export function HomeView() {
               {...deliveries}
               empty={!deliveries.data?.length ? "Nenhuma entrega ainda." : undefined}
             />
-            <ul className="home-list" aria-label="Entregas recentes">
+            <ul className="deliveries-grid" aria-label="Entregas recentes">
               {deliveries.data?.map((delivery) => (
                 <li key={delivery.id}>
                   <button
@@ -294,21 +414,13 @@ export function HomeView() {
                     className="delivery-item"
                     onClick={() => navigate("task", { id: delivery.taskId })}
                   >
-                    <Icon
-                      name={
-                        delivery.kind === "file"
-                          ? "file-text"
-                          : delivery.kind === "link"
-                            ? "globe"
-                            : "send"
-                      }
-                    />
-                    <span className="od-field od-fill">
-                      <strong className="od-truncate">{delivery.name}</strong>
-                      <span className="od-truncate home-muted">{title(delivery.taskId)}</span>
+                    <span className="home-tile">
+                      <Icon name={deliveryIcon(delivery)} />
                     </span>
+                    <strong className="od-clamp-2">{delivery.name}</strong>
+                    <span className="od-truncate home-muted">{title(delivery.taskId)}</span>
                     <time dateTime={new Date(delivery.createdAt).toISOString()}>
-                      {relative(delivery.createdAt, now)}
+                      {delivered(delivery.createdAt, now)}
                     </time>
                   </button>
                 </li>
@@ -325,40 +437,55 @@ export function HomeView() {
           aria-labelledby="pc-card-title"
           aria-busy={!machines.loaded && !machines.error}
         >
-          <h2 className="card-title" id="pc-card-title">
-            Áreas de trabalho ativas
-          </h2>
+          <div className="pc-head">
+            <span className="home-tile">
+              <Icon name="monitor" />
+            </span>
+            <div className="od-field od-fill">
+              <h2 className="card-title" id="pc-card-title">
+                Áreas de trabalho dos agentes
+              </h2>
+              <p className="card-description">
+                Cada instância trabalha numa máquina virtual Linux própria e isolada.
+              </p>
+            </div>
+            {(machines.data?.length ?? 0) > 0 && (
+              <span className="pc-usage">
+                <span
+                  className="pc-dot"
+                  data-tone={activeMachines.length ? "run" : "muted"}
+                  aria-hidden="true"
+                />
+                {activeMachines.length} de {machines.data?.length} em uso
+              </span>
+            )}
+          </div>
           <State
             {...machines}
             empty={!activeMachines.length ? "Nenhuma área de trabalho ativa agora." : undefined}
           />
-          <ul className="home-list" aria-label="Áreas de trabalho ativas">
-            {activeMachines.map((machine) => {
-              const content = (
-                <>
-                  <MachineThumb machine={machine} />
-                  <span className="home-muted">{agentName(machine.agentId)}</span>
-                  {machine.controller === "user" && <span>Você está no controle</span>}
-                  {machine.taskId && <span className="od-truncate">{title(machine.taskId)}</span>}
-                </>
-              );
-              return (
-                <li key={machine.id}>
-                  {machine.taskId ? (
-                    <button
-                      type="button"
-                      className="lane-item"
-                      onClick={() => navigate("task", { id: machine.taskId as string })}
-                    >
-                      {content}
-                    </button>
-                  ) : (
-                    <div className="lane-item">{content}</div>
-                  )}
-                </li>
-              );
-            })}
+          <ul className="pc-grid" aria-label="Áreas de trabalho ativas">
+            {activeMachines.map((machine) => (
+              <li key={machine.id}>
+                <MachineCard
+                  machine={machine}
+                  taskTitle={machine.taskId ? title(machine.taskId) : null}
+                />
+              </li>
+            ))}
           </ul>
+          {installedApps.length > 0 && (
+            <div className="pc-apps">
+              <span className="pc-apps-label">Instalado nas máquinas</span>
+              <span className="pc-apps-list">
+                {installedApps.map((app) => (
+                  <span className="pc-app" key={app}>
+                    {app}
+                  </span>
+                ))}
+              </span>
+            </div>
+          )}
         </aside>
       </div>
     </section>

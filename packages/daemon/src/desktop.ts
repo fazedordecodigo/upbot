@@ -65,6 +65,7 @@ type MachineState = {
   pending: Map<string, { resolve: (text: string) => void; reject: (e: Error) => void }>;
   thumbWaiters: ((t: DesktopThumbnail | null) => void)[];
   agentActive: boolean;
+  apps: string[];
 };
 
 export function machineSlug(name: string): string {
@@ -207,6 +208,7 @@ export class DesktopService {
       pending: new Map(),
       thumbWaiters: [],
       agentActive: false,
+      apps: [],
     };
     this.states.set(st.id, st);
     return st;
@@ -224,6 +226,7 @@ export class DesktopService {
       height: st.height,
       taskId: this.taskFor?.(st.agentId) ?? null,
       thumbnailAt: st.thumbnail?.at ?? null,
+      apps: st.apps,
     };
   }
 
@@ -585,6 +588,8 @@ export class DesktopService {
         st.status = "ready";
         if (typeof m.width === "number") st.width = m.width;
         if (typeof m.height === "number") st.height = m.height;
+        if (Array.isArray(m.apps))
+          st.apps = m.apps.filter((a): a is string => typeof a === "string").slice(0, 64);
         this.write(st, { type: "controller", controller: st.controller });
         this.applyStreamMode(st);
         this.emitMachine(st);

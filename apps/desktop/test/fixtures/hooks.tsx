@@ -29,6 +29,7 @@ const machine = {
   controller: "agent",
   taskId: "task",
   thumbnailAt: null,
+  apps: [],
 };
 class Client {
   calls: string[] = [];
