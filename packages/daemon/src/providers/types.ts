@@ -1,4 +1,4 @@
-import type { ConfigOption, PermissionOption, ToolCallStatus } from "@boto/protocol";
+import type { ConfigOption, PermissionOption, PlanEntry, ToolCallStatus } from "@boto/protocol";
 
 export type NormalizedUpdate =
   | { type: "message_chunk"; text: string }
@@ -18,6 +18,7 @@ export type NormalizedUpdate =
       status?: ToolCallStatus;
       detail?: string | null;
     }
+  | { type: "plan"; entries: PlanEntry[] }
   | { type: "config_update"; configOptions: ConfigOption[] }
   | { type: "mode_update"; modeId: string }
   | {

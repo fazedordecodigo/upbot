@@ -18,6 +18,7 @@ import { useRouter } from "../shell/router";
 import { LiveDesk } from "../task/LiveDesk";
 import { SecretApproval } from "../task/SecretApproval";
 import { Icon, type IconName } from "../ui/icons";
+import { Markdown } from "../ui/Markdown";
 import { useToast } from "../ui/Toast";
 import "./TaskView.css";
 
@@ -36,6 +37,38 @@ const decisions = {
   reject_always: "Não permitido",
 };
 const clampSplit = (value: number) => Math.round(Math.max(30, Math.min(70, value)));
+
+const TOOL_META: Record<string, { label: string; icon: IconName }> = {
+  execute: { label: "Terminal", icon: "terminal" },
+  read: { label: "Leitura", icon: "file-text" },
+  edit: { label: "Editor", icon: "file-code" },
+  delete: { label: "Exclusão", icon: "trash" },
+  move: { label: "Arquivos", icon: "folder" },
+  search: { label: "Busca", icon: "search" },
+  fetch: { label: "Navegador", icon: "globe" },
+  think: { label: "Raciocínio", icon: "cpu" },
+  switch_mode: { label: "Modo", icon: "settings" },
+};
+const toolMeta = (kind: string | null) =>
+  (kind ? TOOL_META[kind] : undefined) ?? {
+    label: "Ferramenta",
+    icon: "app-window" as IconName,
+  };
+
+function ToolDetail({ text }: { text: string | null }) {
+  if (!text?.trim()) return null;
+  const trimmed = text.trim();
+  const first = trimmed.split("\n", 1)[0]?.trim() ?? "";
+  if (trimmed === first && trimmed.length <= 160) {
+    return <p className="task-note">{trimmed}</p>;
+  }
+  return (
+    <details className="task-detail">
+      <summary>{first || "Detalhes"}</summary>
+      <pre className="task-args">{trimmed}</pre>
+    </details>
+  );
+}
 
 function Memory({ item }: { item: Extract<ChatItem, { kind: "agent_message" }> }) {
   const { client } = useDaemon();
@@ -436,8 +469,14 @@ function TaskSurface() {
                           data-pending={a.status === "pending"}
                           key={a.id}
                         >
-                          <h3>
+                          <p className="task-label">
                             <Icon name={handover ? "mouse-pointer" : "shield-check"} />
+                            {handover ? "Controle do computador" : "Aprovação"} ·{" "}
+                            <time dateTime={new Date(a.createdAt).toISOString()}>
+                              {time(a.createdAt)}
+                            </time>
+                          </p>
+                          <h3>
                             {handover
                               ? `${data.agentName} precisa que você assuma o controle.`
                               : (described?.description ?? a.title)}
@@ -511,6 +550,13 @@ function TaskSurface() {
                             </div>
                           ) : (
                             <p className="task-note">
+                              <Icon
+                                name={
+                                  a.status === "approved" || a.status === "done"
+                                    ? "circle-check"
+                                    : "circle-slash"
+                                }
+                              />{" "}
                               {
                                 {
                                   approved: "Aprovada",
@@ -528,16 +574,38 @@ function TaskSurface() {
                     }
                     const i = row.item;
                     switch (i.kind) {
-                      case "user_message":
+                      case "user_message": {
+                        const actor =
+                          i.from?.name ??
+                          i.gateway?.userName ??
+                          i.team?.memberName ??
+                          i.routine?.name;
                         return (
-                          <div className="task-user" key={i.id}>
-                            {i.text}
-                          </div>
+                          <article className="task-user" key={i.id}>
+                            <p className="task-label">
+                              {actor ? `${actor} pediu` : "Você pediu"} ·{" "}
+                              <time dateTime={new Date(i.createdAt).toISOString()}>
+                                {time(i.createdAt)}
+                              </time>
+                            </p>
+                            <p className="task-user-text">{i.text}</p>
+                            {i.attachments && i.attachments.length > 0 && (
+                              <div className="task-user-files">
+                                {i.attachments.map((file) => (
+                                  <span className="task-chip" key={file.path}>
+                                    <Icon name="file-text" />
+                                    <span className="od-truncate">{file.name}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </article>
                         );
+                      }
                       case "agent_message":
                         return (
-                          <article className="task-message" key={i.id}>
-                            <p>{i.text}</p>
+                          <article className="task-message md" key={i.id}>
+                            <Markdown text={i.text} />
                             <Memory item={i} />
                           </article>
                         );
@@ -548,24 +616,82 @@ function TaskSurface() {
                             <p>{i.text}</p>
                           </details>
                         );
-                      case "tool_call":
+                      case "tool_call": {
+                        const meta = toolMeta(i.toolKind);
+                        const running = i.status === "pending" || i.status === "in_progress";
                         return (
-                          <div className="task-step" key={i.id}>
+                          <div className="task-step" data-status={i.status} key={i.id}>
+                            <time
+                              className="task-time"
+                              dateTime={new Date(i.createdAt).toISOString()}
+                            >
+                              {time(i.createdAt)}
+                            </time>
                             <Icon
                               name={
-                                i.status === "failed"
-                                  ? "circle-alert"
-                                  : i.status === "completed"
-                                    ? "circle-check"
-                                    : "loader"
+                                running
+                                  ? "loader"
+                                  : i.status === "failed"
+                                    ? "circle-alert"
+                                    : meta.icon
                               }
                             />
-                            <div>
-                              <p>{i.title}</p>
-                              {i.detail && <p className="task-note">{i.detail}</p>}
+                            <div className="task-step-body">
+                              <p className="task-step-title">
+                                <span className="task-kind">{meta.label}</span>
+                                {i.title ? ` · ${i.title}` : ""}
+                              </p>
+                              <ToolDetail text={i.detail} />
+                              <p className="task-step-status">
+                                {i.status === "completed"
+                                  ? `Concluída às ${time(i.updatedAt)}`
+                                  : i.status === "failed"
+                                    ? `Falhou às ${time(i.updatedAt)}`
+                                    : i.status === "pending"
+                                      ? "Na fila"
+                                      : "Em andamento…"}
+                              </p>
                             </div>
                           </div>
                         );
+                      }
+                      case "plan": {
+                        const done = i.entries.filter((e) => e.status === "completed").length;
+                        const total = i.entries.length;
+                        return (
+                          <article className="task-card task-plan" key={i.id}>
+                            <p className="task-label">
+                              <Icon name="list-checks" />
+                              Plano · {done} de {total}{" "}
+                              {total === 1 ? "etapa concluída" : "etapas concluídas"}
+                            </p>
+                            <span
+                              className="progress"
+                              role="progressbar"
+                              aria-valuenow={done}
+                              aria-valuemin={0}
+                              aria-valuemax={total}
+                              aria-label="Etapas concluídas"
+                            >
+                              <span style={{ "--p": total ? done / total : 0 } as CSSProperties} />
+                            </span>
+                            <ul className="task-plan-list">
+                              {i.entries.map((entry) => (
+                                <li key={entry.content} data-status={entry.status}>
+                                  {entry.status === "completed" ? (
+                                    <Icon name="circle-check" />
+                                  ) : entry.status === "in_progress" ? (
+                                    <Icon name="loader" />
+                                  ) : (
+                                    <span className="task-dot" aria-hidden="true" />
+                                  )}
+                                  <span>{entry.content}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </article>
+                        );
+                      }
                       case "permission": {
                         const pending =
                           data.permissionsReady &&
@@ -581,10 +707,14 @@ function TaskSurface() {
                             data-pending={!i.resolution && pending}
                             key={i.id}
                           >
-                            <h3>
+                            <p className="task-label">
                               <Icon name="shield-check" />
-                              {i.title}
-                            </h3>
+                              Permissão de ferramenta ·{" "}
+                              <time dateTime={new Date(i.createdAt).toISOString()}>
+                                {time(i.createdAt)}
+                              </time>
+                            </p>
+                            <h3>{i.title}</h3>
                             <p>O Boto precisa da sua permissão para usar esta ferramenta.</p>
                             {step?.kind === "tool_call" && (
                               <p className="task-note">
@@ -594,6 +724,9 @@ function TaskSurface() {
                             )}
                             {i.resolution ? (
                               <p className="task-note">
+                                <Icon
+                                  name={i.resolution.optionId ? "circle-check" : "circle-slash"}
+                                />{" "}
                                 {
                                   decisions[
                                     i.options.find((o) => o.optionId === i.resolution?.optionId)

@@ -183,6 +183,12 @@ export type PermissionOption = z.infer<typeof PermissionOption>;
 export const ToolCallStatus = z.enum(["pending", "in_progress", "completed", "failed"]);
 export type ToolCallStatus = z.infer<typeof ToolCallStatus>;
 
+export const PlanEntry = z.object({
+  content: z.string(),
+  status: z.enum(["pending", "in_progress", "completed"]),
+});
+export type PlanEntry = z.infer<typeof PlanEntry>;
+
 const ChatItemBase = z.object({
   id: z.string(),
   seq: z.number(),
@@ -227,6 +233,7 @@ export const ChatItem = z.discriminatedUnion("kind", [
     memoryUsage: MemoryUsage.optional(),
   }),
   ChatItemBase.extend({ kind: z.literal("agent_thought"), text: z.string() }),
+  ChatItemBase.extend({ kind: z.literal("plan"), entries: z.array(PlanEntry) }),
   ChatItemBase.extend({
     kind: z.literal("tool_call"),
     toolCallId: z.string(),

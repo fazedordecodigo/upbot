@@ -197,6 +197,8 @@ export class AgentRuntime {
   private textFlushTimer: ReturnType<typeof setTimeout> | null = null;
   // toolCallId -> cached item for the running turn; skips the items lookup entirely
   private toolCallItems = new Map<string, ChatItem>();
+  // the running turn's single plan card; ACP resends the whole checklist per update
+  private planItem: ChatItem | null = null;
   private pending = new Map<string, PendingEntry>();
   private cancelTimer: ReturnType<typeof setTimeout> | null = null;
   private draining = false;
@@ -374,6 +376,7 @@ export class AgentRuntime {
       this.turn = { id: turnRow.id, cancelled: false, byUser: false };
       this.closeTextItem();
       this.toolCallItems.clear();
+      this.planItem = null;
       this.turnHops = next.hops ?? 0;
       this.turnStartedAt = Date.now();
       this.turnChannelId = next.channel_id ?? null;
@@ -943,6 +946,22 @@ export class AgentRuntime {
         });
         this.toolCallItems.set(u.toolCallId, item);
         this.broadcast("item.created", item);
+        break;
+      }
+      case "plan": {
+        this.closeTextItem();
+        const existing = this.planItem?.turnId === turn.id ? this.planItem : null;
+        if (existing?.kind === "plan") {
+          const updatedAt = this.store.writeItemData(existing.id, { entries: u.entries });
+          this.planItem = { ...existing, entries: u.entries, updatedAt };
+          this.broadcast("item.updated", this.planItem);
+        } else {
+          const item = this.store.createItem(this.agent.id, turn.id, "plan", {
+            entries: u.entries,
+          });
+          this.planItem = item;
+          this.broadcast("item.created", item);
+        }
         break;
       }
       case "tool_call_update": {

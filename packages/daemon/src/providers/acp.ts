@@ -1,6 +1,6 @@
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
-import type { ConfigOption, ProviderId } from "@boto/protocol";
+import type { ConfigOption, PlanEntry, ProviderId } from "@boto/protocol";
 import { envPositiveNumber } from "../env/vars";
 import { VERSION } from "../version";
 import {
@@ -267,6 +267,7 @@ type SessionUpdatePayload = {
   status?: string;
   content2?: never;
   locations?: { path?: string }[];
+  entries?: { content?: unknown; status?: unknown; priority?: unknown }[];
   currentModeId?: string;
   configOptions?: unknown;
 };
@@ -322,6 +323,23 @@ function mapUpdate(params: unknown): NormalizedUpdate {
       const d = toolDetail(u);
       if (d !== null) out.detail = d;
       return out;
+    }
+    case "plan": {
+      const entries: PlanEntry[] = [];
+      for (const e of Array.isArray(u.entries) ? u.entries : []) {
+        const content = typeof e?.content === "string" ? e.content.trim() : "";
+        if (!content) continue;
+        entries.push({
+          content,
+          status:
+            e?.status === "completed"
+              ? "completed"
+              : e?.status === "in_progress"
+                ? "in_progress"
+                : "pending",
+        });
+      }
+      return entries.length ? { type: "plan", entries } : { type: "ignored", kind: "plan" };
     }
     case "config_option_update":
       return { type: "config_update", configOptions: normalizeConfigOptions(u) };

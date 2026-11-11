@@ -390,6 +390,31 @@ async function handlePrompt(ctx: Ctx): Promise<{ stopReason: string }> {
     return { stopReason: "end_turn" };
   }
 
+  if (text === "plan") {
+    const entries = (status: string[]) => ({
+      sessionId,
+      update: {
+        sessionUpdate: "plan",
+        entries: [
+          { content: "Clonar o repositório", status: status[0] },
+          { content: "Rodar os testes", status: status[1] },
+          { content: "Abrir o PR", status: status[2] },
+        ],
+      },
+    });
+    await ctx.client.notify(
+      "session/update",
+      entries(["completed", "in_progress", "pending"]),
+    );
+    await sleep(50);
+    await ctx.client.notify(
+      "session/update",
+      entries(["completed", "completed", "completed"]),
+    );
+    await say("agent_message_chunk", "plan:done");
+    return { stopReason: "end_turn" };
+  }
+
   if (text === "slow") {
     while (!cancelledSessions.has(sessionId)) {
       await say("agent_message_chunk", ".");
