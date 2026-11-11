@@ -1,21 +1,18 @@
-import type {
-  Approval,
-  ChatItem,
-  Machine,
-  PendingPermission,
-  Task,
-  TaskDelivery,
-} from "@boto/protocol";
-import { useEffect, useState } from "react";
+import type { Approval, ChatItem, Machine, TaskDelivery } from "@boto/protocol";
+import { type ReactNode, useEffect, useState } from "react";
 import { MachineThumb } from "../agents/AgentParts";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { useHomeTasks } from "../hooks/useHomeTasks";
+import { useWaitingRequests, type WaitingRequest } from "../hooks/useWaitingRequests";
+import { decideApproval } from "../lib/approval-decisions";
+import { approvalArguments } from "../lib/approval-description";
 import { dayGreeting } from "../lib/greeting";
 import { addDelivery, taskLanes } from "../lib/tasks";
 import { fmtTime } from "../lib/ui";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
 import { Icon, type IconName } from "../ui/icons";
+import { useToast } from "../ui/Toast";
 import "./HomeView.css";
 
 function State({
@@ -43,7 +40,7 @@ function State({
 }
 function relative(at: number, now: number) {
   const minutes = Math.round((at - now) / 60000);
-  const formatter = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
+  const formatter = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto", style: "short" });
   return Math.abs(minutes) < 60
     ? formatter.format(minutes, "minute")
     : Math.abs(minutes) < 1440
@@ -159,55 +156,121 @@ function MachineCard({ machine, taskTitle }: { machine: Machine; taskTitle: stri
     <div className="pc-machine">{body}</div>
   );
 }
-function WaitingContext({
-  task,
-  approvals,
-  permissions,
-}: {
-  task: Task;
-  approvals: Approval[];
-  permissions: PendingPermission[];
-}) {
-  const { client, connected } = useDaemon();
-  const pendingApprovals = approvals.filter(
-    (entry) => entry.status === "pending" && entry.agentId === task.agentId,
-  );
-  const pendingPermissions = permissions.filter((entry) => entry.agentId === task.agentId);
-  const history = useDaemonQuery(
-    client,
-    "tasks.history",
-    { id: task.id, limit: 500 },
-    {
-      enabled: connected && (pendingApprovals.length > 0 || pendingPermissions.length > 0),
-      events: {
-        "task.updated": (entry) => entry.id === task.id,
-        "permission.requested": true,
-        "approval.updated": true,
-      },
-    },
-  );
-  const belongs = (entry: { turnId?: string | null; agentId: string }) =>
-    "turnId" in entry
-      ? !!entry.turnId &&
-        history.data?.turns.some((turn) => turn.id === entry.turnId && turn.taskId === task.id)
-      : entry.agentId === task.agentId;
-  const approval = pendingApprovals.find(belongs);
-  const permission = pendingPermissions.find(belongs);
+const PERMISSION_HINT: Record<string, string> = {
+  execute: "Rodar comandos no terminal da máquina.",
+  read: "Ler arquivos da máquina.",
+  edit: "Criar e alterar arquivos no editor da máquina.",
+  delete: "Apagar arquivos da máquina.",
+  move: "Mover ou renomear arquivos da máquina.",
+  search: "Buscar conteúdo na máquina.",
+  fetch: "Navegar na web.",
+  think: "Raciocinar sobre a tarefa.",
+  switch_mode: "Mudar o modo da sessão.",
+};
+
+/** A short version of the approval's arguments (or its raw detail when not JSON). */
+function approvalDetail(approval: Approval): string | null {
+  const detail = approval.detail.trim();
+  if (!detail) return null;
+  try {
+    JSON.parse(detail);
+  } catch {
+    return detail.replace(/\s+/g, " ");
+  }
+  return approvalArguments(detail);
+}
+
+function WaitingCard({ request, now }: { request: WaitingRequest; now: number }) {
+  const { client } = useDaemon();
+  const { navigate } = useRouter();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const task = request.task;
+  const run = async (operation: () => Promise<string | undefined>) => {
+    setBusy(true);
+    try {
+      const message = await operation();
+      if (message) toast(message);
+    } catch {
+      toast("Não foi possível concluir a ação. Tente de novo.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const head =
+    request.kind === "permission"
+      ? { icon: "key" as IconName, label: "Pede permissão" }
+      : { icon: "circle-alert" as IconName, label: "Pede aprovação" };
+  const title = request.kind === "permission" ? request.permission.title : request.approval.title;
+  const created =
+    request.kind === "permission" ? request.permission.createdAt : request.approval.createdAt;
+  const detail =
+    request.kind === "permission"
+      ? request.permission.toolKind
+        ? PERMISSION_HINT[request.permission.toolKind]
+        : undefined
+      : approvalDetail(request.approval);
+  let action: ReactNode = null;
+  if (request.kind === "permission") {
+    const option = request.permission.options.find((entry) => entry.kind === "allow_once");
+    if (option)
+      action = (
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              await client.request("permissions.respond", {
+                requestId: request.permission.requestId,
+                optionId: option.optionId,
+              });
+              return "Permitido nesta sessão.";
+            })
+          }
+        >
+          <Icon name="check" />
+          Permitir nesta sessão
+        </button>
+      );
+  } else if (request.approval.kind === "tool") {
+    action = (
+      <button
+        type="button"
+        className="btn btn-outline btn-sm"
+        disabled={busy}
+        onClick={() =>
+          void run(async () => (await decideApproval(client, request.approval, "approve")).message)
+        }
+      >
+        <Icon name="check" />
+        Aprovar
+      </button>
+    );
+  }
   return (
-    <>
-      {history.error && (
-        <span role="alert" className="home-muted">
-          {history.error}
-        </span>
-      )}
-      {(approval || permission) && (
-        <span className="od-truncate home-muted">
-          {approval
-            ? `Aprovação pendente: ${approval.title}`
-            : `Permissão pendente: ${permission?.title}`}
-        </span>
-      )}
-    </>
+    <article className="wait-item">
+      <p className="status" data-tone="wait">
+        <Icon name={head.icon} />
+        {head.label}
+      </p>
+      <strong className="od-truncate">{title}</strong>
+      <p className="home-muted wait-detail od-clamp-2">
+        {task.title}
+        {detail ? `. ${detail}` : ""}
+      </p>
+      <div className="wait-actions">
+        {action}
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => navigate("task", { id: task.id })}
+        >
+          Ver detalhes
+        </button>
+        <time dateTime={new Date(created).toISOString()}>{relative(created, now)}</time>
+      </div>
+    </article>
   );
 }
 
@@ -230,18 +293,6 @@ export function HomeView() {
     "tasks.deliveries",
     { limit: 6 },
     { enabled: connected, events: { "task.deleted": true } },
-  );
-  const permissions = useDaemonQuery(
-    client,
-    "permissions.list",
-    {},
-    { enabled: connected, events: { "permission.requested": true, "permission.resolved": true } },
-  );
-  const approvals = useDaemonQuery(
-    client,
-    "approvals.list",
-    {},
-    { enabled: connected, events: { "approval.updated": true } },
   );
   const machines = useDaemonQuery(
     client,
@@ -297,6 +348,11 @@ export function HomeView() {
     items.find((task) => task.id === id)?.title ?? titles[id] ?? "Carregando…";
   const agentName = (id: string) => agents.find((agent) => agent.id === id)?.name ?? "a definir";
   const lanes = taskLanes(items);
+  const waiting = useWaitingRequests(client, lanes.waiting, connected);
+  const requests = waiting.data ?? [];
+  const covered = new Set(requests.map((request) => request.task.id));
+  const uncovered = waiting.loaded ? lanes.waiting.filter((task) => !covered.has(task.id)) : [];
+  const waitingCount = requests.length + uncovered.length;
   const hour = new Date(now).getHours();
   const greeting = dayGreeting(hour);
   const status = {
@@ -333,67 +389,111 @@ export function HomeView() {
         </div>
         {profile.error && <State {...profile} />}
         <div className="lanes" aria-live="polite">
-          {(
-            [
-              ["running", "Em andamento", lanes.running, "Nada em andamento agora."],
-              ["waiting", "Aguardando você", lanes.waiting, "Nada aguardando você."],
-            ] as const
-          ).map(([lane, label, list, empty]) => (
-            <section className="lane" key={lane} aria-labelledby={`lane-${lane}-title`}>
-              <div className="section-head od-row">
-                <h2 className="section-title" id={`lane-${lane}-title`}>
-                  {label}
-                </h2>
-                <span className="badge badge-secondary" id={`lane-${lane}-count`}>
-                  {tasks.loaded ? list.length : ""}
+          <section className="lane" aria-labelledby="lane-running-title">
+            <div className="section-head od-row">
+              <h2 className="section-title" id="lane-running-title">
+                Em andamento
+              </h2>
+              {tasks.loaded && lanes.running.length > 0 && (
+                <span className="badge badge-secondary" id="lane-running-count">
+                  {lanes.running.length}
                 </span>
-              </div>
-              <div id={`lane-${lane}`} aria-busy={!tasks.loaded && !tasks.error}>
-                <State {...tasks} empty={!list.length ? empty : undefined} />
-                <ul className="home-list" aria-label={label}>
-                  {list.map((task) => {
-                    const [icon, text] =
-                      task.situation === "done" ? status.muted : status[task.situation];
-                    return (
-                      <li key={task.id}>
-                        <button
-                          type="button"
-                          className="lane-item"
-                          onClick={() => navigate("task", { id: task.id })}
-                        >
-                          <span className="status" data-tone={task.situation}>
-                            <Icon name={icon} />
-                            {text}
-                          </span>
-                          <strong className="od-truncate">{task.title}</strong>
-                          {task.situation === "wait" && (
-                            <WaitingContext
-                              task={task}
-                              approvals={approvals.data ?? []}
-                              permissions={permissions.data ?? []}
-                            />
-                          )}
-                          <span className="home-meta">
-                            <span className="od-truncate">{agentName(task.agentId)}</span>
-                            <span>·</span>
-                            <time dateTime={new Date(task.createdAt).toISOString()}>
-                              {relative(task.createdAt, now)}
-                            </time>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-                {lane === "waiting" && (
-                  <>
-                    {permissions.error && <State {...permissions} />}
-                    {approvals.error && <State {...approvals} />}
-                  </>
-                )}
-              </div>
-            </section>
-          ))}
+              )}
+            </div>
+            <div id="lane-running" aria-busy={!tasks.loaded && !tasks.error}>
+              <State {...tasks} />
+              {tasks.loaded && !tasks.error && !lanes.running.length && (
+                <p className="home-empty">
+                  Nenhuma tarefa em andamento. Clique em Nova tarefa e o Boto começa na hora.
+                </p>
+              )}
+              <ul className="home-list" aria-label="Em andamento">
+                {lanes.running.map((task) => {
+                  const [icon, text] =
+                    task.situation === "done" ? status.muted : status[task.situation];
+                  return (
+                    <li key={task.id}>
+                      <button
+                        type="button"
+                        className="lane-item"
+                        onClick={() => navigate("task", { id: task.id })}
+                      >
+                        <span className="status" data-tone={task.situation}>
+                          <Icon name={icon} />
+                          {text}
+                        </span>
+                        <strong className="od-truncate">{task.title}</strong>
+                        <span className="home-meta">
+                          <span className="od-truncate">{agentName(task.agentId)}</span>
+                          <span>·</span>
+                          <time dateTime={new Date(task.createdAt).toISOString()}>
+                            {relative(task.createdAt, now)}
+                          </time>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </section>
+          <section className="lane" aria-labelledby="lane-waiting-title">
+            <div className="section-head od-row">
+              <h2 className="section-title" id="lane-waiting-title">
+                Aguardando você
+              </h2>
+              {waitingCount > 0 && (
+                <span className="badge badge-secondary" id="lane-waiting-count">
+                  {waitingCount}
+                </span>
+              )}
+            </div>
+            <div
+              id="lane-waiting"
+              aria-busy={(!tasks.loaded && !tasks.error) || (!waiting.loaded && !waiting.error)}
+            >
+              <State {...tasks} />
+              <State {...waiting} />
+              {tasks.loaded && !tasks.error && waiting.loaded && !waitingCount && (
+                <p className="home-empty">Nada aguardando você.</p>
+              )}
+              <ul className="home-list" aria-label="Aguardando você">
+                {requests.map((request) => (
+                  <li
+                    key={
+                      request.kind === "permission"
+                        ? request.permission.requestId
+                        : request.approval.id
+                    }
+                  >
+                    <WaitingCard request={request} now={now} />
+                  </li>
+                ))}
+                {uncovered.map((task) => (
+                  <li key={task.id}>
+                    <button
+                      type="button"
+                      className="lane-item"
+                      onClick={() => navigate("task", { id: task.id })}
+                    >
+                      <span className="status" data-tone="wait">
+                        <Icon name="circle-alert" />
+                        Aguardando você
+                      </span>
+                      <strong className="od-truncate">{task.title}</strong>
+                      <span className="home-meta">
+                        <span className="od-truncate">{agentName(task.agentId)}</span>
+                        <span>·</span>
+                        <time dateTime={new Date(task.createdAt).toISOString()}>
+                          {relative(task.createdAt, now)}
+                        </time>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
         </div>
         <section aria-labelledby="deliveries-title">
           <div className="section-head od-row">

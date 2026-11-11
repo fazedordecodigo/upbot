@@ -7,10 +7,21 @@
 .home .hero-greeting, .home .home-muted, .home .home-meta, .home time { color: var(--boto-color-muted-foreground); }
 .home .section-head { margin-bottom: var(--boto-space-5); }
 .home .section-title { font-size: var(--boto-font-size-xl); }
+.home .lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--boto-space-4); align-items: start; margin-block: var(--boto-space-8); }
+.home .lane { margin-block: var(--boto-space-0); min-width: var(--boto-space-0); }
 .home .home-list, .home .deliveries-grid, .home .pc-grid { list-style: none; padding: var(--boto-space-0); margin: var(--boto-space-0); display: grid; gap: var(--boto-space-3); }
+.home .home-list > li { display: grid; min-width: var(--boto-space-0); }
 .home .lane-item, .home .delivery-item { width: 100%; text-align: start; color: var(--boto-color-foreground); background: var(--boto-color-card); border: calc(var(--boto-size-focus-ring) / 2) solid var(--boto-color-border); border-radius: var(--boto-radius-lg); padding: var(--boto-space-4); }
 .home .lane-item { display: grid; gap: var(--boto-space-2); }
 .home .home-meta { display: flex; align-items: center; gap: var(--boto-space-3); min-width: var(--boto-space-0); }
+.home .home-empty { margin: var(--boto-space-0); padding: var(--boto-space-4); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); border: calc(var(--boto-size-focus-ring) / 2) dashed var(--boto-color-border); border-radius: var(--boto-radius-lg); }
+.home .wait-item { display: grid; gap: var(--boto-space-2); color: var(--boto-color-foreground); background: var(--boto-color-card); border: calc(var(--boto-size-focus-ring) / 2) solid var(--boto-color-border); border-radius: var(--boto-radius-lg); padding: var(--boto-space-4); }
+.home .wait-item > p { margin: var(--boto-space-0); }
+.home .wait-item .status { font-weight: 600; }
+.home .wait-item > strong { font-size: var(--boto-font-size-sm); }
+.home .wait-detail { font-size: var(--boto-font-size-sm); }
+.home .wait-actions { display: flex; align-items: center; gap: var(--boto-space-3); margin-top: var(--boto-space-1); }
+.home .wait-actions > time { margin-left: auto; }
 .home button:hover { background: var(--boto-color-accent-surface); }
 .home .home-new:hover { background: var(--boto-color-primary-hover); }
 .home button:focus-visible { outline: var(--boto-size-focus-ring) solid var(--boto-color-ring); outline-offset: var(--boto-size-focus-offset); }

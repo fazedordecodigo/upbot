@@ -358,7 +358,11 @@ test("failed initial refresh recovers on reconnect and reloads real counts", asy
         (await p.locator("#command-empty").innerText()) === "Nenhum resultado para “inexistente”.",
     );
     expect(errors).toEqual([]);
-    await p.getByText("Nada em andamento agora.", { exact: true }).waitFor();
+    await p
+      .getByText("Nenhuma tarefa em andamento. Clique em Nova tarefa e o Boto começa na hora.", {
+        exact: true,
+      })
+      .waitFor();
   } finally {
     await p.close();
     server.stop(true);

@@ -268,6 +268,7 @@ export const PendingPermission = z.object({
   title: z.string(),
   toolKind: z.string().nullable(),
   options: z.array(PermissionOption),
+  createdAt: z.number(),
 });
 export type PendingPermission = z.infer<typeof PendingPermission>;
 

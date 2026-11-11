@@ -25,6 +25,7 @@ export const iconNames = [
   "globe",
   "home",
   "info",
+  "key",
   "keyboard",
   "layout-template",
   "list-checks",

@@ -147,6 +147,7 @@ type PendingEntry = {
   toolKind: string | null;
   options: PermissionOption[];
   itemId: string;
+  createdAt: number;
   resolve: (r: { optionId: string | null }) => void;
 };
 
@@ -814,6 +815,7 @@ export class AgentRuntime {
       title: p.title,
       toolKind: p.toolKind,
       options: p.options,
+      createdAt: p.createdAt,
     }));
   }
 
@@ -871,6 +873,7 @@ export class AgentRuntime {
         toolKind: req.toolKind,
         options: req.options,
         itemId: "",
+        createdAt: Date.now(),
         resolve,
       };
       const item = this.store.createItem(this.agent.id, turn?.id ?? null, "permission", {
@@ -880,6 +883,7 @@ export class AgentRuntime {
         resolution: null,
       });
       entry.itemId = item.id;
+      entry.createdAt = item.createdAt;
       this.pending.set(requestId, entry);
       this.broadcast("item.created", item);
       const pending: PendingPermission = {
@@ -889,6 +893,7 @@ export class AgentRuntime {
         title: req.title,
         toolKind: req.toolKind,
         options: req.options,
+        createdAt: entry.createdAt,
       };
       this.broadcast("permission.requested", pending);
       if (!turn?.cancelled) this.setStatus("awaiting_permission");
