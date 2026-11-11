@@ -12,7 +12,7 @@
 # Use --size-mib 8192 when installing all seven providers.
 set -euo pipefail
 FC_VERSION="${FC_VERSION:-v1.12.1}"
-DEVIN_CLI_VERSION="${DEVIN_CLI_VERSION:-3000.12.17}"
+DEVIN_CLI_VERSION="${DEVIN_CLI_VERSION:-3000.12.43}"
 GROK_CLI_VERSION="${GROK_CLI_VERSION:-1.0.77}"
 KERNEL_URL="${KERNEL_URL:-https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.12/$(uname -m)/vmlinux-6.1.128}"
 SIZE_MIB=""

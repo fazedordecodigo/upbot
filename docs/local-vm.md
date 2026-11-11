@@ -60,15 +60,17 @@ placements on ordinary SSH hosts are unchanged — they keep the host's login.
   `127.0.0.1:47222` for Playwright/CDP.
 - noVNC on `127.0.0.1:47080` (`boto-vnc` + `boto-novnc`) as a direct/debug view; the
   password is generated at `~/Boto/computer/shared/vnc-password`.
-- Provider CLIs (`claude`, `codex`), Node 22 and Bun, all checksum-verified at provision
-  time; git, curl, jq, python3, ffmpeg, ImageMagick, build tools.
+- The seven provider CLIs (`claude`, `codex`, `gemini`, `opencode`, `agent` for Cursor,
+  `devin`, `grok` — same set as the full guest image), Node 22 and Bun, all
+  checksum-verified at provision time; git, curl, jq, python3, ffmpeg, ImageMagick,
+  build tools.
 
 ## Storage and sharing
 
-| Guest path   | Mac path                     | Mode      |
-| ------------ | ---------------------------- | --------- |
-| `/workspace` | `~/Boto/computer/workspace`  | read/write |
-| `/mnt/boto`  | `~/Boto/computer/shared`     | read-only |
+| Guest path   | Mac path                    | Mode       |
+| ------------ | --------------------------- | ---------- |
+| `/workspace` | `~/Boto/computer/workspace` | read/write |
+| `/mnt/boto`  | `~/Boto/computer/shared`    | read-only  |
 
 `/workspace` (virtiofs) is where files the bot hands back should land. `/mnt/boto` is for
 host→guest inputs like the VNC password — the guest cannot write it.
@@ -97,7 +99,12 @@ agent Computer Use all work identically. noVNC remains available at
 - **State "broken"** — Lima reports an unexpected status; `limactl list` shows the raw
   value. `Apagar` + `Criar` rebuilds the instance (shared folders survive).
 - **Provider won't launch / machine shows error** — the helper may be missing or stale;
-  run **Instalar helper**.
+  run **Instalar helper**. A VM created before a recipe change keeps its original
+  provision: **Apagar** + **Criar** rebuilds it with the current recipe (the shared
+  folders under `~/Boto/computer/` survive), or install the missing piece inside the
+  guest by hand.
+- **"cannot start \<cli\>: Executable not found in $PATH"** — that provider CLI isn't
+  installed in the guest; current recipes install all seven.
 - Tests override the pieces: `BOTO_LIMA_COMMAND` (fake `limactl`, JSON array),
   `BOTO_LIMA_INSTANCE` (instance name), `BOTO_VM_READY_FILE` (provision marker),
   `BOTO_SSH_COMMAND` (fake ssh). See `packages/daemon/test/localvm.e2e.test.ts`.

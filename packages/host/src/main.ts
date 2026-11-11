@@ -27,6 +27,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readdirSync,
   readFileSync,
@@ -36,7 +37,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createConnection, createServer, isIP, type Server, type Socket } from "node:net";
-import { arch, homedir, platform, release } from "node:os";
+import { arch, homedir, platform, release, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 
@@ -271,11 +272,25 @@ function finish(code: number) {
 function runLocal(spec: RunSpec, rest: Buffer) {
   const cwd = join(ROOT, "agents", safeId(spec.agentId));
   mkdirSync(cwd, { recursive: true });
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    ...spec.env,
+    NO_COLOR: "1",
+  };
+  // Hosts without a writable /run/boto (older Lima guests) still give credentialed Codex
+  // an ephemeral per-run home instead of dying on EACCES.
+  if (env.CODEX_HOME === "/run/boto/codex-home") {
+    try {
+      mkdirSync(env.CODEX_HOME, { recursive: true });
+    } catch {
+      env.CODEX_HOME = mkdtempSync(join(tmpdir(), "codex-home-"));
+    }
+  }
   const [bin, ...args] = spec.cmd;
   if (!bin) die("empty command");
   const child = spawn(bin as string, args, {
     cwd,
-    env: { ...process.env, ...spec.env, NO_COLOR: "1" },
+    env,
     stdio: ["pipe", "pipe", "pipe"],
   });
   child.on("error", (e) => die(`cannot start ${bin}: ${e.message}`, 127));
@@ -1170,8 +1185,12 @@ async function guestDesktop() {
   if (!width || !height) return die("desktop display geometry is invalid", 3);
   const hostname = spawnSync("hostname").stdout?.toString().trim() || "boto-vm";
   const state = new DesktopControllerState();
-  const tmp = `/run/boto/desktop-${process.pid}`;
-  mkdirSync(tmp, { recursive: true });
+  let tmp = `/run/boto/desktop-${process.pid}`;
+  try {
+    mkdirSync(tmp, { recursive: true });
+  } catch {
+    tmp = mkdtempSync(join(tmpdir(), "boto-desktop-"));
+  }
   let seq = 0;
   let fps = 0;
   let thumbEveryMs = 5000;

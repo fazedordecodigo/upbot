@@ -8,7 +8,7 @@
 #
 # Inside: Debian 12, Xvfb :0 + Openbox (live desktop via `boto-host guest-desktop`),
 # Chromium (DevTools on 127.0.0.1:9222, forwarded to the Mac as :47222), noVNC on
-# 127.0.0.1:47080 for direct access, provider CLIs (claude, codex), Bun, Node 22.
+# 127.0.0.1:47080 for direct access, the seven provider CLIs, Bun, Node 22.
 # The bot's files shared with the Mac live at /workspace (~/Boto/computer/workspace).
 minimumLimaVersion: 2.0.0
 vmType: vz
@@ -17,151 +17,170 @@ memory: 4GiB
 disk: 20GiB
 mountType: virtiofs
 mounts:
-- location: "~/Boto/computer/workspace"
-  mountPoint: /workspace
-  writable: true
-- location: "~/Boto/computer/shared"
-  mountPoint: /mnt/boto
-  writable: false
+  - location: "~/Boto/computer/workspace"
+    mountPoint: /workspace
+    writable: true
+  - location: "~/Boto/computer/shared"
+    mountPoint: /mnt/boto
+    writable: false
 portForwards:
-- guestPort: 6080          # noVNC (direct live screen in a browser)
-  hostIP: 127.0.0.1
-  hostPort: 47080
-- guestPort: 9222          # Chromium DevTools (Playwright/CDP)
-  guestIP: 127.0.0.1
-  hostIP: 127.0.0.1
-  hostPort: 47222
-- guestPortRange: [1, 65535]
-  proto: any
-  ignore: true
+  - guestPort: 6080 # noVNC (direct live screen in a browser)
+    hostIP: 127.0.0.1
+    hostPort: 47080
+  - guestPort: 9222 # Chromium DevTools (Playwright/CDP)
+    guestIP: 127.0.0.1
+    hostIP: 127.0.0.1
+    hostPort: 47222
+  - guestPortRange: [1, 65535]
+    proto: any
+    ignore: true
 containerd:
   system: false
   user: false
 provision:
-- mode: system
-  script: |
-    set -eux
-    export DEBIAN_FRONTEND=noninteractive
-    u="{{.User}}"; h="$(getent passwd "$u" | cut -d: -f6)"
-    if [ ! -f /var/lib/boto-computer-provisioned ]; then
-      apt-get update
-      apt-get install -y --no-install-recommends \
-        xvfb x11vnc openbox xdotool xclip x11-utils xauth dbus-x11 scrot chromium \
-        fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji fonts-dejavu-core \
-        novnc websockify ca-certificates xterm locales plank pcmanfm xfce4-terminal xcompmgr \
-        git curl wget unzip jq python3 python3-pip python3-venv ffmpeg imagemagick build-essential iptables
-      sed -i 's/^# *pt_BR.UTF-8/pt_BR.UTF-8/; s/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
-      # Node.js 22 — checksum-verified, same scheme as packages/host/rootfs/build-rootfs.sh.
-      mkdir -p /tmp/node-dist
-      case "$(dpkg --print-architecture)" in arm64) narch=arm64 ;; amd64) narch=x64 ;; *) exit 1 ;; esac
-      curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt -o /tmp/node-dist/SHASUMS256.txt
-      tarball="$(awk -v a="linux-$narch.tar.xz" '$2 ~ ("^node-v[0-9.]+-" a "$") {print $2; exit}' /tmp/node-dist/SHASUMS256.txt)"
-      [ -n "$tarball" ]
-      grep " $tarball\$" /tmp/node-dist/SHASUMS256.txt > /tmp/node-dist/node.sha256
-      curl -fsSL "https://nodejs.org/dist/latest-v22.x/$tarball" -o "/tmp/node-dist/$tarball"
-      (cd /tmp/node-dist && sha256sum -c node.sha256)
-      tar -xJf "/tmp/node-dist/$tarball" -C /usr/local --strip-components=1
-      rm -rf /tmp/node-dist
-      # Bun — checksum-verified against the release SHASUMS256.
-      mkdir -p /tmp/bun-dist
-      bzip="bun-linux-aarch64.zip"; [ "$narch" = "x64" ] && bzip="bun-linux-x64-baseline.zip"
-      curl -fsSL https://github.com/oven-sh/bun/releases/latest/download/SHASUMS256.txt -o /tmp/bun-dist/SHASUMS256.txt
-      grep " $bzip\$" /tmp/bun-dist/SHASUMS256.txt > /tmp/bun-dist/bun.sha256
-      curl -fsSL "https://github.com/oven-sh/bun/releases/latest/download/$bzip" -o "/tmp/bun-dist/$bzip"
-      (cd /tmp/bun-dist && sha256sum -c bun.sha256)
-      unzip -o "/tmp/bun-dist/$bzip" -d /tmp/bun-dist
-      install -m 0755 "/tmp/bun-dist/${bzip%.zip}/bun" /usr/local/bin/bun
-      ln -sf /usr/local/bin/bun /usr/local/bin/bunx
-      rm -rf /tmp/bun-dist
-      # Provider CLIs spawned by name in process placement (same set as the default guest image).
-      npm install -g @anthropic-ai/claude-code @openai/codex
-      touch /var/lib/boto-computer-provisioned
-    fi
-    install -d -o "$u" -g "$u" "$h/.config/openbox" "$h/.vnc" "$h/.boto-chrome"
-    cat > "$h/.config/openbox/autostart" <<'AUTOSTART'
-    # Desktop session: compositor, backdrop color, dock, then Chromium maximized with DevTools
-    # on 127.0.0.1:9222 (forwarded to the Mac for Playwright/CDP).
-    xcompmgr -n &
-    xsetroot -solid "#101418" &
-    (sleep 1; plank) &
-    (sleep 2; chromium --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
-      --user-data-dir="$HOME/.boto-chrome" --no-first-run --no-default-browser-check \
-      --start-maximized) &
-    AUTOSTART
-    chown -R "$u:$u" "$h/.config" "$h/.boto-chrome"
-    cat > /etc/systemd/system/boto-xvfb.service <<UNIT
-    [Unit]
-    Description=Boto screen
-    [Service]
-    User=$u
-    ExecStart=/usr/bin/Xvfb :0 -screen 0 1280x800x24 -nolisten tcp
-    Restart=always
-    [Install]
-    WantedBy=multi-user.target
-    UNIT
-    cat > /etc/systemd/system/boto-desktop.service <<UNIT
-    [Unit]
-    Description=Boto desktop session
-    After=boto-xvfb.service
-    Requires=boto-xvfb.service
-    [Service]
-    User=$u
-    Environment=DISPLAY=:0
-    Environment=LANG=pt_BR.UTF-8
-    ExecStartPre=/bin/sleep 1
-    ExecStart=/usr/bin/dbus-launch --exit-with-session /usr/bin/openbox-session
-    Restart=always
-    [Install]
-    WantedBy=multi-user.target
-    UNIT
-    cat > /etc/systemd/system/boto-vnc.service <<UNIT
-    [Unit]
-    Description=Boto screen sharing
-    After=boto-xvfb.service
-    Requires=boto-xvfb.service
-    [Service]
-    User=$u
-    ExecStartPre=/bin/sh -c 'x11vnc -storepasswd "\$(cat /mnt/boto/vnc-password)" $h/.vnc/passwd'
-    ExecStart=/usr/bin/x11vnc -display :0 -rfbauth $h/.vnc/passwd -localhost -forever -shared -rfbport 5901 -noxdamage -quiet
-    Restart=always
-    [Install]
-    WantedBy=multi-user.target
-    UNIT
-    cat > /etc/systemd/system/boto-novnc.service <<UNIT
-    [Unit]
-    Description=Boto screen viewer
-    After=boto-vnc.service
-    [Service]
-    User=$u
-    ExecStart=/usr/bin/websockify --web /usr/share/novnc 0.0.0.0:6080 127.0.0.1:5901
-    Restart=always
-    [Install]
-    WantedBy=multi-user.target
-    UNIT
-    systemctl daemon-reload
-    systemctl enable --now boto-xvfb boto-desktop boto-vnc boto-novnc
-# The VM can't reach this Mac: host.lima.internal is the Mac's own 127.0.0.1 (its admin panel,
-# voice server...). Replies, DNS and DHCP pass; the rest is refused. Re-applied every boot
-# because the rules don't survive one.
-- mode: system
-  script: |
-    set -eu
-    command -v iptables-restore >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends iptables
-    h=$(getent ahostsv4 host.lima.internal | awk 'NR==1{print $1}'); [ -n "$h" ] || h=192.168.5.2
-    iptables-restore --noflush <<'RULES'
-    *filter
-    :BOTO-HOST - [0:0]
-    -F BOTO-HOST
-    -A BOTO-HOST -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
-    -A BOTO-HOST -p udp --dport 53 -j RETURN
-    -A BOTO-HOST -p tcp --dport 53 -j RETURN
-    -A BOTO-HOST -p udp --dport 67 -j RETURN
-    -A BOTO-HOST -j REJECT
-    COMMIT
-    RULES
-    iptables -C OUTPUT -d "$h" -j BOTO-HOST 2>/dev/null || iptables -I OUTPUT 1 -d "$h" -j BOTO-HOST
+  - mode: system
+    script: |
+      set -eux
+      export DEBIAN_FRONTEND=noninteractive
+      u="{{.User}}"; h="$(getent passwd "$u" | cut -d: -f6)"
+      if [ ! -f /var/lib/boto-computer-provisioned ]; then
+        apt-get update
+        apt-get install -y --no-install-recommends \
+          xvfb x11vnc openbox xdotool xclip x11-utils xauth dbus-x11 scrot chromium \
+          fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji fonts-dejavu-core \
+          novnc websockify ca-certificates xterm locales plank pcmanfm xfce4-terminal xcompmgr \
+          git curl wget unzip jq python3 python3-pip python3-venv ffmpeg imagemagick build-essential iptables
+        sed -i 's/^# *pt_BR.UTF-8/pt_BR.UTF-8/; s/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
+        # Node.js 22 — checksum-verified, same scheme as packages/host/rootfs/build-rootfs.sh.
+        mkdir -p /tmp/node-dist
+        case "$(dpkg --print-architecture)" in arm64) narch=arm64 ;; amd64) narch=x64 ;; *) exit 1 ;; esac
+        curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt -o /tmp/node-dist/SHASUMS256.txt
+        tarball="$(awk -v a="linux-$narch.tar.xz" '$2 ~ ("^node-v[0-9.]+-" a "$") {print $2; exit}' /tmp/node-dist/SHASUMS256.txt)"
+        [ -n "$tarball" ]
+        grep " $tarball\$" /tmp/node-dist/SHASUMS256.txt > /tmp/node-dist/node.sha256
+        curl -fsSL "https://nodejs.org/dist/latest-v22.x/$tarball" -o "/tmp/node-dist/$tarball"
+        (cd /tmp/node-dist && sha256sum -c node.sha256)
+        tar -xJf "/tmp/node-dist/$tarball" -C /usr/local --strip-components=1
+        rm -rf /tmp/node-dist
+        # Bun — checksum-verified against the release SHASUMS256.
+        mkdir -p /tmp/bun-dist
+        bzip="bun-linux-aarch64.zip"; [ "$narch" = "x64" ] && bzip="bun-linux-x64-baseline.zip"
+        curl -fsSL https://github.com/oven-sh/bun/releases/latest/download/SHASUMS256.txt -o /tmp/bun-dist/SHASUMS256.txt
+        grep " $bzip\$" /tmp/bun-dist/SHASUMS256.txt > /tmp/bun-dist/bun.sha256
+        curl -fsSL "https://github.com/oven-sh/bun/releases/latest/download/$bzip" -o "/tmp/bun-dist/$bzip"
+        (cd /tmp/bun-dist && sha256sum -c bun.sha256)
+        unzip -o "/tmp/bun-dist/$bzip" -d /tmp/bun-dist
+        install -m 0755 "/tmp/bun-dist/${bzip%.zip}/bun" /usr/local/bin/bun
+        ln -sf /usr/local/bin/bun /usr/local/bin/bunx
+        rm -rf /tmp/bun-dist
+        # Provider CLIs spawned by name in process placement — the same set the full guest
+        # image carries (see the `case "$p"` block in packages/host/rootfs/build-rootfs.sh).
+        npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli opencode-ai
+        HOME=/opt/cursor-agent-home bash -c 'curl -fsS https://cursor.com/install | bash'
+        ln -sf /opt/cursor-agent-home/.local/bin/agent /usr/local/bin/agent
+        mkdir -p /opt/devin-home
+        curl -fsSL https://static.devin.ai/cli/3000.12.43/setup.sh -o /tmp/devin-setup.sh
+        HOME=/opt/devin-home bash /tmp/devin-setup.sh || true
+        ln -sf "$(readlink -f /opt/devin-home/.local/bin/devin)" /usr/local/bin/devin
+        devin --version | grep -F 'devin 3000.12.43 ('
+        mkdir -p /opt/grok-home
+        mv /usr/local/bin/agent /tmp/boto-saved-agent
+        curl -fsSL https://x.ai/cli/install.sh -o /tmp/grok-install.sh
+        HOME=/opt/grok-home GROK_BIN_DIR=/opt/grok-home/.grok/bin bash /tmp/grok-install.sh 1.0.77
+        rm -f /usr/local/bin/agent
+        mv /tmp/boto-saved-agent /usr/local/bin/agent
+        ln -sf "$(readlink -f /opt/grok-home/.grok/bin/grok)" /usr/local/bin/grok
+        grok --no-auto-update --version | grep -F 'grok 1.0.77 ('
+        touch /var/lib/boto-computer-provisioned
+      fi
+      # /run is tmpfs and this script re-runs on every boot: recreate the scratch dir the
+      # guest desktop agent and CODEX_HOME write to (boto-init does the same on Firecracker).
+      install -d -o "$u" -g "$u" -m 0755 /run/boto
+      install -d -o "$u" -g "$u" "$h/.config/openbox" "$h/.vnc" "$h/.boto-chrome"
+      cat > "$h/.config/openbox/autostart" <<'AUTOSTART'
+      # Desktop session: compositor, backdrop color, dock, then Chromium maximized with DevTools
+      # on 127.0.0.1:9222 (forwarded to the Mac for Playwright/CDP).
+      xcompmgr -n &
+      xsetroot -solid "#101418" &
+      (sleep 1; plank) &
+      (sleep 2; chromium --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
+        --user-data-dir="$HOME/.boto-chrome" --no-first-run --no-default-browser-check \
+        --start-maximized) &
+      AUTOSTART
+      chown -R "$u:$u" "$h/.config" "$h/.boto-chrome"
+      cat > /etc/systemd/system/boto-xvfb.service <<UNIT
+      [Unit]
+      Description=Boto screen
+      [Service]
+      User=$u
+      ExecStart=/usr/bin/Xvfb :0 -screen 0 1280x800x24 -nolisten tcp
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+      cat > /etc/systemd/system/boto-desktop.service <<UNIT
+      [Unit]
+      Description=Boto desktop session
+      After=boto-xvfb.service
+      Requires=boto-xvfb.service
+      [Service]
+      User=$u
+      Environment=DISPLAY=:0
+      Environment=LANG=pt_BR.UTF-8
+      ExecStartPre=/bin/sleep 1
+      ExecStart=/usr/bin/dbus-launch --exit-with-session /usr/bin/openbox-session
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+      cat > /etc/systemd/system/boto-vnc.service <<UNIT
+      [Unit]
+      Description=Boto screen sharing
+      After=boto-xvfb.service
+      Requires=boto-xvfb.service
+      [Service]
+      User=$u
+      ExecStartPre=/bin/sh -c 'x11vnc -storepasswd "\$(cat /mnt/boto/vnc-password)" $h/.vnc/passwd'
+      ExecStart=/usr/bin/x11vnc -display :0 -rfbauth $h/.vnc/passwd -localhost -forever -shared -rfbport 5901 -noxdamage -quiet
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+      cat > /etc/systemd/system/boto-novnc.service <<UNIT
+      [Unit]
+      Description=Boto screen viewer
+      After=boto-vnc.service
+      [Service]
+      User=$u
+      ExecStart=/usr/bin/websockify --web /usr/share/novnc 0.0.0.0:6080 127.0.0.1:5901
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+      systemctl daemon-reload
+      systemctl enable --now boto-xvfb boto-desktop boto-vnc boto-novnc
+  # The VM can't reach this Mac: host.lima.internal is the Mac's own 127.0.0.1 (its admin panel,
+  # voice server...). Replies, DNS and DHCP pass; the rest is refused. Re-applied every boot
+  # because the rules don't survive one.
+  - mode: system
+    script: |
+      set -eu
+      command -v iptables-restore >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends iptables
+      h=$(getent ahostsv4 host.lima.internal | awk 'NR==1{print $1}'); [ -n "$h" ] || h=192.168.5.2
+      iptables-restore --noflush <<'RULES'
+      *filter
+      :BOTO-HOST - [0:0]
+      -F BOTO-HOST
+      -A BOTO-HOST -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+      -A BOTO-HOST -p udp --dport 53 -j RETURN
+      -A BOTO-HOST -p tcp --dport 53 -j RETURN
+      -A BOTO-HOST -p udp --dport 67 -j RETURN
+      -A BOTO-HOST -j REJECT
+      COMMIT
+      RULES
+      iptables -C OUTPUT -d "$h" -j BOTO-HOST 2>/dev/null || iptables -I OUTPUT 1 -d "$h" -j BOTO-HOST
 images:
-- location: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2
-  arch: aarch64
-- location: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
-  arch: x86_64
+  - location: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2
+    arch: aarch64
+  - location: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
+    arch: x86_64

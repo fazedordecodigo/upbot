@@ -46,7 +46,7 @@ passes `remote.credentials` as env). MicroVM sign-in (`vmCredentials`, Settings 
 claude (OAuth token or API key), codex (`OPENAI_API_KEY`), gemini (`GEMINI_API_KEY`), cursor
 (`CURSOR_API_KEY`), devin (`WINDSURF_API_KEY`), and grok (`XAI_API_KEY`). The seven-provider
 image includes the verified Claude Code 2.1.310, Codex 0.164.0, Gemini 0.65.0,
-OpenCode 1.19.4, Cursor Agent 2026.10.22-27dcf5f, Devin 3000.12.17 and Grok 1.0.77.
+OpenCode 1.19.4, Cursor Agent 2026.10.22-27dcf5f, Devin 3000.12.43 and Grok 1.0.77.
 Building all seven providers needs `--size-mib 8192`. Cursor installs
 under `/opt/cursor-agent-home` because `/root` is bind-mounted from persistent storage.
 Signed-out behavior: Gemini reports `gemini`, OpenCode `opencode auth login`, and Cursor
@@ -62,7 +62,7 @@ Firecracker provider env. Gemini invalid-key errors are explicit; Cursor's
 to `api2.cursor.sh` with a microVM credential set, since Cursor returns no explicit invalid-key
 error. `bun run test:firecracker:providers` checks these real ACP flows, credential delivery,
 placement isolation, and plaintext leaks.
-The image also supports Devin 3000.12.17 (`/opt/devin-home`, `WINDSURF_API_KEY`) and
+The image also supports Devin 3000.12.43 (`/opt/devin-home`, `WINDSURF_API_KEY`) and
 Grok 1.0.77 (`/opt/grok-home`, `XAI_API_KEY`), linked as `devin` and `grok` in
 `/usr/local/bin`. Pins can be overridden with `DEVIN_CLI_VERSION` / `GROK_CLI_VERSION`.
 Grok's installer overwrites `/usr/local/bin/agent`; the build preserves and restores
