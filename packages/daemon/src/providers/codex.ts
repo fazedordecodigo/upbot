@@ -1,4 +1,4 @@
-import type { ConfigOption, PermissionOption, ToolCallStatus } from "@boto/protocol";
+import type { ConfigOption, PermissionOption, PlanEntry, ToolCallStatus } from "@boto/protocol";
 import { VERSION } from "../version";
 import {
   AUTH_RE,
@@ -264,6 +264,29 @@ class CodexSession implements ProviderSession {
       case "turn/completed":
         this.onTurnCompleted((p.turn ?? {}) as Json);
         return;
+      case "turn/plan/updated": {
+        // the todo_write/update_plan tool reports the plan as [{step, status}]
+        const raw = (
+          Array.isArray(p.todo) ? p.todo : Array.isArray(p.plan) ? p.plan : []
+        ) as Json[];
+        const entries: PlanEntry[] = [];
+        for (const e of raw) {
+          const content = str(e?.step) ?? str(e?.content);
+          if (!content?.trim()) continue;
+          const s = e?.status;
+          entries.push({
+            content: content.trim(),
+            status:
+              s === "completed"
+                ? "completed"
+                : s === "in_progress" || s === "inProgress"
+                  ? "in_progress"
+                  : "pending",
+          });
+        }
+        this.hooks.onUpdate({ type: "plan", entries });
+        return;
+      }
       case "thread/tokenUsage/updated":
         this.onTokenUsage((p.tokenUsage ?? {}) as Json);
         return;

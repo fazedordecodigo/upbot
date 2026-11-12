@@ -1,4 +1,4 @@
-import type { ConfigOption, PermissionOption } from "@boto/protocol";
+import type { ConfigOption, PermissionOption, PlanEntry } from "@boto/protocol";
 import {
   AUTH_RE,
   authMessage,
@@ -74,6 +74,27 @@ export function claudeToolTitle(name: string, input: unknown): string {
     str(i.query) ??
     str(i.description);
   return arg ? `${name}: ${truncate(arg.split("\n")[0]!, 200)}` : name;
+}
+
+// Claude tracks its work with the TodoWrite tool; its todos are the plan card.
+function todoPlanEntries(input: unknown): PlanEntry[] | null {
+  const todos = (input as Json | undefined)?.todos;
+  if (!Array.isArray(todos)) return null;
+  const entries: PlanEntry[] = [];
+  for (const t of todos as Json[]) {
+    const content = str(t?.content)?.trim();
+    if (!content) continue;
+    entries.push({
+      content,
+      status:
+        t?.status === "completed"
+          ? "completed"
+          : t?.status === "in_progress"
+            ? "in_progress"
+            : "pending",
+    });
+  }
+  return entries;
 }
 
 function toolResultText(content: unknown): string | null {
@@ -257,6 +278,11 @@ class ClaudeSession implements ProviderSession {
         this.hooks.onUpdate({ type: "thought_chunk", text: block.thinking as string });
       } else if (block.type === "tool_use") {
         const name = String(block.name ?? "tool");
+        const plan = name === "TodoWrite" ? todoPlanEntries(block.input) : null;
+        if (plan) {
+          this.hooks.onUpdate({ type: "plan", entries: plan });
+          continue;
+        }
         this.hooks.onUpdate({
           type: "tool_call",
           toolCallId: String(block.id ?? ""),

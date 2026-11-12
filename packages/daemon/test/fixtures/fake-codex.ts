@@ -10,6 +10,7 @@
 //   split:<t> -> agentMessage split inside a multi-byte UTF-8 character, turn completed
 //   think:<t> -> reasoning delta then text <t>
 //   tool      -> commandExecution + requestApproval -> "permission:<decision>"
+//   plan      -> turn/plan/updated notifications -> "plan:done"
 //   whoami    -> "sandbox=<type> approval=<p> model=<m> effort=<e> thread=<id>"
 //   slow      -> a delta every 100ms until turn/interrupt
 //   fail      -> turn completed with status failed
@@ -195,6 +196,21 @@ async function runTurn(threadId: string, turnId: string, params: J) {
     });
     if (res.decision === "cancel") return complete(threadId, turnId, "interrupted");
     message(threadId, turnId, `permission:${String(res.decision)}`);
+    complete(threadId, turnId, "completed");
+  } else if (text === "plan") {
+    const plan = (statuses: string[]) =>
+      notify("turn/plan/updated", {
+        threadId,
+        turnId,
+        plan: [
+          { step: "Clonar o repositório", status: statuses[0] },
+          { step: "Rodar os testes", status: statuses[1] },
+          { step: "Abrir o PR", status: statuses[2] },
+        ],
+      });
+    plan(["completed", "inProgress", "pending"]);
+    plan(["completed", "completed", "completed"]);
+    message(threadId, turnId, "plan:done");
     complete(threadId, turnId, "completed");
   } else if (text === "whoami") {
     const sp = params.sandboxPolicy as J | undefined;
