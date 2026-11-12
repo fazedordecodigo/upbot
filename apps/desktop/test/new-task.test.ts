@@ -439,6 +439,34 @@ test(
 );
 
 test(
+  "sidebar lists the bots and opens a new session with the clicked bot",
+  async () => {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    page.setDefaultTimeout(10_000);
+    try {
+      await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
+      await page.locator("#home-title").waitFor();
+      const items = page.locator('#sidebar .sb-sub-item[data-nav="new"]');
+      await until(async () => (await items.count()) >= 2);
+      for (const name of ["Alpha", "Beta"])
+        expect(await items.filter({ hasText: name }).count()).toBe(1);
+      const item = items.filter({ hasText: "Beta" });
+      await item.click();
+      await until(async () => (await page.locator("#main").getAttribute("data-view")) === "new");
+      expect(await item.getAttribute("aria-current")).toBe("page");
+      await until(() => page.locator("#composer-input").isEnabled());
+      await page.locator("#composer-input").fill("echo:sidebar session");
+      await page.locator("#send").click();
+      await until(async () => (await page.locator("#main").getAttribute("data-view")) === "task");
+      expect((await taskByPrompt("echo:sidebar session")).agentId).toBe(beta.id);
+    } finally {
+      await page.close();
+    }
+  },
+  T,
+);
+
+test(
   "saved delegation timing schedules tasks, Nova rotina presets daily, and templates override defaults",
   async () => {
     const profile = await rpc.request("profile.get", {});

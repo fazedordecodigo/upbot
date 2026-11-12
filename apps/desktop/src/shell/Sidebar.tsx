@@ -5,6 +5,7 @@ import { openExternalLink } from "../lib/external-link";
 import { errorFields, logWarn } from "../lib/log";
 import { isMac } from "../lib/platform";
 import { useThemePref } from "../lib/theme";
+import { mono } from "../lib/ui";
 import { TaskHistory } from "../shell-data/TaskHistory";
 import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from "../ui/Dropdown";
 import { Icon, type IconName } from "../ui/icons";
@@ -157,6 +158,40 @@ export function Sidebar({
                 </span>
               ) : null}
             </button>
+            {item.view === "agents" && agents.length > 0 && (
+              <div className="sb-sub od-stack">
+                {agents.map((agent) => (
+                  <button
+                    type="button"
+                    key={agent.id}
+                    className="sb-item sb-sub-item od-row"
+                    data-nav="new"
+                    aria-current={
+                      view === "new" && params.agentId === agent.id ? "page" : undefined
+                    }
+                    onClick={() => {
+                      close();
+                      navigate("new", { agentId: agent.id });
+                    }}
+                  >
+                    <span className="sb-bot-mark" aria-hidden="true">
+                      {agent.avatar && "emoji" in agent.avatar
+                        ? agent.avatar.emoji
+                        : mono(agent.name)}
+                    </span>
+                    <span className="od-fill od-truncate">{agent.name}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="sb-item sb-sub-item"
+                  data-action="go-agents-all"
+                  onClick={() => go("agents")}
+                >
+                  <span className="od-fill">Ver todos os bots</span>
+                </button>
+              </div>
+            )}
             {item.view === "collaboration" && openCollabs.length > 0 && (
               <div className="sb-sub od-stack">
                 {openCollabs.map((c) => (
