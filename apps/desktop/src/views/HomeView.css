@@ -42,9 +42,6 @@
 .home .pc-dot[data-tone="run"] { background: var(--boto-color-success); }
 .home .pc-dot[data-tone="wait"] { background: var(--boto-color-primary); }
 .home .pc-grid { gap: var(--boto-space-4); grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
-.home .pc-machine { display: grid; gap: var(--boto-space-3); width: 100%; text-align: start; color: var(--boto-color-foreground); background: var(--boto-color-muted-surface); border: calc(var(--boto-size-focus-ring) / 2) solid var(--boto-color-border); border-radius: var(--boto-radius-lg); padding: var(--boto-space-3); }
-.home .pc-name { display: flex; align-items: center; gap: var(--boto-space-2); font: var(--boto-font-size-sm) var(--boto-font-mono); }
-.home .pc-task { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
 .home .pc-apps { display: flex; flex-wrap: wrap; align-items: center; gap: var(--boto-space-2); margin-top: var(--boto-space-5); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); }
 .home .pc-apps-label { margin-right: var(--boto-space-1); }
 .home .pc-apps-list { display: flex; flex-wrap: wrap; gap: var(--boto-space-2); }

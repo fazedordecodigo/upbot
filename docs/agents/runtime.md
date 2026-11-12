@@ -122,5 +122,6 @@ aggregate of every instance. With several turns of one agent running, `currentTu
 null (bridge calls can't be attributed), so task-scoped grants never apply then.
 `requireApproval` registers an `ApprovalService.addAskPolicy` that forces asks for every
 non-read app tool and `page_publish`; ask policies only add asks.
-`src/agents-overview.ts` serves `agents.overview` and the debounced `agents.overviewChanged`.
+`src/agents-overview.ts` serves `agents.overview` and the debounced `agents.overviewChanged`;
+each row also carries `next`, the oldest queued request shown as "Próxima" on the board card.
 Test: `test/agents-cockpit.e2e.test.ts`.

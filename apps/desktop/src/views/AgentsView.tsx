@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import type { AgentOverview } from "@boto/protocol";
+import { type CSSProperties, useEffect, useState } from "react";
 import { AgentPanel } from "../agents/AgentPanel";
-import { AgentHeading, MachineThumb, TaskRows } from "../agents/AgentParts";
+import { AgentHeading, TaskRows } from "../agents/AgentParts";
 import { CreateAgent } from "../agents/CreateAgent";
+import { agentStatus } from "../agents/helpers";
+import { MachineCard } from "../agents/MachineCard";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { errorMessage } from "../lib/errors";
-import { PROVIDER_NAMES } from "../lib/ui";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
 import { Icon } from "../ui/icons";
@@ -16,12 +18,19 @@ const filters = [
   ["run", "Trabalhando"],
   ["wait", "Aguardando você"],
   ["idle", "Livres"],
-  ["error", "Com erro"],
+  ["paused", "Pausados"],
 ] as const;
+type FilterKey = (typeof filters)[number][0];
+
+function inFilter(item: AgentOverview, filter: FilterKey) {
+  if (filter === "paused") return item.paused;
+  if (filter === "idle") return item.situation === "idle" && !item.paused;
+  return filter === "all" || item.situation === filter;
+}
 
 export function AgentsView() {
   const { client, agents } = useDaemon();
-  const { params } = useRouter();
+  const { params, navigate } = useRouter();
   const toast = useToast();
   const overview = useDaemonQuery(client, "agents.overview", {});
   const { setData } = overview;
@@ -33,7 +42,7 @@ export function AgentsView() {
     {},
     { events: { "desktop.machine": true } },
   );
-  const [filter, setFilter] = useState<string>("all");
+  const [filter, setFilter] = useState<FilterKey>("all");
   const [creating, setCreating] = useState(false);
   useEffect(() => {
     if (params.create === "1") setCreating(true);
@@ -51,6 +60,18 @@ export function AgentsView() {
       toast(errorMessage(e));
     }
   }
+  const agentRows = overview.data?.agents;
+  const busyAgents = agentRows?.filter(
+    (row) => row.situation === "run" || row.situation === "wait",
+  ).length;
+  const used = agentRows?.reduce((n, row) => n + row.instances.active, 0);
+  const slots = agentRows?.reduce((n, row) => n + (row.instances.max ?? row.instances.capacity), 0);
+  const stats: { value: number | undefined; of: number | undefined; label: string }[] = [
+    { value: busyAgents, of: summary?.agents, label: "agentes em atividade" },
+    { value: used, of: slots, label: "instâncias em uso" },
+    { value: summary?.queued, of: undefined, label: "tarefas na fila" },
+    { value: summary?.waiting, of: undefined, label: "pedidos esperando você" },
+  ];
   return (
     <section className="view agents-view od-scroll" id="view-agents" aria-labelledby="agents-title">
       <div className="page-inner page-wide">
@@ -77,17 +98,17 @@ export function AgentsView() {
           </button>
         </div>
         <section className="ag-stats" id="ag-stats" aria-label="Resumo dos bots">
-          {(
-            [
-              ["agents", "Bots"],
-              ["running", "Em execução"],
-              ["waiting", "Aguardando você"],
-              ["queued", "Na fila"],
-            ] as const
-          ).map(([key, label]) => (
-            <div className="od-stat ag-stat" key={key}>
-              <span className="ag-stat-value" data-unknown={summary?.[key] === undefined}>
-                {summary?.[key] ?? "a definir"}
+          {stats.map(({ value, of, label }) => (
+            <div className="od-stat ag-stat" key={label}>
+              <span className="ag-stat-value" data-unknown={value === undefined}>
+                {value === undefined ? (
+                  "a definir"
+                ) : (
+                  <>
+                    {value}
+                    {of !== undefined && <span className="ag-stat-of"> de {of}</span>}
+                  </>
+                )}
               </span>
               <span className="ag-stat-label">{label}</span>
             </div>
@@ -140,7 +161,7 @@ export function AgentsView() {
                     <span className="ag-filter-count">
                       {key === "all"
                         ? summary.agents
-                        : overview.data.agents.filter((row) => row.situation === key).length}
+                        : overview.data.agents.filter((row) => inFilter(row, key)).length}
                     </span>
                   )}
                 </button>
@@ -168,59 +189,124 @@ export function AgentsView() {
                   Novo bot
                 </button>
               </div>
-            ) : !rows.some((row) => filter === "all" || row.item.situation === filter) ? (
+            ) : !rows.some((row) => inFilter(row.item, filter)) ? (
               <p className="ag-empty">Nenhum bot nesta situação.</p>
             ) : (
               rows
-                .filter((row) => filter === "all" || row.item.situation === filter)
-                .map(({ agent, item }) => (
-                  <article className="ag-card card" key={agent.id}>
-                    <header>
-                      <AgentHeading agent={agent} overview={item} />
-                    </header>
-                    <dl className="ag-facts">
-                      <div>
-                        <dt>Instâncias</dt>
-                        <dd>
-                          {item.instances.active} de {item.instances.max ?? "a definir"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Fila</dt>
-                        <dd>{item.queued}</dd>
-                      </div>
-                      <div>
-                        <dt>Provedor</dt>
-                        <dd>{PROVIDER_NAMES[agent.provider]}</dd>
-                      </div>
-                    </dl>
-                    <TaskRows overview={item} />
-                    {item.machines.length > 0 && (
-                      <div className="ag-machines">
-                        {item.machines.map((id) => {
-                          const machine = machines.data?.find((m) => m.id === id);
-                          return machine ? <MachineThumb key={id} machine={machine} /> : null;
-                        })}
-                      </div>
-                    )}
-                    <footer className="ag-card-foot">
-                      <button
-                        type="button"
-                        className="btn btn-outline btn-sm"
-                        onClick={() => setSelected(agent.id)}
+                .filter((row) => inFilter(row.item, filter))
+                .map(({ agent, item }) => {
+                  const status = agentStatus(item);
+                  const capacity = item.instances.max ?? item.instances.capacity;
+                  const instanceText = `${item.instances.active} de ${item.instances.max ?? "a definir"} ${item.instances.max === 1 ? "instância" : "instâncias"}`;
+                  const live = (machines.data ?? []).filter(
+                    (machine) => item.machines.includes(machine.id) && machine.status !== "stopped",
+                  );
+                  const liveTasks = new Set(
+                    live.flatMap((machine) => (machine.taskId ? [machine.taskId] : [])),
+                  );
+                  const uncovered = (ref: { taskId: string | null }) =>
+                    !ref.taskId || !liveTasks.has(ref.taskId);
+                  const running = item.running.filter(uncovered);
+                  const waiting = item.waiting.filter(uncovered);
+                  const taskTitle = (taskId: string | null) =>
+                    [...item.waiting, ...item.running].find((ref) => ref.taskId === taskId)
+                      ?.title ?? null;
+                  return (
+                    <article className="ag-card card" key={agent.id}>
+                      <header>
+                        <AgentHeading
+                          agent={agent}
+                          overview={item}
+                          aside={<span className="ag-inst">{instanceText}</span>}
+                        />
+                      </header>
+                      <div
+                        className="progress"
+                        data-tone={status.tone}
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={capacity}
+                        aria-valuenow={item.instances.active}
+                        aria-valuetext={instanceText}
                       >
-                        Abrir painel
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => void toggle(agent.id, item.paused)}
-                      >
-                        {item.paused ? "Retomar fila" : "Pausar fila"}
-                      </button>
-                    </footer>
-                  </article>
-                ))
+                        <span
+                          style={
+                            {
+                              "--p": Math.min(1, item.instances.active / capacity),
+                            } as CSSProperties
+                          }
+                        />
+                      </div>
+                      <div className="ag-live">
+                        <h3 className="ag-sec-label">Áreas de trabalho ao vivo</h3>
+                        {live.length > 0 && (
+                          <div className="ag-machines">
+                            {live.map((machine) => (
+                              <MachineCard
+                                key={machine.id}
+                                machine={machine}
+                                taskTitle={taskTitle(machine.taskId)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        {running.length + waiting.length > 0 && (
+                          <TaskRows overview={{ ...item, running, waiting }} />
+                        )}
+                        {live.length + running.length + waiting.length === 0 && (
+                          <p className="ag-live-empty">
+                            {item.paused
+                              ? "Nenhuma máquina em uso. A fila está pausada."
+                              : "Nenhuma máquina em uso. Pronto para a próxima tarefa."}
+                          </p>
+                        )}
+                      </div>
+                      <div className="ag-queue">
+                        <div className="od-row">
+                          <h3 className="ag-sec-label od-fill">Fila</h3>
+                          <span className="ag-queue-count">
+                            {item.queued === 0
+                              ? "Vazia"
+                              : `${item.queued} ${item.queued === 1 ? "tarefa" : "tarefas"}`}
+                          </span>
+                        </div>
+                        {item.next && (
+                          <p className="ag-next od-truncate">
+                            <span className="ag-next-label">Próxima: </span>
+                            {item.next.taskId ? (
+                              <button
+                                type="button"
+                                className="ag-task-link"
+                                onClick={() => navigate("task", { id: item.next?.taskId ?? "" })}
+                              >
+                                {item.next.title}
+                              </button>
+                            ) : (
+                              item.next.title
+                            )}
+                          </p>
+                        )}
+                      </div>
+                      <footer className="ag-card-foot">
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={() => setSelected(agent.id)}
+                        >
+                          Abrir painel
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => void toggle(agent.id, item.paused)}
+                        >
+                          <Icon name={item.paused ? "play" : "pause"} />
+                          {item.paused ? "Retomar fila" : "Pausar fila"}
+                        </button>
+                      </footer>
+                    </article>
+                  );
+                })
             )}
           </div>
         </section>

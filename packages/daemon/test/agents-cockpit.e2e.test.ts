@@ -98,6 +98,7 @@ describe("agents cockpit e2e", () => {
       running: [],
       waiting: [],
       queued: 0,
+      next: null,
       machines: [],
     });
     await c.request("agents.delete", { id: plain.id });
@@ -182,6 +183,12 @@ describe("agents cockpit e2e", () => {
     expect(r.instances).toEqual({ active: 1, max: null, capacity: 1 });
     expect(r.running[0]).toMatchObject({ id: first.queueId, title: "slow", taskId: null });
     expect(r.queued).toBe(1);
+    expect(r.next).toMatchObject({
+      id: second.queueId,
+      taskId: null,
+      turnId: null,
+      title: "echo:depois",
+    });
     const a = snapshot.agents.find((x) => x.agentId === asker.id)!;
     expect(a.situation).toBe("wait");
     expect(a.running).toHaveLength(0);

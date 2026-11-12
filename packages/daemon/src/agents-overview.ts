@@ -101,6 +101,9 @@ export class AgentsOverviewService {
       else if (running.length || status.status === "running" || status.status === "starting")
         situation = "run";
       else if (status.status === "error") situation = "error";
+      const queued = this.queue.queued(agent.id);
+      const first = queued[0];
+      const nextTask = first ? this.resolveTask(first.id) : null;
       return {
         agentId: agent.id,
         situation,
@@ -113,7 +116,16 @@ export class AgentsOverviewService {
         },
         running,
         waiting,
-        queued: this.queue.queued(agent.id).length,
+        queued: queued.length,
+        next: first
+          ? {
+              id: first.id,
+              taskId: nextTask?.taskId ?? first.taskId ?? null,
+              turnId: null,
+              title: nextTask?.title ?? titleOf(first.text),
+              since: first.createdAt,
+            }
+          : null,
         machines: this.machinesFor(agent.id),
       };
     });
