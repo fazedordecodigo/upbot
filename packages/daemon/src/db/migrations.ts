@@ -446,4 +446,12 @@ export const migrations: string[] = [
   ALTER TABLE queue ADD COLUMN collaboration_id TEXT;
   ALTER TABLE turns ADD COLUMN collaboration_id TEXT;
   CREATE INDEX queue_collaboration ON queue(collaboration_id, status)`,
+  // 35: table work mode — topology, per-table gates and a pending phase release.
+  // Defaults reproduce today's behavior (mesh, no gates); use_memory also defaults off
+  // so migrated tables stop injecting <user_profile> (privacy-first, per the PRD).
+  `ALTER TABLE collaborations ADD COLUMN topology TEXT NOT NULL DEFAULT 'mesh';
+  ALTER TABLE collaborations ADD COLUMN ask_external INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE collaborations ADD COLUMN checkpoint_phases INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE collaborations ADD COLUMN use_memory INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE collaborations ADD COLUMN phase_pending TEXT`,
 ];

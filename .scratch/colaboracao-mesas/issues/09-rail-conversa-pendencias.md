@@ -13,14 +13,24 @@ com client stub.
 
 **Blocked by:** 08 — Detalhe em abas: cabeçalho, etapas e grafo da conversa.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Rail mescla mensagens, requests e approvals da mesa ordenados por
+- [x] Rail mescla mensagens, requests e approvals da mesa ordenados por
       `createdAt`
-- [ ] Approval pendente renderiza "Aprovar"/"Agora não" que chamam
+- [x] Approval pendente renderiza "Aprovar"/"Agora não" que chamam
       `approvals.respond` e o card sai da pendência ao resolver
-- [ ] Request pendente aceita resposta livre que destrava a mesa
-- [ ] Composer de instrução preservado
-- [ ] "Ver o pedido" no card da lista ancora o detalhe na pendência
-- [ ] Merge da timeline em `src/lib/` com testes de client stub
-- [ ] Design system Rio Negro: tokens `--boto-*`, componentes `ui/*`
+- [x] Request pendente aceita resposta livre que destrava a mesa
+- [x] Composer de instrução preservado
+- [x] "Ver o pedido" no card da lista ancora o detalhe na pendência
+- [x] Merge da timeline em `src/lib/` com testes de client stub
+- [x] Design system Rio Negro: tokens `--boto-*`, componentes `ui/*`
+
+## Comments
+
+- 2026-11-12 — `src/lib/collaboration-timeline.ts` (`mergeTimeline`, chave
+  `ap-<id>` para approvals). `TablePanel` mescla `approvals.list` (filtro por
+  `collaborationId`, recarga em `approval.updated`) com o transcript, respeita
+  replay e filtro de nó; cards de approval com Aprovar/Agora não →
+  `approvals.respond`, resolvidas mostram o desfecho. Cards da grade viraram
+  container+botão interno; "Ver o pedido" navega com `focus=` e o painel faz
+  scrollIntoView + `.cb-focused`.

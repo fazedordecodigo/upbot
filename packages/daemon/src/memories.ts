@@ -108,7 +108,12 @@ export class MemoryStore {
     return { count: items.length, kinds: [...new Set(items.map((m) => m.kind))], items };
   }
 
-  promptBlock(agentId: string, turnId?: string, includeAgent = true): string {
+  promptBlock(
+    agentId: string,
+    turnId?: string,
+    includeAgent = true,
+    includeProfile = true,
+  ): string {
     const lines: string[] = [];
     const used: MemoryUsageItem[] = [];
     let total = 0;
@@ -119,7 +124,7 @@ export class MemoryStore {
       used.unshift({ id: m.id, text: m.text, kind: "agent" });
       total += line.length + 1;
     }
-    const profile = this.userProfile();
+    const profile = includeProfile ? this.userProfile() : null;
     if (profile) used.unshift({ ...profile, kind: "profile" });
     if (turnId) this.recordUsage(turnId, used);
     const userBlock = profile ? `<user_profile>\n${profile.text}\n</user_profile>\n\n` : "";

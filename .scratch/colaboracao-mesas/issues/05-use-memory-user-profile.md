@@ -13,10 +13,17 @@ mesa não são afetadas.
 
 **Status:** ready-for-agent
 
-- [ ] Sessão de membro de mesa com `use_memory` off não contém
+- [x] Sessão de membro de mesa com `use_memory` off não contém
       `<user_profile>` no prefixo
-- [ ] Sessão de membro de mesa com `use_memory` on contém `<user_profile>`
-- [ ] `<agent_memories>` presente nos dois casos
-- [ ] Sessões de tasks/chats fora de mesa inalteradas
-- [ ] e2e asserindo presença/ausência de `<user_profile>` nas sessões dos
+- [x] Sessão de membro de mesa com `use_memory` on contém `<user_profile>`
+- [x] `<agent_memories>` presente nos dois casos
+- [x] Sessões de tasks/chats fora de mesa inalteradas
+- [x] e2e asserindo presença/ausência de `<user_profile>` nas sessões dos
       membros conforme a flag
+
+## Comments
+
+- 2026-11-12 — `CollaborationService.sessionUsesMemory(turnId)` resolve o queue
+  row → `collaboration_id` → `use_memory`; `MemoryStore.promptBlock` ganhou o
+  parâmetro `includeProfile` e o hook de sessão em main.ts o alimenta. Sem mesa,
+  sempre `true` — sessões fora de mesa não mudam.

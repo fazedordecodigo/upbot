@@ -16,16 +16,25 @@ mantém arestas reais ponderadas por contagem e passa a colorir por tipo
 **Blocked by:** 06 — Lista "Mesas": grade de cards, filtros e sidebar
 aninhada.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Barra de abas de mesas abertas; abrir mesa cria/foca aba; "Mesas"
+- [x] Barra de abas de mesas abertas; abrir mesa cria/foca aba; "Mesas"
       volta ao grid preservando abas; "+" abre criação
-- [ ] `navigate("collaboration", { id })` abre/foca a aba da mesa — usado
+- [x] `navigate("collaboration", { id })` abre/foca a aba da mesa — usado
       pelos itens da sidebar
-- [ ] Cabeçalho mostra a meta do modo de trabalho da mesa
-- [ ] Card do problema com chips das 5 etapas e "Etapa N de 5" pelo índice
-- [ ] Stats com rótulo "ações em andamento"
-- [ ] Grafo com arestas ponderadas por volume, coloridas por tipo, avatares
+- [x] Cabeçalho mostra a meta do modo de trabalho da mesa
+- [x] Card do problema com chips das 5 etapas e "Etapa N de 5" pelo índice
+- [x] Stats com rótulo "ações em andamento"
+- [x] Grafo com arestas ponderadas por volume, coloridas por tipo, avatares
       reais e legenda
-- [ ] Abas não persistem entre reloads (decisão do PRD)
-- [ ] Design system Rio Negro: tokens `--boto-*`, componentes `ui/*`
+- [x] Abas não persistem entre reloads (decisão do PRD)
+- [x] Design system Rio Negro: tokens `--boto-*`, componentes `ui/*`
+
+## Comments
+
+- 2026-11-12 — `.cb-tabs` em `CollaborationView` (useState, não persiste);
+  fechar a aba atual foca a última restante ou volta ao grid. Header ganha
+  `.cb-mode` com líder+topologia+aprovação+etapas+memória+hora de abertura.
+  `ConversationGraph`: arestas com strokeWidth ∝ count, classes
+  `cb-edge-bots|you|request` (pedido = tom de espera), círculos com cor do
+  avatar/emoji real, legenda com 4 itens.

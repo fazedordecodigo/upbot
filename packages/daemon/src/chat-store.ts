@@ -66,6 +66,14 @@ function rowToItem(r: ItemRow): ChatItem {
 export class ChatStore {
   constructor(private db: Database) {}
 
+  /** The task backs a collaboration member's table session (membership is permanent). */
+  isCollabMemberTask(taskId: string | null | undefined): boolean {
+    return (
+      !!taskId &&
+      !!this.db.query("SELECT 1 FROM collaboration_members WHERE task_id = ? LIMIT 1").get(taskId)
+    );
+  }
+
   isPrivateTask(taskId: string | null | undefined): boolean {
     return (
       !!taskId && !!this.db.query("SELECT 1 FROM tasks WHERE id = ? AND private = 1").get(taskId)
@@ -115,7 +123,9 @@ export class ChatStore {
       if (taskId) return false;
       return this.privateApprovalTasks(agentId, createdAt).length === 0;
     }
-    return taskId ? task === taskId : !this.isPrivateTask(task);
+    // Table member sessions are private tasks, but their approvals are the mesa's
+    // user-facing pendencies: visible in the unfiltered list so the UI can join them.
+    return taskId ? task === taskId : !this.isPrivateTask(task) || this.isCollabMemberTask(task);
   }
 
   privateEventTasks(event: string, data: unknown): string[] {

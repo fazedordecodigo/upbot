@@ -18,15 +18,26 @@ e "ver todas as mesas" navega ao grid. As derivações (filtros, pendência,
 
 **Status:** ready-for-agent
 
-- [ ] Grade mostra um card por mesa com mini-grafo, badge de status, etapa
+- [x] Grade mostra um card por mesa com mini-grafo, badge de status, etapa
       e callout da pendência
-- [ ] Aresta para "Você" destacada no mini-grafo quando a mesa tem pendência
-- [ ] Quatro filtros aplicam a derivação correta, incluindo stopped só em
+- [x] Aresta para "Você" destacada no mini-grafo quando a mesa tem pendência
+- [x] Quatro filtros aplicam a derivação correta, incluindo stopped só em
       "Todas" com badge "Encerrada"
-- [ ] "Aguardando você" acende por approval pendente OU request sem resposta
-- [ ] Sidebar aninha mesas não-encerradas sob "Colaboração" com badge de
+- [x] "Aguardando você" acende por approval pendente OU request sem resposta
+- [x] Sidebar aninha mesas não-encerradas sob "Colaboração" com badge de
       total; "ver todas as mesas" abre o grid
-- [ ] Derivação de filtros/pendência em `src/lib/` com testes de client stub
+- [x] Derivação de filtros/pendência em `src/lib/` com testes de client stub
       (prior art: `approval-decisions.test.ts`)
-- [ ] Design system Rio Negro: tokens `--boto-*`, componentes `ui/*`, ícones
+- [x] Design system Rio Negro: tokens `--boto-*`, componentes `ui/*`, ícones
       de `ui/icons.tsx`
+
+## Comments
+
+- 2026-11-12 — `src/lib/collaboration-tables.ts`: `isLiveTable` (active|paused =
+  "não-encerrada", badge da sidebar), `tablePending` (approval pendente joined
+  por `collaborationId` > request mais antigo sem resposta), `tablePendencies`
+  (busca history só de mesas vivas), `filterTables`, `openTableCount`. Grid em
+  `CollaborationView` com `MiniGraph` estrutural (spokes líder↔membros + Você);
+  card → `navigate("collaboration", {id})`, "← Mesas" volta. Sidebar aninha
+  mesas vivas + "Ver todas as mesas". `terminology.test.ts` já falhava antes
+  (offenders fora do escopo).

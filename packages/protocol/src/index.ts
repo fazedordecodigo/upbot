@@ -723,6 +723,8 @@ export const Approval = z.object({
   id: z.string(),
   agentId: z.string(),
   turnId: z.string().nullable(),
+  /** Table the approval was raised in, when the turn belongs to a collaboration member. */
+  collaborationId: z.string().nullable(),
   kind: z.enum(["tool", "secret", "takeover"]),
   title: z.string(),
   detail: z.string(),

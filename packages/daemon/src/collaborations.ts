@@ -7,6 +7,8 @@ import type {
   Turn,
 } from "@boto/protocol";
 import type { AgentStore } from "./agents";
+import { isExternalActionAsk } from "./agents-overview";
+import type { AskPolicy } from "./approvals";
 import { MAX_HOPS } from "./bridge";
 import type { ChatStore } from "./chat-store";
 import type { Broadcast } from "./rpc";
@@ -44,6 +46,11 @@ type CollabRow = {
   origin_agent_id: string | null;
   status: CollaborationStatus;
   phase: CollaborationPhase;
+  topology: "mesh" | "hub";
+  ask_external: number;
+  checkpoint_phases: number;
+  use_memory: number;
+  phase_pending: CollaborationPhase | null;
   summary: string | null;
   message_count: number;
   action_count: number;
@@ -99,6 +106,42 @@ export class CollaborationService {
     private deps: { instructTask: (taskId: string, text: string) => void },
   ) {}
 
+  /**
+   * AskPolicy for ApprovalService: a table created with ask_external gates every
+   * member's external actions, whatever the member's own approval setting says.
+   * Policies only add asks.
+   */
+  askPolicy(): AskPolicy {
+    return (q) => {
+      if (!q.turnId) return false;
+      const row = this.db
+        .query(
+          `SELECT c.ask_external AS flag FROM queue
+           JOIN collaborations c ON c.id = queue.collaboration_id
+           WHERE queue.turn_id = ?`,
+        )
+        .get(q.turnId) as { flag: number } | null;
+      if (!row?.flag) return false;
+      return isExternalActionAsk(q);
+    };
+  }
+
+  /**
+   * Whether the session owning this turn may see the user profile: tables created
+   * without use_memory keep <user_profile> out of member sessions. Sessions that
+   * do not belong to a table are unaffected.
+   */
+  sessionUsesMemory(turnId: string): boolean {
+    const row = this.db
+      .query(
+        `SELECT c.use_memory AS flag FROM queue
+         JOIN collaborations c ON c.id = queue.collaboration_id
+         WHERE queue.turn_id = ?`,
+      )
+      .get(turnId) as { flag: number } | null;
+    return row === null || row.flag === 1;
+  }
+
   private row(id: string): CollabRow | null {
     return this.db.query("SELECT * FROM collaborations WHERE id = ?").get(id) as CollabRow | null;
   }
@@ -128,6 +171,11 @@ export class CollaborationService {
       members: members.map((m) => ({ agentId: m.agent_id, role: m.role })),
       status: r.status,
       phase: r.phase,
+      topology: r.topology,
+      askExternal: r.ask_external === 1,
+      checkpointPhases: r.checkpoint_phases === 1,
+      useMemory: r.use_memory === 1,
+      phasePending: r.phase_pending,
       stats: {
         members: members.length,
         messages: r.message_count,
@@ -234,6 +282,10 @@ export class CollaborationService {
     leaderId: string;
     originTaskId?: string | null;
     originAgentId?: string | null;
+    topology?: "mesh" | "hub" | undefined;
+    askExternal?: boolean | undefined;
+    checkpointPhases?: boolean | undefined;
+    useMemory?: boolean | undefined;
   }): Collaboration {
     const memberIds = [...new Set([p.leaderId, ...p.memberIds])];
     if (memberIds.length < MIN_MEMBERS || memberIds.length > MAX_MEMBERS)
@@ -248,8 +300,9 @@ export class CollaborationService {
     this.db
       .query(
         `INSERT INTO collaborations (id, title, problem, leader_agent_id, origin_task_id,
-           origin_agent_id, status, phase, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'active', 'entender', ?, ?)`,
+           origin_agent_id, status, phase, topology, ask_external, checkpoint_phases, use_memory,
+           created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'active', 'entender', ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -258,6 +311,10 @@ export class CollaborationService {
         p.leaderId,
         p.originTaskId ?? null,
         p.originAgentId ?? null,
+        p.topology ?? "mesh",
+        p.askExternal ? 1 : 0,
+        p.checkpointPhases ? 1 : 0,
+        p.useMemory ? 1 : 0,
         now,
         now,
       );
@@ -402,9 +459,24 @@ export class CollaborationService {
       member.role === "leader"
         ? `You lead this table: invite or remove members (table_invite/table_remove), advance phases with table_phase (${COLLABORATION_PHASES.join(" → ")}) and conclude with conclude_collaboration {summary} once the problem is solved.`
         : `Report findings to the leader, ${this.name(r.leader_agent_id)}, and keep them posted on progress.`;
+    const rules = [
+      r.topology === "hub"
+        ? "everything goes through the leader — address every table_message to them"
+        : "members talk directly to each other",
+      r.ask_external
+        ? "external actions always require the user's approval"
+        : "external actions follow each member's own approval settings",
+      r.checkpoint_phases
+        ? "phase changes wait for the user to release them (table_phase asks the user)"
+        : "the leader advances phases directly with table_phase",
+      r.use_memory
+        ? "members can see the user's profile"
+        : "the user's profile is hidden from this table",
+    ];
     return `<collaboration_context title="${xmlAttr(r.title)}" id="${r.id}" role="${member.role}" leader="${xmlAttr(this.name(r.leader_agent_id))}" members="${xmlAttr(roster)}" phase="${r.phase}">
 You are at a Boto collaboration table working on this problem: ${xmlAttr(r.problem)}
 ${roleHint}
+- How this table works: ${rules.join("; ")}.
 - Talk to one member at a time with the boto table_message tool (to = member name, or "user" to ask the user something; pass table="${r.id}" if it asks for a table).
 - Your final reply in this turn goes back to whoever sent you the last message. Do not reply to pure acknowledgements.
 <recent_messages>
@@ -480,11 +552,21 @@ ${text}`;
       return "your question is on the table; the user answers it in the app";
     }
     const member = this.memberByName(r, to, fromAgentId);
-    const msg = this.append(r.id, "message", fromAgentId, member.agent_id, text);
+    // hub tables: a non-leader's message always lands on the leader, whoever it named
+    const clamped =
+      r.topology === "hub" &&
+      fromAgentId !== r.leader_agent_id &&
+      member.agent_id !== r.leader_agent_id;
+    const dest = clamped
+      ? (this.memberRows(r.id).find((m) => m.agent_id === r.leader_agent_id) ?? member)
+      : member;
+    const msg = this.append(r.id, "message", fromAgentId, dest.agent_id, text);
     const hops = this.runtimes().currentHops(fromAgentId) + 1;
     if (hops <= MAX_HOPS)
-      this.deliver(r.id, msg, member, fromAgentId, hops, `${this.name(fromAgentId)} said to you:`);
-    return `on the table for ${this.name(member.agent_id)}`;
+      this.deliver(r.id, msg, dest, fromAgentId, hops, `${this.name(fromAgentId)} said to you:`);
+    return clamped
+      ? `on the table for ${this.name(dest.agent_id)} — in this table everything goes through the leader, so address them`
+      : `on the table for ${this.name(dest.agent_id)}`;
   }
 
   /** Bridge: `list_collaborations` for the calling member. */
@@ -552,25 +634,16 @@ ${text}`;
     return `${this.name(member.agent_id)} left the table`;
   }
 
-  /** Bridge: `table_phase` (leader only). */
-  advancePhase(fromAgentId: string, key: string | undefined, phase: string): string {
-    const r = this.resolveForAgent(fromAgentId, key);
-    this.requireLeader(r, fromAgentId);
-    if (r.status !== "active") throw new Error(`table is ${r.status}`);
-    if (!COLLABORATION_PHASES.includes(phase as CollaborationPhase))
-      throw new Error(`unknown phase "${phase}" (${COLLABORATION_PHASES.join(", ")})`);
-    this.db
-      .query("UPDATE collaborations SET phase = ?, updated_at = ? WHERE id = ?")
-      .run(phase, Date.now(), r.id);
+  private appendPhaseRow(collabId: string, fromAgentId: string | null, phase: string): void {
     const row: MessageRow = {
       id: crypto.randomUUID(),
-      collaboration_id: r.id,
+      collaboration_id: collabId,
       seq: (
         this.db
           .query(
             "SELECT COALESCE(MAX(seq), 0) + 1 AS s FROM collaboration_messages WHERE collaboration_id = ?",
           )
-          .get(r.id) as { s: number }
+          .get(collabId) as { s: number }
       ).s,
       kind: "phase",
       from_agent_id: fromAgentId,
@@ -589,6 +662,41 @@ ${text}`;
       )
       .run(row.id, row.collaboration_id, row.seq, row.from_agent_id, row.text, row.created_at);
     this.broadcast("collaboration.message", rowToMessage(row));
+  }
+
+  /** Bridge: `table_phase` (leader only). */
+  advancePhase(
+    fromAgentId: string,
+    key: string | undefined,
+    phase: string,
+    summary?: string,
+  ): string {
+    const r = this.resolveForAgent(fromAgentId, key);
+    this.requireLeader(r, fromAgentId);
+    if (r.status !== "active") throw new Error(`table is ${r.status}`);
+    if (!COLLABORATION_PHASES.includes(phase as CollaborationPhase))
+      throw new Error(`unknown phase "${phase}" (${COLLABORATION_PHASES.join(", ")})`);
+    if (r.checkpoint_phases) {
+      if (r.phase_pending)
+        throw new Error(`still waiting for the user to release the move to "${r.phase_pending}"`);
+      const s = summary?.trim();
+      this.append(
+        r.id,
+        "request",
+        fromAgentId,
+        null,
+        s ? `${s} — move the table to "${phase}"` : `Move the table to "${phase}"`,
+      );
+      this.db
+        .query("UPDATE collaborations SET phase_pending = ?, updated_at = ? WHERE id = ?")
+        .run(phase, Date.now(), r.id);
+      this.emit(this.mustRow(r.id));
+      return `phase request is on the table; the user releases the step in the app`;
+    }
+    this.db
+      .query("UPDATE collaborations SET phase = ?, updated_at = ? WHERE id = ?")
+      .run(phase, Date.now(), r.id);
+    this.appendPhaseRow(r.id, fromAgentId, phase);
     this.emit(this.mustRow(r.id));
     return `phase is now ${phase}`;
   }
@@ -659,6 +767,17 @@ ${text}`;
     const member = this.memberRows(id).find((m) => m.agent_id === row.from_agent_id);
     const msg = this.append(id, "message", null, row.from_agent_id, text);
     if (member) this.deliver(id, msg, member, null, 0, "The user answered your question:");
+    // a checkpoint table releases the pending phase when the leader's request is answered
+    const r = this.mustRow(id);
+    if (r.phase_pending && row.from_agent_id === r.leader_agent_id) {
+      this.db
+        .query(
+          "UPDATE collaborations SET phase = ?, phase_pending = NULL, updated_at = ? WHERE id = ?",
+        )
+        .run(r.phase_pending, Date.now(), id);
+      this.appendPhaseRow(id, r.leader_agent_id, r.phase_pending);
+      this.emit(this.mustRow(id));
+    }
     return rowToMessage({ ...row, answered_at: Date.now() });
   }
 

@@ -83,6 +83,22 @@ dialog::backdrop { background: var(--boto-color-overlay); }
 .dropdown-menu { min-width: calc(var(--boto-space-20) * 2 + var(--boto-space-16)); }
 .dropdown-item { min-height: var(--boto-size-control); }
 
+/* Markdown body (react-markdown): shared by task messages and the collab rail. */
+.md { display: grid; gap: var(--boto-space-3); font-size: var(--boto-font-size-sm); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.md h1, .md h2 { margin: 0; font-size: var(--boto-font-size-lg); }
+.md h3, .md h4, .md h5, .md h6 { margin: 0; font-size: var(--boto-font-size-base); }
+.md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0; }
+.md ul, .md ol { padding-inline-start: var(--boto-space-5); display: grid; gap: var(--boto-space-1); }
+.md a { color: var(--boto-color-primary); }
+.md code { padding: 0.1em 0.35em; border-radius: var(--boto-radius-sm); background: var(--boto-color-muted-surface); font-family: var(--boto-font-mono); font-size: 0.92em; }
+.md pre { padding: var(--boto-space-3); border-radius: var(--boto-radius-md); background: var(--boto-color-muted-surface); overflow: auto; white-space: pre; }
+.md pre code { padding: 0; background: transparent; }
+.md blockquote { padding-inline-start: var(--boto-space-3); border-inline-start: 2px solid var(--boto-color-border); color: var(--boto-color-muted-foreground); }
+.md hr { border: 0; border-top: 1px solid var(--boto-color-border); }
+.md table { border-collapse: collapse; font-size: var(--boto-font-size-xs); }
+.md th, .md td { padding: var(--boto-space-1) var(--boto-space-2); border: 1px solid var(--boto-color-border); text-align: start; }
+.md img { max-width: 100%; }
+
 @media (pointer: coarse) {
   button:not(.switch), .btn, .tabs-trigger { min-height: var(--boto-size-target); }
   .btn-icon { min-width: var(--boto-size-target); }

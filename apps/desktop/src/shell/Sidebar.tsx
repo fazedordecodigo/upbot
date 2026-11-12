@@ -1,5 +1,6 @@
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { useShellProfile } from "../hooks/useShellProfile";
+import { isLiveTable, openTableCount } from "../lib/collaboration-tables";
 import { openExternalLink } from "../lib/external-link";
 import { errorFields, logWarn } from "../lib/log";
 import { isMac } from "../lib/platform";
@@ -39,7 +40,7 @@ export function Sidebar({
   openShortcuts: () => void;
   openOnboarding: () => void;
 }) {
-  const { view, navigate } = useRouter();
+  const { view, params, navigate } = useRouter();
   const toast = useToast();
   const { client, ready, agents } = useDaemon();
   const profile = useShellProfile();
@@ -54,6 +55,16 @@ export function Sidebar({
     {},
     { enabled: ready, events: { "routine.updated": true, "routine.deleted": true } },
   );
+  const collabs = useDaemonQuery(
+    client,
+    "collaborations.list",
+    {},
+    {
+      enabled: ready,
+      events: { "collaboration.created": true, "collaboration.updated": true },
+    },
+  );
+  const openCollabs = (collabs.data ?? []).filter(isLiveTable);
   const [, setTheme] = useThemePref();
   const dark = document.documentElement.dataset.theme === "dark";
   const toggleTheme = () => {
@@ -121,27 +132,61 @@ export function Sidebar({
           <span className="od-fill">Nova tarefa</span>
         </button>
         {navigation.map((item) => (
-          <button
-            type="button"
-            key={item.view}
-            className="sb-item od-row"
-            data-action={item.action}
-            data-nav={item.view}
-            aria-current={view === item.view ? "page" : undefined}
-            onClick={() => go(item.view)}
-          >
-            <Icon name={item.icon} />
-            <span className="od-fill">{item.label}</span>
-            {item.view === "agents" ? (
-              <span className="sb-count" data-agent-count="">
-                {ready && agents.length > 0 ? agents.length : ""}
-              </span>
-            ) : item.view === "routines" ? (
-              <span className="sb-count" data-routine-count="">
-                {routines.data?.length || ""}
-              </span>
-            ) : null}
-          </button>
+          <div key={item.view}>
+            <button
+              type="button"
+              className="sb-item od-row"
+              data-action={item.action}
+              data-nav={item.view}
+              aria-current={view === item.view ? "page" : undefined}
+              onClick={() => go(item.view)}
+            >
+              <Icon name={item.icon} />
+              <span className="od-fill">{item.label}</span>
+              {item.view === "agents" ? (
+                <span className="sb-count" data-agent-count="">
+                  {ready && agents.length > 0 ? agents.length : ""}
+                </span>
+              ) : item.view === "routines" ? (
+                <span className="sb-count" data-routine-count="">
+                  {routines.data?.length || ""}
+                </span>
+              ) : item.view === "collaboration" ? (
+                <span className="sb-count" data-collab-count="">
+                  {openCollabs.length || ""}
+                </span>
+              ) : null}
+            </button>
+            {item.view === "collaboration" && openCollabs.length > 0 && (
+              <div className="sb-sub od-stack">
+                {openCollabs.map((c) => (
+                  <button
+                    type="button"
+                    key={c.id}
+                    className="sb-item sb-sub-item"
+                    data-nav="collaboration"
+                    aria-current={
+                      view === "collaboration" && params.id === c.id ? "page" : undefined
+                    }
+                    onClick={() => {
+                      close();
+                      navigate("collaboration", { id: c.id });
+                    }}
+                  >
+                    <span className="od-fill od-truncate">{c.title}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="sb-item sb-sub-item"
+                  data-action="go-collaboration-all"
+                  onClick={() => go("collaboration")}
+                >
+                  <span className="od-fill">Ver todas as mesas</span>
+                </button>
+              </div>
+            )}
+          </div>
         ))}
         <button
           type="button"

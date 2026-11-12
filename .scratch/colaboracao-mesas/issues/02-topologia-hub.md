@@ -13,12 +13,18 @@ afetados.
 
 **Status:** ready-for-agent
 
-- [ ] `table_message` de não-líder em mesa `hub` entrega ao líder
+- [x] `table_message` de não-líder em mesa `hub` entrega ao líder
       independentemente do `to` pedido (transcript registra a linha entregue
       ao líder)
-- [ ] Resposta da tool informa o clamp ("nesta mesa tudo passa pelo líder")
-- [ ] Mesa `mesh` (default) não clampa nada
-- [ ] `table_message` do líder a membro entrega direto
-- [ ] `send_message`/`share_file`/`delegate` fora da mesa inalterados
-- [ ] e2e em `test/collaborations.e2e.test.ts` asserindo o transcript
+- [x] Resposta da tool informa o clamp ("nesta mesa tudo passa pelo líder")
+- [x] Mesa `mesh` (default) não clampa nada
+- [x] `table_message` do líder a membro entrega direto
+- [x] `send_message`/`share_file`/`delegate` fora da mesa inalterados
+- [x] e2e em `test/collaborations.e2e.test.ts` asserindo o transcript
       persistido
+
+## Comments
+
+- 2026-11-12 — Implementado: clamp em `CollaborationService.tableMessage` quando
+  `topology = 'hub'` e remetente ≠ líder; a resposta da tool diz ao membro para
+  endereçar ao líder. `to: "user"` e o resto das tools fora da mesa não mudam.

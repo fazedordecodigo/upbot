@@ -4,6 +4,7 @@ export type ViewName =
   | "home"
   | "agents"
   | "new"
+  | "newTable"
   | "templates"
   | "task"
   | "collaboration"

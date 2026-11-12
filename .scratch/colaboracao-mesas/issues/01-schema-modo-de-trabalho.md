@@ -19,15 +19,25 @@ as regras da mesa.
 
 **Status:** ready-for-agent
 
-- [ ] Migration adiciona as 5 colunas com defaults neutros; daemon sobe sobre
+- [x] Migration adiciona as 5 colunas com defaults neutros; daemon sobe sobre
       banco antigo e novo
-- [ ] `collaborations.create` aceita os 4 campos e `collaborations.get`/`list`
+- [x] `collaborations.create` aceita os 4 campos e `collaborations.get`/`list`
       os devolvem; omitidos → defaults neutros
-- [ ] `approvals.list` devolve `collaborationId` preenchido quando a aprovação
+- [x] `approvals.list` devolve `collaborationId` preenchido quando a aprovação
       nasce de um turn de mesa, `null` fora de mesa
-- [ ] `start_collaboration` do bridge cria mesa com defaults neutros (sem
+- [x] `start_collaboration` do bridge cria mesa com defaults neutros (sem
       gates que ninguém escolheu)
-- [ ] Kickoff do líder menciona o modo de trabalho escolhido (topologia,
+- [x] Kickoff do líder menciona o modo de trabalho escolhido (topologia,
       aprovação externa, checkpoints, memória)
-- [ ] e2e estendendo `test/collaborations.e2e.test.ts`: round-trip dos campos
+- [x] e2e estendendo `test/collaborations.e2e.test.ts`: round-trip dos campos
       e `collaborationId` na aprovação
+
+## Comments
+
+- 2026-11-12 — Implementado (TDD em `collaborations.e2e.test.ts`): migration 35
+  (`topology`/`ask_external`/`checkpoint_phases`/`use_memory`/`phase_pending`),
+  protocolo (`Collaboration`, `CollaborationsCreateParams`, `Approval.collaborationId`),
+  resolução via `queue.turn_id → collaboration_id` no `ApprovalService`, e
+  `visibleTurn` passa a enxergar member tasks de mesa (eram privadas e o filtro
+  escondia as aprovações delas — pré-requisito para `approvals.list` + join da UI).
+  Kickoff ganha a linha "How this table works" com as 4 regras.

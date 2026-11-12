@@ -5,7 +5,7 @@ import type {
   AgentTaskRef,
 } from "@boto/protocol";
 import type { AgentStore } from "./agents";
-import type { ApprovalService, AskPolicy } from "./approvals";
+import type { ApprovalService, AskPolicy, AskQuery } from "./approvals";
 import type { QueueStore } from "./chat-store";
 import { errorFields } from "./runtime/agent-runtime";
 import type { RuntimeManager } from "./runtime/runtime-manager";
@@ -14,6 +14,12 @@ import { instanceCapacity } from "./runtime/scheduler";
 /** Built-in bridge tools that act outside Boto ("publicar"). */
 const EXTERNAL_BRIDGE_TOOLS = new Set(["page_publish"]);
 
+/** External action: an app call that is not a read, or a built-in tool that publishes. */
+export function isExternalActionAsk(q: AskQuery): boolean {
+  if (q.isAppTool) return q.permission !== "read";
+  return EXTERNAL_BRIDGE_TOOLS.has(q.tool);
+}
+
 /**
  * Agent.requireApproval: the agent stops and asks before external actions — every app tool that
  * is not a read, and built-in tools that publish. It only adds asks.
@@ -21,8 +27,7 @@ const EXTERNAL_BRIDGE_TOOLS = new Set(["page_publish"]);
 export function agentApprovalPolicy(agents: AgentStore): AskPolicy {
   return (q) => {
     if (!agents.get(q.agentId)?.requireApproval) return false;
-    if (q.isAppTool) return q.permission !== "read";
-    return EXTERNAL_BRIDGE_TOOLS.has(q.tool);
+    return isExternalActionAsk(q);
   };
 }
 

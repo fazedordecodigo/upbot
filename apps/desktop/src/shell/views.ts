@@ -2,6 +2,7 @@ import { AgentsView } from "../views/AgentsView";
 import { CollaborationView } from "../views/CollaborationView";
 import { HomeView } from "../views/HomeView";
 import { MarketplaceView } from "../views/MarketplaceView";
+import { NewTableView } from "../views/NewTableView";
 import { NewTaskView } from "../views/NewTaskView";
 import { RoutinesView } from "../views/RoutinesView";
 import { SettingsView } from "../views/SettingsView";
@@ -13,6 +14,7 @@ export const views = {
   home: HomeView,
   agents: AgentsView,
   new: NewTaskView,
+  newTable: NewTableView,
   templates: TemplatesView,
   task: TaskView,
   collaboration: CollaborationView,

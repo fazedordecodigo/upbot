@@ -6,6 +6,7 @@ import {
   type DaemonHandle,
   FAKE_AGENT,
   readLog,
+  sendAndWait,
   startDaemon,
   stopDaemon,
   tmp,
@@ -72,6 +73,17 @@ describe("collaborations e2e", () => {
     return items;
   };
 
+  const pendingApproval = async (tool: string) => {
+    const deadline = Date.now() + 20000;
+    for (;;) {
+      const list = await c.request("approvals.list", {});
+      const a = list.find((x) => x.status === "pending" && x.tool === tool);
+      if (a) return a;
+      if (Date.now() > deadline) throw new Error(`approval timeout for ${tool}`);
+      await sleep(100);
+    }
+  };
+
   beforeAll(async () => {
     dataDir = tmp("collab-data-");
     agentsRoot = tmp("collab-agents-");
@@ -136,6 +148,101 @@ describe("collaborations e2e", () => {
     });
     expect(collaboration.id).toBe(collab.id);
     expect(messages.map((m) => m.kind)).toEqual(["instruction", "message"]);
+  });
+
+  test("work mode fields round-trip; omitted ones get neutral defaults", async () => {
+    const flagged = await c.request("collaborations.create", {
+      problem: "echo:flagged table",
+      memberIds: [alice.id, bob.id],
+      leaderId: alice.id,
+      topology: "hub",
+      askExternal: true,
+      checkpointPhases: true,
+      useMemory: true,
+    });
+    expect(flagged.topology).toBe("hub");
+    expect(flagged.askExternal).toBe(true);
+    expect(flagged.checkpointPhases).toBe(true);
+    expect(flagged.useMemory).toBe(true);
+    expect(flagged.phasePending).toBeNull();
+    const fetched = await c.request("collaborations.get", { id: flagged.id });
+    expect(fetched.topology).toBe("hub");
+    expect(fetched.askExternal).toBe(true);
+    expect(fetched.checkpointPhases).toBe(true);
+    expect(fetched.useMemory).toBe(true);
+    expect(
+      (await c.request("collaborations.list", {})).find((x) => x.id === flagged.id),
+    ).toMatchObject({ topology: "hub", askExternal: true });
+    await c.request("collaborations.stop", { id: flagged.id });
+
+    const plain = await c.request("collaborations.create", {
+      problem: "echo:plain table",
+      memberIds: [alice.id, bob.id],
+      leaderId: alice.id,
+    });
+    expect(plain.topology).toBe("mesh");
+    expect(plain.askExternal).toBe(false);
+    expect(plain.checkpointPhases).toBe(false);
+    expect(plain.useMemory).toBe(false);
+    expect(plain.phasePending).toBeNull();
+    await c.request("collaborations.stop", { id: plain.id });
+  });
+
+  test("approvals raised inside a table turn carry collaborationId; outside, null", async () => {
+    const table = await c.request("collaborations.create", {
+      problem: "echo:gated table",
+      memberIds: [alice.id, bob.id],
+      leaderId: alice.id,
+    });
+    await message((m) => m.fromAgentId === alice.id && m.kind === "message", 20000, table.id);
+
+    // alice's table session calls a gated tool; the approval names this table
+    await c.request("collaborations.instruct", {
+      id: table.id,
+      text: `mcp:page_publish ${JSON.stringify({ title: "P", html: "<p>x</p>" })}`,
+    });
+    const inTable = await pendingApproval("page_publish");
+    expect(inTable.collaborationId).toBe(table.id);
+    await c.request("approvals.respond", { id: inTable.id, decision: "deny" });
+    // the denied call comes back to the table as the member's reply
+    await message(
+      (m) => m.fromAgentId === alice.id && m.kind === "message" && m.text.includes("declined"),
+      20000,
+      table.id,
+    );
+
+    // the same gated call in plain chat is not tied to any table
+    const turnPromise = sendAndWait(
+      c,
+      alice.id,
+      `mcp:page_publish ${JSON.stringify({ title: "Q", html: "<p>y</p>" })}`,
+    );
+    const outside = await pendingApproval("page_publish");
+    expect(outside.collaborationId).toBeNull();
+    await c.request("approvals.respond", { id: outside.id, decision: "deny" });
+    await turnPromise;
+    await c.request("collaborations.stop", { id: table.id });
+  });
+
+  test("the leader's kickoff describes the table's work mode", async () => {
+    const flagged = await c.request("collaborations.create", {
+      problem: "echo:flagged kickoff",
+      memberIds: [alice.id, bob.id],
+      leaderId: alice.id,
+      topology: "hub",
+      askExternal: true,
+      checkpointPhases: true,
+      useMemory: true,
+    });
+    await message((m) => m.fromAgentId === alice.id && m.kind === "message", 20000, flagged.id);
+    const prompts = readLog(stateDir).filter((l) => l.method === "session/prompt");
+    const kick = JSON.stringify(prompts.at(-1)!.params);
+    expect(kick).toContain("How this table works");
+    expect(kick).toContain("through the leader");
+    expect(kick).toContain("approval");
+    expect(kick).toContain("phase");
+    expect(kick).toContain("profile");
+    await c.request("collaborations.stop", { id: flagged.id });
   });
 
   test("members talk pair-to-pair and can ask the user", async () => {
@@ -216,6 +323,275 @@ describe("collaborations e2e", () => {
     ).toContain("not at this table");
   });
 
+  test("hub topology clamps member messages to the leader", async () => {
+    const carol = await newAgent("Carol-hub");
+    const hub = await c.request("collaborations.create", {
+      problem: "echo:hub table",
+      memberIds: [alice.id, bob.id, carol.id],
+      leaderId: alice.id,
+      topology: "hub",
+    });
+    await message((m) => m.fromAgentId === alice.id && m.kind === "message", 20000, hub.id);
+
+    // a member addressing another member is clamped to the leader
+    const reply = await toolCall(c, bob, "table_message", {
+      to: "Carol-hub",
+      text: "echo:through hub",
+      table: hub.id,
+    });
+    expect(reply).toContain("leader");
+    const row = await message(
+      (m) => m.fromAgentId === bob.id && m.text === "echo:through hub",
+      20000,
+      hub.id,
+    );
+    expect(row.toAgentId).toBe(alice.id);
+
+    // the leader still talks straight to members
+    await toolCall(c, alice, "table_message", {
+      to: "Bob",
+      text: "echo:leader to bob",
+      table: hub.id,
+    });
+    const direct = await message(
+      (m) => m.fromAgentId === alice.id && m.text === "echo:leader to bob",
+      20000,
+      hub.id,
+    );
+    expect(direct.toAgentId).toBe(bob.id);
+
+    // mesh clamps nothing
+    const mesh = await c.request("collaborations.create", {
+      problem: "echo:mesh table",
+      memberIds: [alice.id, bob.id, carol.id],
+      leaderId: alice.id,
+    });
+    await message((m) => m.fromAgentId === alice.id && m.kind === "message", 20000, mesh.id);
+    await toolCall(c, bob, "table_message", {
+      to: "Carol-hub",
+      text: "echo:mesh direct",
+      table: mesh.id,
+    });
+    const meshRow = await message(
+      (m) => m.fromAgentId === bob.id && m.text === "echo:mesh direct",
+      20000,
+      mesh.id,
+    );
+    expect(meshRow.toAgentId).toBe(carol.id);
+    await c.request("collaborations.stop", { id: hub.id });
+    await c.request("collaborations.stop", { id: mesh.id });
+  });
+
+  test("ask_external gates external actions for every member of the table", async () => {
+    const loose = await c.request("agents.create", {
+      name: "Loose",
+      provider: "devin",
+      instructions: "",
+      requireApproval: false,
+    });
+    // a member who never asks on his own publishes freely in a flagless table
+    const plain = await c.request("collaborations.create", {
+      problem: "echo:open table",
+      memberIds: [loose.id, bob.id],
+      leaderId: loose.id,
+    });
+    await message((m) => m.fromAgentId === loose.id && m.kind === "message", 20000, plain.id);
+    await c.request("collaborations.instruct", {
+      id: plain.id,
+      text: `mcp:page_publish ${JSON.stringify({ title: "Free", html: "<p>f</p>" })}`,
+    });
+    await message(
+      (m) => m.kind === "message" && m.fromAgentId === loose.id && m.text.includes("published"),
+      20000,
+      plain.id,
+    );
+    // and no approval was ever opened for that call
+    const approvals = await c.request("approvals.list", {});
+    expect(approvals.every((a) => a.collaborationId !== plain.id)).toBe(true);
+
+    // the same member in a flagged table gets gated
+    const gated = await c.request("collaborations.create", {
+      problem: "echo:gated external",
+      memberIds: [loose.id, bob.id],
+      leaderId: loose.id,
+      askExternal: true,
+    });
+    await message((m) => m.fromAgentId === loose.id && m.kind === "message", 20000, gated.id);
+    await c.request("collaborations.instruct", {
+      id: gated.id,
+      text: `mcp:page_publish ${JSON.stringify({ title: "Gated", html: "<p>g</p>" })}`,
+    });
+    const approval = await pendingApproval("page_publish");
+    expect(approval.collaborationId).toBe(gated.id);
+    await c.request("approvals.respond", { id: approval.id, decision: "approve" });
+    await message(
+      (m) => m.kind === "message" && m.fromAgentId === loose.id && m.text.includes("published"),
+      20000,
+      gated.id,
+    );
+    await c.request("collaborations.stop", { id: plain.id });
+    await c.request("collaborations.stop", { id: gated.id });
+  });
+
+  test("checkpoint_phases holds the phase until the user releases it", async () => {
+    const cp = await c.request("collaborations.create", {
+      problem: "echo:checkpoint table",
+      memberIds: [alice.id, bob.id],
+      leaderId: alice.id,
+      checkpointPhases: true,
+    });
+    await message((m) => m.fromAgentId === alice.id && m.kind === "message", 20000, cp.id);
+
+    // the leader's table_phase becomes a user request; the phase does not move yet
+    const reply = await toolCall(c, alice, "table_phase", {
+      phase: "investigar",
+      summary: "We mapped the failure modes.",
+      table: cp.id,
+    });
+    expect(reply).toContain("release");
+    const held = await collabWhere((x) => x.phasePending === "investigar", 20000, cp.id);
+    expect(held.phase).toBe("entender");
+    const req = await message((m) => m.kind === "request" && m.answeredAt === null, 20000, cp.id);
+    expect(req.text).toContain("We mapped the failure modes.");
+
+    // a second phase change while one is pending errors out
+    const retry = await toolCall(c, alice, "table_phase", {
+      phase: "corrigir",
+      summary: "skip ahead",
+      table: cp.id,
+    });
+    expect(retry).toContain("release");
+
+    // the table keeps talking while the transition waits
+    await toolCall(c, bob, "table_message", {
+      to: "Alice",
+      text: "echo:still talking",
+      table: cp.id,
+    });
+    await message((m) => m.fromAgentId === bob.id && m.text === "echo:still talking", 20000, cp.id);
+
+    // answering the request applies the pending phase
+    await c.request("collaborations.answer", {
+      id: cp.id,
+      messageId: req.id,
+      text: "go ahead",
+    });
+    const moved = await collabWhere(
+      (x) => x.phase === "investigar" && x.phasePending === null,
+      20000,
+      cp.id,
+    );
+    expect(moved.phase).toBe("investigar");
+    await message((m) => m.kind === "phase" && m.text === "investigar", 20000, cp.id);
+    await c.request("collaborations.stop", { id: cp.id });
+  });
+
+  test("use_memory suppresses the user profile in member sessions only", async () => {
+    await c.request("profile.update", { about: "a tester who likes mesas" });
+    await c.request("memories.add", { agentId: alice.id, text: "remembers everything" });
+
+    const off = await c.request("collaborations.create", {
+      problem: "echo:off-memory table",
+      memberIds: [alice.id, bob.id],
+      leaderId: alice.id,
+      useMemory: false,
+    });
+    await message((m) => m.fromAgentId === alice.id && m.kind === "message", 20000, off.id);
+    const on = await c.request("collaborations.create", {
+      problem: "echo:on-memory table",
+      memberIds: [alice.id, bob.id],
+      leaderId: alice.id,
+      useMemory: true,
+    });
+    await message((m) => m.fromAgentId === alice.id && m.kind === "message", 20000, on.id);
+
+    const outsider = await newAgent("Outsider");
+    await sendAndWait(c, outsider.id, "echo:outside chat", 20000);
+
+    const prompts = readLog(stateDir)
+      .filter((e) => e.method === "session/prompt")
+      .map((e) => (e.params as { prompt: { text?: string }[] }).prompt?.[0]?.text ?? "");
+    const offPrompt = prompts.find((p) => p.includes("off-memory table"));
+    const onPrompt = prompts.find((p) => p.includes("on-memory table"));
+    const chatPrompt = prompts.find((p) => p.includes("outside chat"));
+
+    expect(offPrompt).toBeDefined();
+    expect(offPrompt!).not.toContain("<user_profile>");
+    expect(offPrompt!).toContain("<agent_memories>");
+    expect(onPrompt).toBeDefined();
+    expect(onPrompt!).toContain("<user_profile>");
+    expect(onPrompt!).toContain("<agent_memories>");
+    expect(chatPrompt).toBeDefined();
+    expect(chatPrompt!).toContain("<user_profile>");
+    await c.request("collaborations.stop", { id: off.id });
+    await c.request("collaborations.stop", { id: on.id });
+  });
+
+  test("phase_pending survives a restart", async () => {
+    const dataDir4 = tmp("collab-cp-data-");
+    const agentsRoot4 = tmp("collab-cp-agents-");
+    const stateDir4 = tmp("collab-cp-fake-");
+    const env = {
+      BOTO_ACP_COMMAND_DEVIN: JSON.stringify(["bun", FAKE_AGENT]),
+      FAKE_ACP_STATE_DIR: stateDir4,
+      BOTO_SHARED_ROOT: tmp("collab-cp-shared-"),
+    };
+    const d5 = await startDaemon(dataDir4, agentsRoot4, `${TOKEN}-cp1`, env);
+    const c5 = await DaemonClient.connect(d5.port, `${TOKEN}-cp1`);
+    const lead = await c5.request("agents.create", {
+      name: "CpLead",
+      provider: "devin",
+      instructions: "",
+    });
+    const other = await c5.request("agents.create", {
+      name: "CpOther",
+      provider: "devin",
+      instructions: "",
+    });
+    const t = await c5.request("collaborations.create", {
+      problem: "echo:cp restart",
+      memberIds: [lead.id, other.id],
+      leaderId: lead.id,
+      checkpointPhases: true,
+    });
+    {
+      const deadline = Date.now() + 20000;
+      for (;;) {
+        const { messages } = await c5.request("collaborations.history", { id: t.id });
+        if (messages.some((m) => m.kind === "message")) break;
+        if (Date.now() > deadline) throw new Error("kick-off reply timeout");
+        await sleep(100);
+      }
+    }
+    await toolCall(c5, lead, "table_phase", {
+      phase: "investigar",
+      summary: "halfway there",
+      table: t.id,
+    });
+    {
+      const deadline = Date.now() + 20000;
+      for (;;) {
+        const x = await c5.request("collaborations.get", { id: t.id });
+        if (x.phasePending === "investigar") break;
+        if (Date.now() > deadline) throw new Error("phase_pending timeout");
+        await sleep(100);
+      }
+    }
+    await c5.close();
+    await stopDaemon(d5, undefined);
+    const d6 = await startDaemon(dataDir4, agentsRoot4, `${TOKEN}-cp2`, env);
+    const c6 = await DaemonClient.connect(d6.port, `${TOKEN}-cp2`);
+    try {
+      const after = await c6.request("collaborations.get", { id: t.id });
+      expect(after.phasePending).toBe("investigar");
+      expect(after.phase).toBe("entender");
+    } finally {
+      await stopDaemon(d6, c6, stateDir4);
+      for (const d of [dataDir4, agentsRoot4, stateDir4])
+        rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  });
+
   test("pause freezes deliveries and resume restarts them", async () => {
     const paused = await c.request("collaborations.pause", { id: collab.id });
     expect(paused.status).toBe("paused");
@@ -238,6 +614,14 @@ describe("collaborations e2e", () => {
     expect(created.members.map((m) => m.agentId).sort()).toEqual(
       [alice.id, bob.id, carol.id].sort(),
     );
+    // bot-opened tables carry neutral defaults — no gates nobody chose
+    expect(created).toMatchObject({
+      topology: "mesh",
+      askExternal: false,
+      checkpointPhases: false,
+      useMemory: false,
+      phasePending: null,
+    });
     // the user asks the leader to conclude; the instruction reaches Carol's table session
     await c.request("collaborations.instruct", {
       id: created.id,

@@ -33,6 +33,10 @@ export const CollaborationMember = z.object({
 });
 export type CollaborationMember = z.infer<typeof CollaborationMember>;
 
+/** mesh = members talk directly; hub = everything goes through the leader. */
+export const CollaborationTopology = z.enum(["mesh", "hub"]);
+export type CollaborationTopology = z.infer<typeof CollaborationTopology>;
+
 export const Collaboration = z.object({
   id: z.string(),
   title: z.string(),
@@ -41,6 +45,15 @@ export const Collaboration = z.object({
   members: z.array(CollaborationMember),
   status: CollaborationStatus,
   phase: CollaborationPhase,
+  topology: CollaborationTopology,
+  /** External actions by any member require the user's approval. */
+  askExternal: z.boolean(),
+  /** Phase changes wait for the user to release them. */
+  checkpointPhases: z.boolean(),
+  /** Members' sessions include the user's profile. */
+  useMemory: z.boolean(),
+  /** A phase the leader requested that awaits the user's release. */
+  phasePending: CollaborationPhase.nullable(),
   stats: z.object({
     members: z.number(),
     messages: z.number(),
@@ -77,6 +90,10 @@ export const CollaborationsCreateParams = z
     title: z.string().trim().min(1).max(80).optional(),
     memberIds: z.array(z.string()).min(1).max(8),
     leaderId: z.string(),
+    topology: CollaborationTopology.optional(),
+    askExternal: z.boolean().optional(),
+    checkpointPhases: z.boolean().optional(),
+    useMemory: z.boolean().optional(),
   })
   .strict();
 

@@ -14,11 +14,18 @@ flag desligada, e mesa sem a flag não ganha ask novo.
 
 **Status:** ready-for-agent
 
-- [ ] Turn de membro em mesa com `ask_external` gera approval para app tool
+- [x] Turn de membro em mesa com `ask_external` gera approval para app tool
       não-read e para `page_publish`
-- [ ] A approval gerada tem `collaborationId` da mesa
-- [ ] Mesa sem a flag não gera asks novos (só os do `require_approval` do
+- [x] A approval gerada tem `collaborationId` da mesa
+- [x] Mesa sem a flag não gera asks novos (só os do `require_approval` do
       agente, se houver)
-- [ ] Agente com `require_approval` próprio continua pedindo aprovação em
+- [x] Agente com `require_approval` próprio continua pedindo aprovação em
       mesa sem a flag
-- [ ] e2e cobrindo ask gerado por mesa e ausência de ask sem flag
+- [x] e2e cobrindo ask gerado por mesa e ausência de ask sem flag
+
+## Comments
+
+- 2026-11-12 — `CollaborationService.askPolicy()` registrada no `ApprovalService`
+  em main.ts; resolve `queue.turn_id → collaboration_id → ask_external` e reusa o
+  predicado `isExternalActionAsk` extraído de `agents-overview.ts` (app não-read +
+  `page_publish`). Só adiciona asks — `requireApproval` do bot continua valendo.

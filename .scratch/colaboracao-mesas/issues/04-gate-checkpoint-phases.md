@@ -13,14 +13,22 @@ sobrevive a restart do daemon (é coluna persistida).
 
 **Status:** ready-for-agent
 
-- [ ] `table_phase` em mesa flagada grava `request` com resumo do líder e
+- [x] `table_phase` em mesa flagada grava `request` com resumo do líder e
       seta `phase_pending`; `phase` não muda ainda
-- [ ] `collaborations.answer` aplica a fase pendente ao responder
-- [ ] `table_phase` com pendência ativa → erro informando a espera
-- [ ] Membros continuam conversando com pendência ativa (só a transição
+- [x] `collaborations.answer` aplica a fase pendente ao responder
+- [x] `table_phase` com pendência ativa → erro informando a espera
+- [x] Membros continuam conversando com pendência ativa (só a transição
       espera)
-- [ ] `phase_pending` persiste através de restart do daemon
-- [ ] Mesa sem a flag avança fase na hora, como hoje
-- [ ] e2e cobrindo request + phase_pending + aplicação no answer + erro ao
+- [x] `phase_pending` persiste através de restart do daemon
+- [x] Mesa sem a flag avança fase na hora, como hoje
+- [x] e2e cobrindo request + phase_pending + aplicação no answer + erro ao
       re-tentar + persistência em restart (prior art:
       `approvals-restart.e2e.test.ts`)
+
+## Comments
+
+- 2026-11-12 — `table_phase` ganhou `summary` opcional (schema + handler da
+  bridge). Com `checkpoint_phases`, `advancePhase` grava `request` ao usuário e
+  seta `phase_pending`; pendência ativa bloqueia nova chamada. `answerRequest`
+  aplica a fase ao responder um `request` do líder. Fase imediata intacta fora
+  da flag.

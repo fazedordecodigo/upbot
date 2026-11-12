@@ -23,18 +23,26 @@ no create (ticket 01). O scoring é extraído para `src/lib/` e testado.
 
 **Status:** ready-for-agent
 
-- [ ] Criação é uma view inteira com três seções e prévia sticky refletindo
+- [x] Criação é uma view inteira com três seções e prévia sticky refletindo
       as escolhas
-- [ ] Nome obrigatório; chips de exemplos preenchem nome+problema e somem
+- [x] Nome obrigatório; chips de exemplos preenchem nome+problema e somem
       sem mesas recentes
-- [ ] Coordenador é sempre o `default_bot_id` (nome real no card); sem
+- [x] Coordenador é sempre o `default_bot_id` (nome real no card); sem
       default bot, orientação para criar um bot
-- [ ] Grid de agentes mostra instâncias livres em tempo real; lotado
+- [x] Grid de agentes mostra instâncias livres em tempo real; lotado
       selecionável com aviso "entra quando liberar"
-- [ ] Scoring marca chip "sugerido" e "selecionar sugeridos" funciona; nada
+- [x] Scoring marca chip "sugerido" e "selecionar sugeridos" funciona; nada
       é marcado/desmarcado automaticamente
-- [ ] Os 4 controles do modo de trabalho são enviados no
+- [x] Os 4 controles do modo de trabalho são enviados no
       `collaborations.create`
-- [ ] Scoring em `src/lib/` com testes (tokenização sem diacríticos,
+- [x] Scoring em `src/lib/` com testes (tokenização sem diacríticos,
       stopwords, limiar)
-- [ ] Design system Rio Negro: tokens `--boto-*`, componentes `ui/*`
+- [x] Design system Rio Negro: tokens `--boto-*`, componentes `ui/*`
+
+## Comments
+
+- 2026-11-12 — `src/lib/mesa-suggest.ts`: tokenize (NFD-strip, stopwords pt+en,
+  ≥3), score nome×2/campos×1 normalizado, `SUGGEST_THRESHOLD` 0.2. View
+  `NewTableView` (ViewName `newTable`): 3 seções + prévia sticky; coordenador =
+  `agent.isDefault`; livres = `capacity - active` do `agents.overview` em tempo
+  real; `NewTableDialog` removido — "Nova mesa" no grid navega para a view.

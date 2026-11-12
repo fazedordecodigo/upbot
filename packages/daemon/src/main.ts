@@ -244,7 +244,7 @@ async function main() {
     (id) => bridge.serversFor(id),
     (id, turnId, fresh) =>
       (fresh ? botoContext(workspaceRoot) : "") +
-      memories.promptBlock(id, turnId, fresh) +
+      memories.promptBlock(id, turnId, fresh, collaborations.sessionUsesMemory(turnId)) +
       (fresh ? skills.promptBlock((items) => memories.recordUsage(turnId, items)) : ""),
     (id) => hosts.launchFor(id, bridge.port),
     () => [workspaceRoot],
@@ -306,6 +306,7 @@ async function main() {
     instructTask: (taskId, text) => taskService.instruct(taskId, text),
   });
   bridge.collaborations = collaborations;
+  approvals.addAskPolicy(collaborations.askPolicy());
   routines.setTaskSink({
     create(p) {
       const task = taskService.create(

@@ -156,6 +156,11 @@ export const BRIDGE_TOOLS = [
           type: "string",
           enum: ["entender", "investigar", "corrigir", "verificar", "avisar"],
         },
+        summary: {
+          type: "string",
+          description:
+            "Why the table should move — shown to the user when the table asks before advancing",
+        },
         table: { type: "string", description: "Table id or title (only if ambiguous)" },
       },
       required: ["phase"],
@@ -1106,6 +1111,7 @@ export class Bridge {
             me.id,
             typeof args.table === "string" ? args.table : undefined,
             String(args.phase ?? ""),
+            typeof args.summary === "string" ? args.summary : undefined,
           ),
         };
       }
