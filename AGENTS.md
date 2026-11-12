@@ -96,3 +96,20 @@ when the task touches that area — do not preload every reference.
   and invalid params return `bad_request`.
 - The daemon requires `Authorization: Bearer <token>` on `/health` and `?token=` on
   `/ws`; Origin headers outside the Tauri/localhost allowlist get 403.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as markdown files under `.scratch/<feature-slug>/` (one ticket per file).
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical roles map 1:1 to label strings (`needs-triage`, `needs-info`, `ready-for-agent`,
+`ready-for-human`, `wontfix`), recorded as a `Status:` line in local issue files.
+See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
