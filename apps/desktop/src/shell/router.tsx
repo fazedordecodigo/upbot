@@ -6,6 +6,7 @@ export type ViewName =
   | "new"
   | "templates"
   | "task"
+  | "collaboration"
   | "routines"
   | "marketplace"
   | "settings";

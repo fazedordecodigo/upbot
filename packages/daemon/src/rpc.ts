@@ -7,6 +7,7 @@ import { attachmentsBlock, saveAttachments } from "./attachments";
 import { type BrowserService, findBrowser } from "./browser";
 import type { ChannelService } from "./channels";
 import type { ChatStore, QueueStore } from "./chat-store";
+import type { CollaborationService } from "./collaborations";
 import type { ComputerUse } from "./computer";
 import { InvalidSettingError } from "./db/settings";
 import type { DesktopService } from "./desktop";
@@ -107,8 +108,15 @@ export class Rpc {
       profile: ProfileService;
       desktop: DesktopService;
       overview?: AgentsOverviewService;
+      collaborations?: CollaborationService;
     },
   ) {}
+
+  private collaborations(): CollaborationService {
+    if (!this.extras.collaborations)
+      throw new RpcError("bad_request", "collaborations are not enabled");
+    return this.extras.collaborations;
+  }
 
   /** Returns the response payload string for one raw incoming message. */
   async handle(raw: string, conn?: RpcConnection): Promise<string> {
@@ -298,6 +306,7 @@ export class Rpc {
         const ok = this.agents.softDelete(p.id);
         if (!ok) throw new RpcError("not_found", "agent not found");
         this.queue.removeAllForAgent(p.id);
+        this.extras.collaborations?.onAgentDeleted(p.id);
         this.runtimes.agentDeleted(p.id);
         queueMicrotask(() => this.broadcast("agent.deleted", { id: p.id }));
         return { ok: true };
@@ -729,6 +738,34 @@ export class Rpc {
       case "channels.reassign": {
         const p = params as MethodParsedParams<typeof method>;
         return this.channels.reassign(p.channelId, p.ownerId);
+      }
+      case "collaborations.list":
+        return this.collaborations().list();
+      case "collaborations.get":
+        return this.collaborations().get((params as MethodParsedParams<typeof method>).id);
+      case "collaborations.history": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.collaborations().history(p.id, p.limit);
+      }
+      case "collaborations.create":
+        return this.collaborations().create(params as MethodParsedParams<typeof method>);
+      case "collaborations.instruct": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.collaborations().instruct(p.id, p.text);
+      }
+      case "collaborations.answer": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.collaborations().answerRequest(p.id, p.messageId, p.text);
+      }
+      case "collaborations.pause":
+        return this.collaborations().pause((params as MethodParsedParams<typeof method>).id);
+      case "collaborations.resume":
+        return this.collaborations().resume((params as MethodParsedParams<typeof method>).id);
+      case "collaborations.stop":
+        return this.collaborations().stop((params as MethodParsedParams<typeof method>).id);
+      case "collaborations.conclude": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.collaborations().conclude(p.id, p.summary);
       }
       case "tasks.create":
         return this.extras.tasks.create(params as MethodParsedParams<typeof method>);

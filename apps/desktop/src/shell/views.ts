@@ -1,4 +1,5 @@
 import { AgentsView } from "../views/AgentsView";
+import { CollaborationView } from "../views/CollaborationView";
 import { HomeView } from "../views/HomeView";
 import { MarketplaceView } from "../views/MarketplaceView";
 import { NewTaskView } from "../views/NewTaskView";
@@ -14,6 +15,7 @@ export const views = {
   new: NewTaskView,
   templates: TemplatesView,
   task: TaskView,
+  collaboration: CollaborationView,
   routines: RoutinesView,
   marketplace: MarketplaceView,
   settings: SettingsView,

@@ -72,6 +72,24 @@ export class ChatStore {
     );
   }
 
+  /**
+   * Task that is a collaboration member's provider session while its table is live
+   * (active/paused). Member tasks are session handles, not work items: they must not
+   * be finished or purged by the task machinery between turns.
+   */
+  isCollabSession(taskId: string | null | undefined): boolean {
+    return (
+      !!taskId &&
+      !!this.db
+        .query(
+          `SELECT 1 FROM collaboration_members m
+           JOIN collaborations c ON c.id = m.collaboration_id
+           WHERE m.task_id = ? AND c.status IN ('active', 'paused') LIMIT 1`,
+        )
+        .get(taskId)
+    );
+  }
+
   taskForTurn(turnId: string | null | undefined): string | null {
     if (!turnId) return null;
     return this.getTurn(turnId)?.taskId ?? null;
@@ -131,13 +149,18 @@ export class ChatStore {
       .run(Date.now());
   }
 
-  createTurn(agentId: string, queueId: string | null = null, taskId: string | null = null): Turn {
+  createTurn(
+    agentId: string,
+    queueId: string | null = null,
+    taskId: string | null = null,
+    collaborationId: string | null = null,
+  ): Turn {
     const id = crypto.randomUUID();
     this.db
       .query(
-        "INSERT INTO turns (id, agent_id, status, queue_id, started_at, task_id) VALUES (?, ?, 'running', ?, ?, ?)",
+        "INSERT INTO turns (id, agent_id, status, queue_id, started_at, task_id, collaboration_id) VALUES (?, ?, 'running', ?, ?, ?, ?)",
       )
-      .run(id, agentId, queueId, Date.now(), taskId);
+      .run(id, agentId, queueId, Date.now(), taskId, collaborationId);
     return this.getTurn(id)!;
   }
 
@@ -426,6 +449,7 @@ export type QueueRow = {
   from_agent_id: string | null;
   hops: number;
   channel_id: string | null;
+  collaboration_id: string | null;
   prompt: string | null;
   meta_json: string | null;
   task_id?: string | null;
@@ -444,6 +468,7 @@ export type QueueSource = {
   agentId: string | null;
   hops: number;
   channelId?: string | null;
+  collaborationId?: string | null;
   /** Provider prompt when it differs from the displayed text. */
   prompt?: string;
   /** Extra fields stored on the user_message item (routine, attachments). */
@@ -564,7 +589,7 @@ export class QueueStore {
     const now = Date.now();
     this.db
       .query(
-        "INSERT INTO queue (id, agent_id, text, status, created_at, from_agent_id, hops, channel_id, prompt, meta_json, task_id) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO queue (id, agent_id, text, status, created_at, from_agent_id, hops, channel_id, collaboration_id, prompt, meta_json, task_id) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         id,
@@ -574,6 +599,7 @@ export class QueueStore {
         from?.agentId ?? null,
         from?.hops ?? 0,
         from?.channelId ?? null,
+        from?.collaborationId ?? null,
         from?.prompt ?? null,
         from?.meta ? JSON.stringify(from.meta) : null,
         from?.taskId ?? null,

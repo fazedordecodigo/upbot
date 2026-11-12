@@ -98,6 +98,7 @@ describe("agents cockpit e2e", () => {
       running: [],
       waiting: [],
       queued: 0,
+      next: null,
       machines: [],
     });
     await c.request("agents.delete", { id: plain.id });

@@ -35,6 +35,7 @@ export const iconNames = [
   "monitor",
   "moon",
   "mouse-pointer",
+  "network",
   "palette",
   "panel-left",
   "paperclip",

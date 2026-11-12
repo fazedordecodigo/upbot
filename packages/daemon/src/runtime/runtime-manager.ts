@@ -170,6 +170,13 @@ export class RuntimeManager {
     }
   }
 
+  /** Cancels running table turns — all members', or one member's when agentId is given. */
+  cancelCollaborationTurns(collaborationId: string, agentId?: string): void {
+    for (const rt of agentId ? this.pool(agentId) : this.all()) {
+      if (rt.currentCollaborationId() === collaborationId) rt.cancel({ pauseQueue: false });
+    }
+  }
+
   /**
    * The agent's running turn. Null when several instances run at once: bridge calls carry only
    * the agent, so they cannot be attributed to one turn (approvals then skip task grants).
