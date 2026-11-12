@@ -1,6 +1,6 @@
-import type { Approval, ChatItem, Machine, TaskDelivery } from "@boto/protocol";
+import type { Approval, TaskDelivery } from "@boto/protocol";
 import { type ReactNode, useEffect, useState } from "react";
-import { MachineThumb } from "../agents/AgentParts";
+import { MachineCard } from "../agents/MachineCard";
 import { useDaemonQuery } from "../hooks/useDaemonQuery";
 import { useHomeTasks } from "../hooks/useHomeTasks";
 import { useWaitingRequests, type WaitingRequest } from "../hooks/useWaitingRequests";
@@ -61,100 +61,6 @@ function deliveryIcon(delivery: TaskDelivery): IconName {
   return delivery.url && /\/pull\/|\/merge_requests\//.test(delivery.url)
     ? "git-pull-request"
     : "globe";
-}
-function MachineCard({ machine, taskTitle }: { machine: Machine; taskTitle: string | null }) {
-  const { client, connected } = useDaemon();
-  const { navigate } = useRouter();
-  const taskId = machine.taskId;
-  const permissions = useDaemonQuery(
-    client,
-    "permissions.list",
-    { taskId: taskId ?? "" },
-    {
-      enabled: connected && !!taskId,
-      events: { "permission.requested": true, "permission.resolved": true },
-    },
-  );
-  const approvals = useDaemonQuery(
-    client,
-    "approvals.list",
-    { taskId: taskId ?? "" },
-    { enabled: connected && !!taskId, events: { "approval.updated": true } },
-  );
-  const history = useDaemonQuery(
-    client,
-    "tasks.history",
-    { id: taskId ?? "", limit: 500 },
-    {
-      enabled: connected && !!taskId,
-      events: {
-        "item.created": (item) => item.kind === "plan" && item.taskId === taskId,
-        "item.updated": (item) => item.kind === "plan" && item.taskId === taskId,
-      },
-    },
-  );
-  const plan = history.data?.items.findLast(
-    (item): item is Extract<ChatItem, { kind: "plan" }> => item.kind === "plan",
-  );
-  const step = plan?.entries.findIndex((entry) => entry.status !== "completed") ?? -1;
-  const approval = approvals.data?.find((entry) => entry.status === "pending");
-  const permission = permissions.data?.[0];
-  let tone: "run" | "wait" | "muted" | "done" = "muted";
-  let icon: IconName = "circle-pause";
-  let text = "Desligada";
-  let tip: string | undefined;
-  if (machine.status === "error") {
-    icon = "circle-alert";
-    text = "Com erro";
-  } else if (approval) {
-    tone = "wait";
-    icon = "circle-alert";
-    text = "Pede aprovação";
-    tip = approval.title;
-  } else if (permission) {
-    tone = "wait";
-    icon = "circle-alert";
-    text = "Pede permissão";
-    tip = permission.title;
-  } else if (machine.controller === "user") {
-    icon = "user-check";
-    text = "Você está no controle";
-  } else if (machine.status === "starting") {
-    icon = "loader";
-    text = "Ligando…";
-  } else if (machine.status === "stopped") {
-    tone = "done";
-    text = "Desligada";
-  } else if (!taskId) {
-    tone = "done";
-    icon = "circle-check";
-    text = "Livre";
-  } else {
-    tone = "run";
-    icon = "loader";
-    text = plan && step >= 0 ? `Etapa ${step + 1} de ${plan.entries.length}` : "Em execução";
-  }
-  const body = (
-    <>
-      <MachineThumb machine={machine} caption={false} />
-      <span className="pc-name">
-        <span className="pc-dot" data-tone={tone} aria-hidden="true" />
-        <span className="od-truncate">{machine.name}</span>
-      </span>
-      <span className="pc-task od-truncate">{taskTitle ?? "Sem tarefa em andamento"}</span>
-      <span className="status" data-tone={tone} title={tip}>
-        <Icon name={icon} />
-        {text}
-      </span>
-    </>
-  );
-  return taskId ? (
-    <button type="button" className="pc-machine" onClick={() => navigate("task", { id: taskId })}>
-      {body}
-    </button>
-  ) : (
-    <div className="pc-machine">{body}</div>
-  );
 }
 const PERMISSION_HINT: Record<string, string> = {
   execute: "Rodar comandos no terminal da máquina.",

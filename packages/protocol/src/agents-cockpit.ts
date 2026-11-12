@@ -54,6 +54,8 @@ export const AgentOverview = z.object({
   /** Started work blocked on the user (permission or approval). */
   waiting: z.array(AgentTaskRef),
   queued: z.number().int().min(0),
+  /** Oldest queued request — the "Próxima" line on the card; null when the queue is empty. */
+  next: AgentTaskRef.nullable(),
   machines: z.array(z.string()),
 });
 export type AgentOverview = z.infer<typeof AgentOverview>;
