@@ -15,8 +15,8 @@ import { attachment, attachmentError } from "../lib/new-task";
 import { readStorage, writeStorage } from "../lib/storage";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
-import { LiveDesk } from "../task/LiveDesk";
 import { SecretApproval } from "../task/SecretApproval";
+import { Workspace } from "../task/Workspace";
 import { Icon, type IconName } from "../ui/icons";
 import { Markdown } from "../ui/Markdown";
 import { useToast } from "../ui/Toast";
@@ -258,6 +258,17 @@ function TaskSurface() {
       approval,
     })),
   ].sort((a, b) => a.createdAt - b.createdAt);
+  const firstRequestId = data.items.find((i) => i.kind === "user_message")?.id;
+  const toolModeLabel = task
+    ? { both: "Navegador e terminal", browser: "Só navegador", terminal: "Só terminal" }[
+        task.toolMode
+      ]
+    : null;
+  const toolModeIcon: Record<string, IconName> = {
+    both: "app-window",
+    browser: "globe",
+    terminal: "terminal",
+  };
   return (
     <section className="view task" id="view-task" aria-labelledby="task-title">
       <header className="task-head">
@@ -592,6 +603,20 @@ function TaskSurface() {
                               </time>
                             </p>
                             <p className="task-user-text">{i.text}</p>
+                            {i.id === firstRequestId && task && toolModeLabel && (
+                              <div className="task-user-files">
+                                <span className="task-chip">
+                                  <Icon name={toolModeIcon[task.toolMode] ?? "app-window"} />
+                                  <span className="od-truncate">{toolModeLabel}</span>
+                                </span>
+                                <span className="task-chip">
+                                  <Icon name="shield-check" />
+                                  <span className="od-truncate">
+                                    {task.requireApproval ? "Pede aprovação" : "Sem aprovação"}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
                             {i.attachments && i.attachments.length > 0 && (
                               <div className="task-user-files">
                                 {i.attachments.map((file) => (
@@ -662,22 +687,27 @@ function TaskSurface() {
                         const done = i.entries.filter((e) => e.status === "completed").length;
                         const total = i.entries.length;
                         return (
-                          <article className="task-card task-plan" key={i.id}>
-                            <p className="task-label">
-                              <Icon name="list-checks" />
-                              Plano · {done} de {total}{" "}
-                              {total === 1 ? "etapa concluída" : "etapas concluídas"}
-                            </p>
-                            <span
-                              className="progress"
-                              role="progressbar"
-                              aria-valuenow={done}
-                              aria-valuemin={0}
-                              aria-valuemax={total}
-                              aria-label="Etapas concluídas"
-                            >
-                              <span style={{ "--p": total ? done / total : 0 } as CSSProperties} />
-                            </span>
+                          <details className="task-card task-plan" key={i.id} open>
+                            <summary>
+                              <span className="task-label">
+                                <Icon name="list-checks" />
+                                Plano · {done} de {total}{" "}
+                                {total === 1 ? "etapa concluída" : "etapas concluídas"}
+                              </span>
+                              <span
+                                className="progress"
+                                role="progressbar"
+                                aria-valuenow={done}
+                                aria-valuemin={0}
+                                aria-valuemax={total}
+                                aria-label="Etapas concluídas"
+                              >
+                                <span
+                                  style={{ "--p": total ? done / total : 0 } as CSSProperties}
+                                />
+                              </span>
+                              <Icon name="chevron-down" className="task-plan-chev" />
+                            </summary>
                             <ul className="task-plan-list">
                               {i.entries.map((entry) => (
                                 <li key={entry.content} data-status={entry.status}>
@@ -692,7 +722,7 @@ function TaskSurface() {
                                 </li>
                               ))}
                             </ul>
-                          </article>
+                          </details>
                         );
                       }
                       case "permission": {
@@ -939,11 +969,17 @@ function TaskSurface() {
         {/* biome-ignore lint/a11y/useSemanticElements: preserve the desktop pane prototype contract. */}
         <div className="pc" id="pc-pane" role="region" aria-label="Área de trabalho do bot">
           <div className="desk" id="task-desk" data-desk="task">
-            <LiveDesk
+            <Workspace
+              client={client}
               session={session}
               available={!!machine}
-              onRelease={() => void act(session.release)}
+              items={data.items}
+              agentId={task?.agentId}
+              status={status}
+              icon={icon}
+              tone={tone}
               onExpand={machine ? () => setVmOpen(true) : undefined}
+              onRelease={() => void act(session.release)}
             />
           </div>
         </div>

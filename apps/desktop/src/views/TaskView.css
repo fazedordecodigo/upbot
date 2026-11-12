@@ -40,6 +40,11 @@
 .task .task-detail > summary { cursor: pointer; color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task .task-detail[open] > summary { white-space: normal; overflow-wrap: anywhere; }
 .task .task-detail .task-args { margin-top: var(--boto-space-2); }
+.task .task-plan > summary { display: flex; align-items: center; gap: var(--boto-space-3); cursor: pointer; list-style: none; }
+.task .task-plan > summary::-webkit-details-marker { display: none; }
+.task .task-plan > summary .progress { flex: 1; min-width: var(--boto-space-10); }
+.task .task-plan-chev { flex-shrink: 0; color: var(--boto-color-muted-foreground); transition: transform var(--boto-duration-fast) var(--boto-easing-out); }
+.task .task-plan[open] > summary .task-plan-chev { transform: rotate(180deg); }
 .task .task-plan-list { display: grid; gap: var(--boto-space-2); margin: 0; padding: 0; list-style: none; }
 .task .task-plan-list li { display: flex; align-items: center; gap: var(--boto-space-2); font-size: var(--boto-font-size-sm); }
 .task .task-plan-list li > .od-icon { flex-shrink: 0; }
