@@ -14,6 +14,12 @@ import { useRouter, type ViewName } from "./router";
 const navigation: { view: ViewName; label: string; icon: IconName; action: string }[] = [
   { view: "home", label: "Início", icon: "home", action: "go-home" },
   { view: "agents", label: "Bots", icon: "users", action: "go-agents" },
+  {
+    view: "collaboration",
+    label: "Colaboração",
+    icon: "network",
+    action: "go-collaboration",
+  },
   { view: "routines", label: "Rotinas", icon: "repeat", action: "go-routines" },
   { view: "templates", label: "Modelos", icon: "layout-template", action: "go-templates" },
   { view: "marketplace", label: "Marketplace", icon: "store", action: "go-marketplace" },

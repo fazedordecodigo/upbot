@@ -194,6 +194,7 @@ async function handlePrompt(ctx: Ctx): Promise<{ stopReason: string }> {
   const full = (prompt?.[0]?.text ?? "")
     .replace(/^[\s\S]*<\/agent_message_context>\n/, "")
     .replace(/^[\s\S]*<\/channel_context>\n[^\n]*\n/, "")
+    .replace(/^[\s\S]*<\/collaboration_context>\n[^\n]*\n/, "")
     // group-chat quotes and leading @mentions are addressing, not part of the command
     .replace(/^<in_reply_to[^>]*>[\s\S]*?<\/in_reply_to>\n/, "")
     .replace(/^(?:@[\w-]+\s+)+/, "");

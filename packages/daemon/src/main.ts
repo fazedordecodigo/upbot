@@ -11,6 +11,7 @@ import { Bridge } from "./bridge";
 import { BrowserService } from "./browser";
 import { ChannelService } from "./channels";
 import { ChatStore, QueueStore } from "./chat-store";
+import { CollaborationService } from "./collaborations";
 import { ComputerUse } from "./computer";
 import { Connectors } from "./connectors";
 import { openDatabase } from "./db";
@@ -217,8 +218,9 @@ async function main() {
       queueMicrotask(() => {
         void (async () => {
           approvalsRef?.onTurnEnded(turn.agentId, turn.id);
-          if (chat.isPrivateTask(turn.taskId)) return;
           const row = turn.queueId ? queue.row(turn.queueId) : null;
+          collaborations.onTurnEnded(turn, row);
+          if (chat.isPrivateTask(turn.taskId)) return;
           channels.onTurnEnded(turn, row);
           gateways.onTurnEnded(turn, row);
           team.onTurnEnded(turn, row);
@@ -300,6 +302,10 @@ async function main() {
   tasks.recover();
   runtimes.tasks = tasks.hooks();
   const taskService = tasks;
+  const collaborations = new CollaborationService(db, store, chat, () => runtimes, broadcast, {
+    instructTask: (taskId, text) => taskService.instruct(taskId, text),
+  });
+  bridge.collaborations = collaborations;
   routines.setTaskSink({
     create(p) {
       const task = taskService.create(
@@ -361,6 +367,8 @@ async function main() {
   const localvm = new LocalVmService(hosts, dataDir, broadcast, log);
   localvm.onHostChanged = () => broadcast("hosts.changed", {});
   void localvm.sync();
+  // after every broadcast-referenced service exists: recover() may emit events
+  collaborations.recover();
   const rpc = new Rpc(
     store,
     chat,
@@ -395,6 +403,7 @@ async function main() {
       profile: new ProfileService(db, memories, broadcast),
       desktop,
       overview,
+      collaborations,
     },
   );
 

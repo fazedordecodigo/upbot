@@ -341,6 +341,7 @@ export class TaskService {
   private recompute(id: string): void {
     const r = this.row(id);
     if (!r || r.situation === "muted" || r.situation === "done") return;
+    if (this.chat.isCollabSession(id)) return;
     const turnId = this.runningTurnId(id);
     let next: TaskSituation;
     if (turnId) {
@@ -408,6 +409,7 @@ export class TaskService {
   private purgeIfPrivateDone(id: string): void {
     const r = this.row(id);
     if (!r || r.private !== 1 || r.situation !== "done" || this.runningTurnId(id)) return;
+    if (this.chat.isCollabSession(id)) return;
     this.chat.purgeTaskItems(id);
     this.queue.purgeTaskTexts(id);
     this.db.query("UPDATE tasks SET prompt = '' WHERE id = ?").run(id);

@@ -5,6 +5,7 @@ import {
   type AgentsCockpitEventMap,
   agentsCockpitMethods,
 } from "./agents-cockpit";
+import { type CollaborationEventMap, collaborationMethods } from "./collaborations";
 import { MemoryUsage, type Profile, profileMethods } from "./profile";
 import {
   AppSecretSpec,
@@ -35,6 +36,7 @@ import { ToolMode, templateMethods } from "./templates";
 import { type DesktopEventMap, desktopMethodMap } from "./vm-desktop";
 
 export * from "./agents-cockpit";
+export * from "./collaborations";
 export * from "./profile";
 export * from "./providers-catalog";
 export * from "./tasks";
@@ -1348,6 +1350,7 @@ export const methodMap = {
   "tasks.deliveries": { params: TasksDeliveriesParams, result: z.array(TaskDelivery) },
   ...desktopMethodMap,
   ...agentsCockpitMethods,
+  ...collaborationMethods,
 } as const;
 
 export type MethodName = keyof typeof methodMap;
@@ -1403,4 +1406,5 @@ export type DaemonEventMap = AgentsCockpitEventMap & {
   "task.delivery": TaskDelivery;
   "task.deleted": { id: string };
   "task.event": { taskId: string; event: string; data: unknown };
-} & DesktopEventMap;
+} & DesktopEventMap &
+  CollaborationEventMap;

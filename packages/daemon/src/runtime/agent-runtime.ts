@@ -207,6 +207,7 @@ export class AgentRuntime {
   private turnStartedAt = 0;
   private turnBackground = false;
   private turnChannelId: string | null = null;
+  private turnCollaborationId: string | null = null;
   private compacting = false;
   private capture: string[] | null = null;
   private disposing = false;
@@ -261,6 +262,10 @@ export class AgentRuntime {
 
   currentChannelId(): string | null {
     return this.turn ? this.turnChannelId : null;
+  }
+
+  currentCollaborationId(): string | null {
+    return this.turn ? this.turnCollaborationId : null;
   }
 
   bridgeActivity(): void {
@@ -371,7 +376,12 @@ export class AgentRuntime {
       console.error(`[botod] queue item ${next.id}: ignored invalid meta ${rejected.join(", ")}`);
     this.draining = true;
     try {
-      const turnRow = this.store.createTurn(this.agent.id, next.id, scope);
+      const turnRow = this.store.createTurn(
+        this.agent.id,
+        next.id,
+        scope,
+        next.collaboration_id ?? null,
+      );
       this.turnTaskId = scope;
       this.queue.markStarted(next.id, turnRow.id);
       this.turn = { id: turnRow.id, cancelled: false, byUser: false };
@@ -381,9 +391,11 @@ export class AgentRuntime {
       this.turnHops = next.hops ?? 0;
       this.turnStartedAt = Date.now();
       this.turnChannelId = next.channel_id ?? null;
+      this.turnCollaborationId = next.collaboration_id ?? null;
       this.turnBackground = Boolean(
         next.from_agent_id ||
           next.channel_id ||
+          next.collaboration_id ||
           meta.routine ||
           meta.gateway ||
           meta.team ||

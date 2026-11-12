@@ -399,4 +399,51 @@ export const migrations: string[] = [
   // 33: the local Lima VM registers as a daemon-managed host (kind "localvm")
   `ALTER TABLE hosts ADD COLUMN kind TEXT NOT NULL DEFAULT 'ssh';
   ALTER TABLE hosts ADD COLUMN instance TEXT`,
+  // 34: collaborations — multi-agent tables ("mesas"). Each member gets a hidden
+  // private task (its dedicated provider session); every addressed message lands
+  // in the shared transcript. delivered+queue_id make pause/resume/restart
+  // idempotent: only rows still delivered=0 are (re)enqueued.
+  `CREATE TABLE collaborations (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    problem TEXT NOT NULL,
+    leader_agent_id TEXT NOT NULL,
+    origin_task_id TEXT,
+    origin_agent_id TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    phase TEXT NOT NULL DEFAULT 'entender',
+    summary TEXT,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    action_count INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    ended_at INTEGER
+  );
+  CREATE TABLE collaboration_members (
+    collaboration_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member',
+    task_id TEXT NOT NULL,
+    joined_at INTEGER NOT NULL,
+    left_at INTEGER,
+    PRIMARY KEY (collaboration_id, agent_id)
+  );
+  CREATE TABLE collaboration_messages (
+    id TEXT PRIMARY KEY,
+    collaboration_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    from_agent_id TEXT,
+    to_agent_id TEXT,
+    text TEXT NOT NULL,
+    delivered INTEGER NOT NULL DEFAULT 0,
+    queue_id TEXT,
+    answered_at INTEGER,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX collaboration_messages_collab ON collaboration_messages(collaboration_id, seq);
+  CREATE INDEX collaboration_members_collab ON collaboration_members(collaboration_id);
+  ALTER TABLE queue ADD COLUMN collaboration_id TEXT;
+  ALTER TABLE turns ADD COLUMN collaboration_id TEXT;
+  CREATE INDEX queue_collaboration ON queue(collaboration_id, status)`,
 ];
