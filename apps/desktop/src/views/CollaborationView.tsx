@@ -4,6 +4,7 @@ import type {
   Collaboration,
   CollaborationMessage,
   CollaborationPhase,
+  CollaborationTopology,
 } from "@boto/protocol";
 import { invoke } from "@tauri-apps/api/core";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,6 +19,7 @@ import {
 } from "../lib/collaboration-tables";
 import { mergeTimeline } from "../lib/collaboration-timeline";
 import { errorMessage } from "../lib/errors";
+import type { StatusTone } from "../lib/ui";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
 import { Dropdown, DropdownItem } from "../ui/Dropdown";
@@ -487,7 +489,7 @@ function ConversationGraph({
             os dois
           </span>
           <span className="cb-legend-item">
-            <i className="cb-legend-line cb-edge-bots" /> Mensagem entre agentes
+            <i className="cb-legend-line cb-edge-bots" /> Mensagem entre bots
           </span>
           <span className="cb-legend-item">
             <i className="cb-legend-line cb-edge-request" /> Pedido para você
@@ -844,7 +846,7 @@ function TablePanel({
             <section className="cb-graph-section" aria-labelledby={`cb-graph-${id}`}>
               <header className="cb-section-head od-row">
                 <h3 id={`cb-graph-${id}`}>Grafo da conversa</h3>
-                <span className="cb-hint">Selecione um agente para ver só as mensagens dele.</span>
+                <span className="cb-hint">Selecione um bot para ver só as mensagens dele.</span>
               </header>
               <ConversationGraph
                 collab={collab}
@@ -1044,123 +1046,314 @@ function TablePanel({
   );
 }
 
-/** Structural mini graph for a card: leader↔member spokes plus the user; no weights. */
+/** Glyph inside a mini-graph node: sprite icon, person, Boto mark or initials. */
+function MiniMark({ x, y, mark, leader }: { x: number; y: number; mark: Mark; leader?: boolean }) {
+  const size = leader ? 13 : 10;
+  if (mark.t === "icon")
+    return (
+      <use
+        href={`/assets/icons.svg#i-${mark.n}`}
+        width={size}
+        height={size}
+        x={x - size / 2}
+        y={y - size / 2}
+      />
+    );
+  if (mark.t === "user")
+    return (
+      <g className="cb-mini-person" transform={`translate(${x - 5.2}, ${y - 5.2}) scale(0.65)`}>
+        <circle cx="8" cy="5" r="2.7" />
+        <path d="M2.8 13.4c.3-2.9 2.4-4.5 5.2-4.5s4.9 1.6 5.2 4.5" />
+      </g>
+    );
+  if (leader && mark.t === "mono")
+    return (
+      <path
+        className="cb-boto-mark"
+        fillRule="evenodd"
+        transform={`translate(${x - 6.4}, ${y - 6.4}) scale(0.2)`}
+        d={BOTO_MARK_D}
+      />
+    );
+  return (
+    <text className="cb-mini-mark" x={x} y={y + 3} textAnchor="middle">
+      {mark.s}
+    </text>
+  );
+}
+
+/**
+ * Structural mini graph for a card: leader in the center, members on an upper
+ * arc, "Você" below. Mesh topology links members between themselves; a live
+ * table flows dots along the spokes and pulses the leader halo; a pending
+ * table draws your link in pink dashes.
+ */
 export function MiniGraph({
   title,
   leaderId,
   memberIds,
   pending,
   nameOf,
+  agents = [],
+  topology = "hub",
+  live = false,
 }: {
   title: string;
   leaderId: string;
   memberIds: string[];
   pending: boolean;
   nameOf: (agentId: string | null) => string;
+  agents?: Agent[];
+  topology?: CollaborationTopology;
+  live?: boolean;
 }) {
-  const members = memberIds.filter((id) => id !== leaderId);
+  const members = memberIds.filter((id) => id && id !== leaderId);
   const cx = 110;
-  const cy = 52;
-  const radius = 34;
-  const user = { key: "user", label: "Você", x: cx, y: cy + radius * 0.95 };
-  const nodes = [
-    { key: leaderId, label: nameOf(leaderId), x: cx, y: cy, leader: true },
-    ...members.map((id, i) => {
-      const angle = ((-160 + (140 * i) / Math.max(members.length - 1, 1)) * Math.PI) / 180;
-      return {
-        key: id,
-        label: nameOf(id),
-        x: cx + radius * Math.cos(angle),
-        y: cy + radius * Math.sin(angle),
-        leader: false,
-      };
-    }),
-    { ...user, leader: false },
-  ];
-  const spokes = nodes.filter((n) => !n.leader).map((n) => ({ to: n }));
+  const cy = 56;
+  const rx = 82;
+  const ry = 40;
+  const user = { x: cx, y: 104, r: 8.5 };
+  const angles =
+    MEMBER_ANGLES[members.length] ??
+    members.map((_, i) => -90 - 180 / Math.max(members.length, 1) + (360 / members.length) * i);
+  const nodes = members.map((id, i) => {
+    const angle = ((angles[i] ?? -90) * Math.PI) / 180;
+    const label = nameOf(id);
+    return {
+      key: id,
+      label,
+      mark: agentMark(agents, id, label),
+      x: cx + rx * Math.cos(angle),
+      y: cy + ry * Math.sin(angle),
+      r: 8.5,
+    };
+  });
   return (
     <svg
       className="cb-mini"
-      viewBox="0 0 220 112"
+      viewBox="0 0 220 120"
       data-pending={pending}
+      data-live={live}
       role="img"
       aria-label={`Mini-grafo da mesa ${title}`}
     >
-      {spokes.map(({ to }) => (
-        <g key={to.key} className={to.key === "user" ? "cb-mini-user" : undefined}>
-          <line x1={cx} y1={cy} x2={to.x} y2={to.y} />
-        </g>
-      ))}
+      {topology === "mesh" &&
+        nodes.flatMap((a, i) =>
+          nodes
+            .slice(i + 1)
+            .map((b) => (
+              <line
+                key={`m-${a.key}-${b.key}`}
+                className="cb-mini-mesh-edge"
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+              />
+            )),
+        )}
       {nodes.map((n) => (
-        <g key={n.key} className={n.leader ? "cb-mini-leader" : undefined}>
-          <circle cx={n.x} cy={n.y} r={n.leader ? 10 : n.key === "user" ? 8 : 6} />
-          <text x={n.x} y={n.y + (n.leader ? 24 : n.key === "user" ? 20 : -10)} textAnchor="middle">
-            {n.label}
-          </text>
+        <line key={`e-${n.key}`} className="cb-mini-spoke" x1={cx} y1={cy} x2={n.x} y2={n.y} />
+      ))}
+      <line className="cb-mini-user-edge" x1={cx} y1={cy} x2={user.x} y2={user.y} />
+      {live && (
+        <g className="cb-mini-anim">
+          <circle className="cb-mini-pulse" cx={cx} cy={cy} r={14} fill="none" opacity={0}>
+            <animate attributeName="r" values="14;24" dur="2.6s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.55;0" dur="2.6s" repeatCount="indefinite" />
+          </circle>
+          {nodes.map((n, i) => (
+            <circle key={`d-${n.key}`} className="cb-mini-dot" r={2} opacity={0}>
+              <animateMotion
+                dur="2.8s"
+                begin={`${i * 0.55}s`}
+                repeatCount="indefinite"
+                path={
+                  i % 2 === 0 ? `M ${cx} ${cy} L ${n.x} ${n.y}` : `M ${n.x} ${n.y} L ${cx} ${cy}`
+                }
+              />
+              <animate
+                attributeName="opacity"
+                values="0;1;1;0"
+                keyTimes="0;0.12;0.75;1"
+                dur="2.8s"
+                begin={`${i * 0.55}s`}
+                repeatCount="indefinite"
+              />
+            </circle>
+          ))}
+          {pending && (
+            <circle className="cb-mini-dot cb-mini-dot-you" r={2} opacity={0}>
+              <animateMotion
+                dur="1.6s"
+                repeatCount="indefinite"
+                path={`M ${cx} ${cy} L ${user.x} ${user.y}`}
+              />
+              <animate
+                attributeName="opacity"
+                values="0;1;1;0"
+                keyTimes="0;0.15;0.75;1"
+                dur="1.6s"
+                repeatCount="indefinite"
+              />
+            </circle>
+          )}
+        </g>
+      )}
+      {nodes.map((n) => (
+        <g key={n.key} className="cb-mini-node">
+          <circle className="cb-mini-disc" cx={n.x} cy={n.y} r={n.r} />
+          <MiniMark x={n.x} y={n.y} mark={n.mark} />
+          <title>{n.label}</title>
         </g>
       ))}
+      <g className="cb-mini-node cb-mini-user">
+        <circle className="cb-mini-disc" cx={user.x} cy={user.y} r={user.r} />
+        <MiniMark x={user.x} y={user.y} mark={{ t: "user" }} />
+        <title>Você</title>
+      </g>
+      <g className="cb-mini-node cb-mini-leader">
+        <circle className="cb-mini-ring" cx={cx} cy={cy} r={15} fill="none" />
+        <circle className="cb-mini-disc" cx={cx} cy={cy} r={11} />
+        <MiniMark x={cx} y={cy} mark={agentMark(agents, leaderId, "★")} leader />
+        <title>{nameOf(leaderId)}</title>
+      </g>
     </svg>
   );
+}
+
+const CARD_STATUS: Record<
+  Collaboration["status"],
+  { icon: IconName; label: string; tone: StatusTone }
+> = {
+  active: { icon: "loader", label: "Em discussão", tone: "run" },
+  paused: { icon: "circle-pause", label: "Pausada", tone: "muted" },
+  done: { icon: "circle-check", label: "Resolvida", tone: "done" },
+  stopped: { icon: "circle-slash", label: "Encerrada", tone: "muted" },
+};
+
+/** "24 min", "1 h 5 min" — o tempo de trabalho mostrado no card da mesa. */
+function workTime(ms: number): string {
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return "<1 min";
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
 }
 
 function TableCard({
   collab,
   pending,
   nameOf,
+  agents,
   onOpen,
   onOpenPending,
 }: {
   collab: Collaboration;
   pending: TablePending | undefined;
   nameOf: (agentId: string | null) => string;
+  agents: Agent[];
   onOpen: () => void;
   onOpenPending: () => void;
 }) {
-  const step = PHASES.indexOf(collab.phase) + 1;
+  const waiting = pending !== undefined;
+  const live = collab.status === "active";
+  const done = collab.status === "done";
+  const step = Math.max(1, PHASES.indexOf(collab.phase) + 1);
+  const status: { icon: IconName; label: string; tone: StatusTone } = waiting
+    ? { icon: "circle-alert", label: "Aguardando você", tone: "wait" }
+    : CARD_STATUS[collab.status];
+  const phaseText = done
+    ? "Todas as etapas concluídas"
+    : collab.status === "stopped"
+      ? `Encerrada na etapa ${step} de ${PHASES.length}`
+      : `Etapa ${step} de ${PHASES.length}: ${PHASE_LABELS[collab.phase]}`;
   const pendingText =
     pending?.kind === "approval"
       ? (pending.approval.title ?? pending.approval.tool ?? "aprovação")
       : pending?.kind === "request"
         ? pending.request.text
         : null;
+  const stack = [
+    collab.leaderId,
+    ...collab.members.filter((m) => m.agentId !== collab.leaderId).map((m) => m.agentId),
+  ];
+  const others = Math.max(0, collab.stats.members - 1);
   return (
-    <div className="cb-card" data-status={collab.status}>
+    <article
+      className="cb-card"
+      data-status={collab.status}
+      data-live={live}
+      data-waiting={waiting}
+    >
       <button type="button" className="cb-card-main" onClick={onOpen}>
-        <span className="cb-card-head od-row">
-          <strong className="cb-card-title od-fill od-truncate">{collab.title}</strong>
-          <span
-            className="status"
-            data-tone={
-              collab.status === "active" ? "run" : collab.status === "done" ? "done" : "muted"
-            }
-          >
-            {STATUS_LABELS[collab.status]}
-          </span>
+        <span className="cb-card-graph">
+          <MiniGraph
+            title={collab.title}
+            leaderId={collab.leaderId}
+            memberIds={collab.members.map((m) => m.agentId)}
+            pending={waiting}
+            nameOf={nameOf}
+            agents={agents}
+            topology={collab.topology}
+            live={live}
+          />
         </span>
-        <MiniGraph
-          title={collab.title}
-          leaderId={collab.leaderId}
-          memberIds={collab.members.map((m) => m.agentId)}
-          pending={pending !== undefined}
-          nameOf={nameOf}
-        />
-        <span className="cb-card-meta">
-          Etapa {step} de {PHASES.length} · {collab.stats.members} bots · {collab.stats.messages}{" "}
-          mensagens
+        <span className="cb-card-body">
+          <span className="cb-card-statusrow">
+            <span
+              className={`status cb-card-status${live && !waiting ? " cb-spin" : ""}`}
+              data-tone={status.tone}
+            >
+              <Icon name={status.icon} /> {status.label}
+            </span>
+            <span className="cb-card-time">{workTime(collab.stats.elapsedMs)} de trabalho</span>
+          </span>
+          <strong className="cb-card-title od-truncate">{collab.title}</strong>
+          <span className="cb-card-problem">{collab.problem}</span>
+          <span className="cb-card-phase">{phaseText}</span>
         </span>
       </button>
-      {pendingText !== null && (
+      {waiting && pending && (
         <button
           type="button"
-          className="cb-card-pending"
+          className="cb-card-ask"
           onClick={onOpenPending}
           title="Abrir a mesa direto na pendência"
         >
-          <Icon name="clock" /> Aguardando você: <span className="od-truncate">{pendingText}</span>
-          <span className="cb-card-pending-go">Ver o pedido</span>
+          <span className="cb-card-ask-label">
+            <Icon name="circle-alert" />
+            {pending.kind === "approval" ? "Pede aprovação" : "Pede resposta"}
+          </span>
+          <span className="cb-card-ask-text od-truncate">{pendingText}</span>
         </button>
       )}
-    </div>
+      {done && (
+        <p className="cb-card-result">
+          Problema resolvido.
+          {collab.summary ? ` ${collab.summary}` : " A entrega está no fim da conversa."}
+        </p>
+      )}
+      <footer className="cb-card-foot">
+        <span className="cb-card-bots od-fill od-truncate">
+          <span className="cb-card-stack" aria-hidden="true">
+            {stack.slice(0, 4).map((id) => (
+              <AvatarChip key={id} mark={agentMark(agents, id, nameOf(id))} title={nameOf(id)} />
+            ))}
+            {stack.length > 4 && <span className="cb-av cb-av-more">+{stack.length - 4}</span>}
+          </span>
+          {others > 0 ? `${nameOf(collab.leaderId)} e ${others} bots` : nameOf(collab.leaderId)}
+        </span>
+        <button
+          type="button"
+          className="btn btn-outline btn-sm"
+          onClick={waiting ? onOpenPending : onOpen}
+        >
+          {waiting ? "Ver o pedido" : "Abrir mesa"}
+        </button>
+      </footer>
+    </article>
   );
 }
 
@@ -1261,7 +1454,14 @@ export function CollaborationView() {
   };
   const titleOf = (id: string) => collabs.find((c) => c.id === id)?.title ?? "Mesa";
 
-  const shown = filterTables(collabs, filter, pendencies);
+  const shown = useMemo(() => {
+    // Mesas aguardando você primeiro; depois em discussão, resolvidas, encerradas.
+    const rank = (c: Collaboration) =>
+      isLiveTable(c) ? (pendencies.has(c.id) ? 0 : 1) : c.status === "done" ? 2 : 3;
+    return filterTables(collabs, filter, pendencies)
+      .slice()
+      .sort((a, b) => rank(a) - rank(b) || b.updatedAt - a.updatedAt);
+  }, [collabs, filter, pendencies]);
   const counts: Record<TableFilter, number> = {
     todas: collabs.length,
     aguardando: collabs.filter((c) => isLiveTable(c) && pendencies.has(c.id)).length,
@@ -1337,11 +1537,11 @@ export function CollaborationView() {
         <div className="page-head">
           <div className="od-field od-fill">
             <h1 className="page-title" id="collaboration-title" tabIndex={-1}>
-              Mesas
+              Colaboração
             </h1>
             <p className="page-sub">
-              Mesas onde um bot líder reúne outros bots para conversar par-a-par e resolver um
-              problema.
+              Quando um problema envolve mais de uma especialidade, o Boto reúne os bots numa mesa.
+              Cada mesa tem a própria conversa, e todas seguem trabalhando ao mesmo tempo.
             </p>
           </div>
           <button
@@ -1377,19 +1577,45 @@ export function CollaborationView() {
         )}
         {collabs.length > 0 && (
           <>
-            <div className="cb-chips od-row" role="tablist" aria-label="Filtrar mesas">
-              {FILTERS.map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={filter === f.key}
-                  className="cb-chip"
-                  onClick={() => setFilter(f.key)}
-                >
-                  {f.label} {counts[f.key] > 0 ? counts[f.key] : ""}
-                </button>
-              ))}
+            <div className="cb-tables-head">
+              <h2 className="section-title">Mesas</h2>
+              <div className="tabs-list cb-filters" role="radiogroup" aria-label="Filtrar mesas">
+                {FILTERS.map((f, index) => (
+                  // biome-ignore lint/a11y/useSemanticElements: roving radio buttons match the Agents board filter.
+                  <button
+                    key={f.key}
+                    type="button"
+                    className="tabs-trigger"
+                    role="radio"
+                    aria-checked={filter === f.key}
+                    tabIndex={filter === f.key ? 0 : -1}
+                    onClick={() => setFilter(f.key)}
+                    onKeyDown={(event) => {
+                      const next =
+                        event.key === "Home"
+                          ? 0
+                          : event.key === "End"
+                            ? FILTERS.length - 1
+                            : event.key === "ArrowRight"
+                              ? (index + 1) % FILTERS.length
+                              : event.key === "ArrowLeft"
+                                ? (index + FILTERS.length - 1) % FILTERS.length
+                                : null;
+                      if (next === null) return;
+                      event.preventDefault();
+                      const target = FILTERS[next];
+                      if (!target) return;
+                      setFilter(target.key);
+                      (
+                        event.currentTarget.parentElement?.children[next] as HTMLElement | undefined
+                      )?.focus();
+                    }}
+                  >
+                    {f.label}
+                    <span className="cb-filter-count">{counts[f.key]}</span>
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="cb-grid">
               {shown.map((c) => (
@@ -1398,6 +1624,7 @@ export function CollaborationView() {
                   collab={c}
                   pending={pendencies.get(c.id)}
                   nameOf={nameOf}
+                  agents={agents}
                   onOpen={() => navigate("collaboration", { id: c.id })}
                   onOpenPending={() => {
                     const p = pendencies.get(c.id);

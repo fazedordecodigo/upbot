@@ -387,6 +387,8 @@ export function NewTableView() {
                 memberIds={[coordinator?.id ?? "", ...picked]}
                 pending={false}
                 nameOf={nameOf}
+                agents={agents}
+                topology={topology}
               />
               <p className="nt-preview-meta">
                 Etapa 1 de 5 · {(coordinator ? 1 : 0) + picked.size} bots · 0 mensagens

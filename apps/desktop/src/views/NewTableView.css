@@ -32,12 +32,16 @@
 .new-table .nt-error { margin: 0; color: var(--boto-color-status-wait); font-size: var(--boto-font-size-sm); }
 
 .new-table .nt-preview { position: sticky; top: var(--boto-space-4); }
-.new-table .cb-mini { width: 100%; }
+.new-table .cb-mini { width: 100%; height: auto; }
 .new-table .cb-mini line { stroke: var(--boto-color-border); stroke-width: 1.2; }
-.new-table .cb-mini .cb-mini-user line { stroke-dasharray: 3 3; }
-.new-table .cb-mini circle { fill: var(--boto-color-card); stroke: var(--boto-color-border); stroke-width: 1.2; }
-.new-table .cb-mini .cb-mini-leader circle { stroke: var(--boto-color-primary); }
-.new-table .cb-mini text { fill: var(--boto-color-muted-foreground); font-size: 9px; }
+.new-table .cb-mini .cb-mini-user-edge { stroke-dasharray: 3 3; }
+.new-table .cb-mini .cb-mini-disc { fill: var(--boto-color-card); stroke: var(--boto-color-border); stroke-width: 1.2; }
+.new-table .cb-mini .cb-mini-leader .cb-mini-disc { stroke: var(--boto-color-primary); }
+.new-table .cb-mini .cb-mini-leader .cb-mini-ring { stroke: var(--boto-color-primary); opacity: 0.6; }
+.new-table .cb-mini .cb-mini-mark { fill: var(--boto-color-muted-foreground); font-size: 8px; }
+.new-table .cb-mini use { color: var(--boto-color-foreground); }
+.new-table .cb-mini .cb-mini-person { fill: none; stroke: var(--boto-color-foreground); stroke-width: 1.6; }
+.new-table .cb-mini .cb-boto-mark { fill: var(--boto-color-primary); }
 .new-table .nt-preview-card { display: grid; gap: var(--boto-space-3); padding: var(--boto-space-4); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-md); background: var(--boto-color-card); }
 .new-table .nt-preview-meta { margin: 0; color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
 .new-table .nt-preview-mode { margin: 0; padding-left: var(--boto-space-4); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); display: grid; gap: var(--boto-space-1); }
