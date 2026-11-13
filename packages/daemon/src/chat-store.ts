@@ -66,9 +66,35 @@ function rowToItem(r: ItemRow): ChatItem {
 export class ChatStore {
   constructor(private db: Database) {}
 
+  /** The task backs a collaboration member's table session (membership is permanent). */
+  isCollabMemberTask(taskId: string | null | undefined): boolean {
+    return (
+      !!taskId &&
+      !!this.db.query("SELECT 1 FROM collaboration_members WHERE task_id = ? LIMIT 1").get(taskId)
+    );
+  }
+
   isPrivateTask(taskId: string | null | undefined): boolean {
     return (
       !!taskId && !!this.db.query("SELECT 1 FROM tasks WHERE id = ? AND private = 1").get(taskId)
+    );
+  }
+
+  /**
+   * Task that is a collaboration member's provider session while its table is live
+   * (active/paused). Member tasks are session handles, not work items: they must not
+   * be finished or purged by the task machinery between turns.
+   */
+  isCollabSession(taskId: string | null | undefined): boolean {
+    return (
+      !!taskId &&
+      !!this.db
+        .query(
+          `SELECT 1 FROM collaboration_members m
+           JOIN collaborations c ON c.id = m.collaboration_id
+           WHERE m.task_id = ? AND c.status IN ('active', 'paused') LIMIT 1`,
+        )
+        .get(taskId)
     );
   }
 
@@ -97,14 +123,17 @@ export class ChatStore {
       if (taskId) return false;
       return this.privateApprovalTasks(agentId, createdAt).length === 0;
     }
-    return taskId ? task === taskId : !this.isPrivateTask(task);
+    // Table member sessions are private tasks, but their approvals are the mesa's
+    // user-facing pendencies: visible in the unfiltered list so the UI can join them.
+    return taskId ? task === taskId : !this.isPrivateTask(task) || this.isCollabMemberTask(task);
   }
 
   privateEventTasks(event: string, data: unknown): string[] {
     if (!data || typeof data !== "object") return [];
     const value = data as Record<string, unknown>;
     let taskId = typeof value.taskId === "string" ? value.taskId : null;
-    if (event === "task.created" || event === "task.updated") taskId = String(value.id);
+    if (event === "task.created" || event === "task.updated" || event === "task.deleted")
+      taskId = String(value.id);
     if (!taskId && typeof value.turnId === "string") taskId = this.taskForTurn(value.turnId);
     if (!taskId && (event === "turn.started" || event === "turn.ended"))
       taskId = this.taskForTurn(String(value.id));
@@ -130,13 +159,18 @@ export class ChatStore {
       .run(Date.now());
   }
 
-  createTurn(agentId: string, queueId: string | null = null, taskId: string | null = null): Turn {
+  createTurn(
+    agentId: string,
+    queueId: string | null = null,
+    taskId: string | null = null,
+    collaborationId: string | null = null,
+  ): Turn {
     const id = crypto.randomUUID();
     this.db
       .query(
-        "INSERT INTO turns (id, agent_id, status, queue_id, started_at, task_id) VALUES (?, ?, 'running', ?, ?, ?)",
+        "INSERT INTO turns (id, agent_id, status, queue_id, started_at, task_id, collaboration_id) VALUES (?, ?, 'running', ?, ?, ?, ?)",
       )
-      .run(id, agentId, queueId, Date.now(), taskId);
+      .run(id, agentId, queueId, Date.now(), taskId, collaborationId);
     return this.getTurn(id)!;
   }
 
@@ -145,16 +179,17 @@ export class ChatStore {
     return r ? rowToTurn(r) : null;
   }
 
+  /** Null when the turn's row is already gone (its task was deleted mid-run). */
   endTurn(
     id: string,
     status: Exclude<TurnStatus, "running">,
     stopReason: string | null,
     error: string | null,
-  ): Turn {
+  ): Turn | null {
     this.db
       .query("UPDATE turns SET status = ?, stop_reason = ?, error = ?, ended_at = ? WHERE id = ?")
       .run(status, stopReason, error, Date.now(), id);
-    return this.getTurn(id)!;
+    return this.getTurn(id);
   }
 
   turnsByIds(ids: string[]): Turn[] {
@@ -424,6 +459,7 @@ export type QueueRow = {
   from_agent_id: string | null;
   hops: number;
   channel_id: string | null;
+  collaboration_id: string | null;
   prompt: string | null;
   meta_json: string | null;
   task_id?: string | null;
@@ -442,6 +478,7 @@ export type QueueSource = {
   agentId: string | null;
   hops: number;
   channelId?: string | null;
+  collaborationId?: string | null;
   /** Provider prompt when it differs from the displayed text. */
   prompt?: string;
   /** Extra fields stored on the user_message item (routine, attachments). */
@@ -562,7 +599,7 @@ export class QueueStore {
     const now = Date.now();
     this.db
       .query(
-        "INSERT INTO queue (id, agent_id, text, status, created_at, from_agent_id, hops, channel_id, prompt, meta_json, task_id) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO queue (id, agent_id, text, status, created_at, from_agent_id, hops, channel_id, collaboration_id, prompt, meta_json, task_id) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         id,
@@ -572,6 +609,7 @@ export class QueueStore {
         from?.agentId ?? null,
         from?.hops ?? 0,
         from?.channelId ?? null,
+        from?.collaborationId ?? null,
         from?.prompt ?? null,
         from?.meta ? JSON.stringify(from.meta) : null,
         from?.taskId ?? null,

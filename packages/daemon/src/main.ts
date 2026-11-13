@@ -11,6 +11,7 @@ import { Bridge } from "./bridge";
 import { BrowserService } from "./browser";
 import { ChannelService } from "./channels";
 import { ChatStore, QueueStore } from "./chat-store";
+import { CollaborationService } from "./collaborations";
 import { ComputerUse } from "./computer";
 import { Connectors } from "./connectors";
 import { openDatabase } from "./db";
@@ -25,12 +26,13 @@ import { runMcpBridge } from "./mcp-bridge";
 import { MemoryStore } from "./memories";
 import { MobileServer } from "./mobile";
 import { PageLibrary } from "./pages";
-import { botoContext, seedDefaultBot } from "./persona";
+import { botoContext, migrateDefaultBot } from "./persona";
 import { ProfileService } from "./profile";
 import { ProvidersService } from "./providers-service";
 import { readyLine } from "./ready";
 import { VmCredentials } from "./remote/credentials";
 import { HostStore } from "./remote/hosts";
+import { LocalVmService } from "./remote/localvm";
 import { RoutineService } from "./routines";
 import { Rpc } from "./rpc";
 import { errorFields } from "./runtime/agent-runtime";
@@ -176,7 +178,7 @@ async function main() {
   chat.interruptRunningTurns();
   migrateLegacyHome(db, agentsRoot, log);
   const store = new AgentStore(db, agentsRoot);
-  seedDefaultBot(db, store);
+  migrateDefaultBot(db);
   const workspaceRoot = process.env.BOTO_WORKSPACE_ROOT || join(dirname(agentsRoot), "Workspace");
   mkdirSync(workspaceRoot, { recursive: true });
   const queue = new QueueStore(db);
@@ -216,8 +218,9 @@ async function main() {
       queueMicrotask(() => {
         void (async () => {
           approvalsRef?.onTurnEnded(turn.agentId, turn.id);
-          if (chat.isPrivateTask(turn.taskId)) return;
           const row = turn.queueId ? queue.row(turn.queueId) : null;
+          collaborations.onTurnEnded(turn, row);
+          if (chat.isPrivateTask(turn.taskId)) return;
           channels.onTurnEnded(turn, row);
           gateways.onTurnEnded(turn, row);
           team.onTurnEnded(turn, row);
@@ -231,6 +234,8 @@ async function main() {
   const bridge = new Bridge(store, () => runtimes, sharedRoot);
   const memories = new MemoryStore(db);
   const skills = new SkillLibrary(sharedRoot);
+  const vault = new Vault(db, dataDir);
+  const vmCredentials = new VmCredentials(vault);
   const runtimes = new RuntimeManager(
     store,
     chat,
@@ -239,11 +244,12 @@ async function main() {
     (id) => bridge.serversFor(id),
     (id, turnId, fresh) =>
       (fresh ? botoContext(workspaceRoot) : "") +
-      memories.promptBlock(id, turnId, fresh) +
+      memories.promptBlock(id, turnId, fresh, collaborations.sessionUsesMemory(turnId)) +
       (fresh ? skills.promptBlock((items) => memories.recordUsage(turnId, items)) : ""),
     (id) => hosts.launchFor(id, bridge.port),
     () => [workspaceRoot],
     (turnId) => memories.usage(turnId),
+    (provider) => vmCredentials.apiKey(provider),
   );
   const subagents = new SubagentService(db, store, chat, queue, () => runtimes, hosts, broadcast);
   bridge.subagents = subagents;
@@ -256,8 +262,6 @@ async function main() {
   const routines = new RoutineService(db, store, () => runtimes, broadcast);
   const browser = new BrowserService(join(dataDir, "browser-profile"), broadcast);
   bridge.browser = browser;
-  const vault = new Vault(db, dataDir);
-  const vmCredentials = new VmCredentials(vault);
   const providers = new ProvidersService(db, vmCredentials, broadcast);
   hosts.credentialEnv = (provider) => vmCredentials.env(provider);
   const computer = new ComputerUse(db);
@@ -298,6 +302,11 @@ async function main() {
   tasks.recover();
   runtimes.tasks = tasks.hooks();
   const taskService = tasks;
+  const collaborations = new CollaborationService(db, store, chat, () => runtimes, broadcast, {
+    instructTask: (taskId, text) => taskService.instruct(taskId, text),
+  });
+  bridge.collaborations = collaborations;
+  approvals.addAskPolicy(collaborations.askPolicy());
   routines.setTaskSink({
     create(p) {
       const task = taskService.create(
@@ -356,6 +365,11 @@ async function main() {
   const team = new TeamClient(db, store, chat, () => runtimes, vault, broadcast);
   const gateways = new GatewayService(db, store, chat, () => runtimes, vault, broadcast);
   gatewaysRef = gateways;
+  const localvm = new LocalVmService(hosts, dataDir, broadcast, log);
+  localvm.onHostChanged = () => broadcast("hosts.changed", {});
+  void localvm.sync();
+  // after every broadcast-referenced service exists: recover() may emit events
+  collaborations.recover();
   const rpc = new Rpc(
     store,
     chat,
@@ -384,11 +398,13 @@ async function main() {
       mobile,
       team,
       hosts,
+      localvm,
       subagents,
       tasks: taskService,
       profile: new ProfileService(db, memories, broadcast),
       desktop,
       overview,
+      collaborations,
     },
   );
 

@@ -1,5 +1,5 @@
 import type { Agent, AgentOverview, Machine } from "@boto/protocol";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { DesktopClient, frameDataUrl } from "../lib/desktop";
 import { mono } from "../lib/ui";
 import { useDaemon } from "../shell/daemon";
@@ -11,10 +11,13 @@ export function AgentHeading({
   agent,
   overview,
   panel = false,
+  aside,
 }: {
   agent: Agent;
   overview: AgentOverview;
   panel?: boolean;
+  /** Extra content on the status row (the card shows the instance count there). */
+  aside?: ReactNode;
 }) {
   const status = agentStatus(overview);
   return (
@@ -52,15 +55,18 @@ export function AgentHeading({
           <p className="ag-card-role od-clamp-2">{agent.role || "Sem descrição"}</p>
         </div>
       </div>
-      <span
-        className="status"
-        data-tone={status.tone}
-        title={overview.error ?? undefined}
-        aria-description={overview.error ?? undefined}
-      >
-        <Icon name={status.icon} />
-        {status.text}
-      </span>
+      <div className="od-row ag-status-row">
+        <span
+          className="status"
+          data-tone={status.tone}
+          title={overview.error ?? undefined}
+          aria-description={overview.error ?? undefined}
+        >
+          <Icon name={status.icon} />
+          {status.text}
+        </span>
+        {aside}
+      </div>
     </>
   );
 }
@@ -105,7 +111,7 @@ export function TaskRows({ overview }: { overview: AgentOverview }) {
   );
 }
 
-export function MachineThumb({ machine }: { machine: Machine }) {
+export function MachineThumb({ machine, caption = true }: { machine: Machine; caption?: boolean }) {
   const { client } = useDaemon();
   const [src, setSrc] = useState<string>();
   useEffect(() => {
@@ -147,16 +153,18 @@ export function MachineThumb({ machine }: { machine: Machine }) {
           <Icon name="monitor" />
         </div>
       )}
-      <figcaption>
-        <span className="od-truncate">{machine.name}</span>
-        <span>
-          {
-            { starting: "Ligando", ready: "Pronta", stopped: "Desligada", error: "Com erro" }[
-              machine.status
-            ]
-          }
-        </span>
-      </figcaption>
+      {caption && (
+        <figcaption>
+          <span className="od-truncate">{machine.name}</span>
+          <span>
+            {
+              { starting: "Ligando", ready: "Pronta", stopped: "Desligada", error: "Com erro" }[
+                machine.status
+              ]
+            }
+          </span>
+        </figcaption>
+      )}
     </figure>
   );
 }

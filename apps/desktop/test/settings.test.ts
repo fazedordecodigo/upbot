@@ -110,13 +110,15 @@ async function tab(p: Page, id: string) {
   await p.locator(`#st-tab-${id}`).click();
 }
 
-test("real settings: provider catalog, masked keys, profile, memories, appearance and permissions", async () => {
+test("real settings: provider catalog, masked keys, profile, appearance and permissions", async () => {
   const p = await settings();
   try {
     const catalog = await rpc.request("providers.list", {});
-    expect(await p.locator("#st-clis .st-row-name").allTextContents()).toEqual(
-      catalog.map((provider) => provider.name),
-    );
+    const expectedClis = [
+      ...catalog.filter((provider) => provider.installed),
+      ...catalog.filter((provider) => !provider.installed),
+    ].map((provider) => provider.name);
+    expect(await p.locator("#st-clis .st-row-name").allTextContents()).toEqual(expectedClis);
     await p.locator("#st-tab-provider").focus();
     await p.keyboard.press("ArrowUp");
     expect(await p.locator("#st-tab-privacy").getAttribute("aria-selected")).toBe("true");
@@ -126,10 +128,14 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
     expect(await p.locator("#st-tab-privacy").getAttribute("aria-selected")).toBe("true");
     await p.keyboard.press("Home");
     await p.keyboard.press("ArrowDown");
+    expect(await p.locator("#st-tab-computer").getAttribute("aria-selected")).toBe("true");
+    await p.keyboard.press("ArrowDown");
     expect(await p.locator("#st-tab-memory").getAttribute("aria-selected")).toBe("true");
     await p.keyboard.press("ArrowLeft");
+    await p.keyboard.press("ArrowLeft");
     const secret = "settings-test-secret-never-rendered-123456";
-    const keyRow = p.locator("#st-keys .st-row").filter({ has: p.locator("#st-key-devin") });
+    const keyRow = p.locator("#st-keys .st-row").filter({ hasText: "Devin" });
+    await keyRow.getByRole("button", { name: "Adicionar chave" }).click();
     await p.locator("#st-key-devin").fill(secret);
     await keyRow.getByRole("button", { name: "Salvar", exact: true }).click();
     const savedRow = p.locator("#st-keys .st-row").filter({ hasText: "Devin" });
@@ -149,12 +155,12 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
         ),
     ).toBe(false);
     await savedRow.getByRole("button", { name: "Remover" }).click();
-    await p.locator("#st-key-devin").waitFor();
+    await savedRow.getByRole("button", { name: "Adicionar chave" }).waitFor();
     await p.locator("#st-scan").click();
     await until(async () =>
-      (await p.locator("#st-scan-status").innerText()).includes("CLIs encontradas."),
+      (await p.locator("#st-scan-status").innerText()).includes("Última busca"),
     );
-    await p.locator("#st-default select").selectOption("devin");
+    await p.locator('#st-default [role="radio"]').filter({ hasText: "Devin" }).click();
     await until(async () => (await rpc.request("providers.getDefault", {})).provider === "devin");
     expect(
       (await rpc.request("providers.list", {})).find((provider) => provider.id === "devin")
@@ -170,41 +176,6 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
       about: "Prefiro respostas curtas.",
     });
     expect(await p.locator("#st-about-count").innerText()).toBe("25/600");
-    expect(await p.locator("#st-memories").innerText()).toContain(
-      "Nenhum bot guardou memórias ainda.",
-    );
-    const agent = await rpc.request("agents.create", { name: "Memória UI", provider: "devin" });
-    const memory = await rpc.request("memories.add", {
-      agentId: agent.id,
-      text: "Gosta de TypeScript.",
-    });
-    await p.locator("#st-memories .st-row").filter({ hasText: memory.text }).waitFor();
-    await p.locator("#st-memories").getByRole("button", { name: "Editar", exact: true }).click();
-    await p.getByRole("textbox", { name: "Texto da memória" }).fill("x".repeat(10000));
-    await p.locator("#st-memories").getByRole("button", { name: "Salvar", exact: true }).click();
-    await p.locator("#st-memories .st-error").waitFor();
-    expect(await p.locator("#st-memories .st-error").innerText()).toBe(
-      "Não foi possível atualizar a memória.",
-    );
-    await p.getByRole("textbox", { name: "Texto da memória" }).fill("Prefere Bun.");
-    await p.locator("#st-memories").getByRole("button", { name: "Salvar", exact: true }).click();
-    await until(
-      async () =>
-        (await rpc.request("memories.list", { agentId: agent.id }))[0]?.text === "Prefere Bun.",
-    );
-    await p.locator("#st-memories").getByRole("button", { name: "Apagar", exact: true }).click();
-    await p.getByRole("dialog").getByRole("button", { name: "Apagar", exact: true }).click();
-    await until(
-      async () => (await rpc.request("memories.list", { agentId: agent.id })).length === 0,
-    );
-    const stale = await rpc.request("memories.add", {
-      agentId: agent.id,
-      text: "Memória removida em outra sessão.",
-    });
-    await p.locator("#st-memories").getByRole("button", { name: "Editar", exact: true }).click();
-    await p.getByRole("textbox", { name: "Texto da memória" }).fill("Nova versão.");
-    await rpc.request("memories.delete", { id: stale.id });
-    await until(async () => (await p.locator("#st-memories .st-row").count()) === 0);
     await p.locator("#st-forget").click();
     await p.getByRole("dialog").getByRole("button", { name: "Cancelar", exact: true }).click();
     expect((await rpc.request("profile.get", {})).name).toBe("Iara");
@@ -262,16 +233,19 @@ test("real settings: provider catalog, masked keys, profile, memories, appearanc
 test("installed CLIs with a login command can sign in and show the waiting state", async () => {
   const p = await settings();
   try {
-    const row = p.locator("#st-accounts .st-row").filter({ hasText: "Devin" });
+    const row = p.locator("#st-accounts .st-account-card").filter({ hasText: "Devin" });
     await row.waitFor();
-    expect(await row.locator(".badge").count()).toBe(0);
+    const devinInfo = (await rpc.request("providers.list", {})).find(
+      (provider) => provider.id === "devin",
+    );
+    expect(await row.locator(".badge").count()).toBe(devinInfo?.loggedIn === true ? 1 : 0);
     const button = row.getByRole("button");
-    expect(await button.innerText()).toBe("Entrar");
+    expect(await button.innerText()).toBe("Entrar com Devin");
     await button.click();
     await until(async () => (await button.innerText()) === "Aguardando o navegador…");
     await until(async () => await button.isDisabled());
     await until(
-      async () => (await button.innerText()) === "Entrar" && !(await button.isDisabled()),
+      async () => (await button.innerText()) === "Entrar com Devin" && !(await button.isDisabled()),
     );
   } finally {
     await p.close();

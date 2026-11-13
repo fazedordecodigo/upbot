@@ -91,12 +91,10 @@ test("fresh daemon shows both empty states and the composer action", async () =>
   try {
     await openRoutines(page);
     await page
-      .getByText(
-        "Nenhuma rotina recorrente. Crie uma em Nova rotina ou escolha “Todo dia às 8h” ao delegar uma tarefa.",
-      )
+      .getByText("Nenhuma rotina recorrente. Crie uma em Nova rotina ou a partir de um modelo.")
       .waitFor();
     await page
-      .getByText("Nenhuma tarefa agendada. Ao delegar, escolha “Daqui a 1 hora” ou “Amanhã às 8h”.")
+      .getByText("Nenhuma tarefa agendada. Crie uma a partir de um modelo ou use Nova rotina.")
       .waitFor();
     await page.setViewportSize({ width: 390, height: 844 });
     const action = await page.locator("#new-routine").boundingBox();
@@ -106,7 +104,7 @@ test("fresh daemon shows both empty states and the composer action", async () =>
     expect(action.y).toBeLessThan(subtitle.y + subtitle.height);
     await page.locator("#new-routine").click();
     expect(await page.locator("#main").getAttribute("data-view")).toBe("new");
-    expect(await page.locator("#when-label").innerText()).toBe("Todo dia às 8h");
+    await page.locator("#composer-input").waitFor();
   } finally {
     await page.close();
   }

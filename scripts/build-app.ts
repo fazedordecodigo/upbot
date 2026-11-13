@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 
 const bundles: Record<string, string> = {
-  darwin: "app",
+  darwin: "app,dmg",
   linux: "appimage,deb",
   win32: "nsis",
 };

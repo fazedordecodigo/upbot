@@ -10,25 +10,59 @@
 .task .tl { display: flex; flex-direction: column; width: var(--task-split); min-width: 0; }
 .task .tl-scroll { overflow: auto; flex: 1; min-height: 0; }
 .task .tl-inner { display: flex; flex-direction: column; gap: var(--boto-space-5); max-width: var(--boto-size-chat-column); margin-inline: auto; padding: var(--boto-space-6); overflow-wrap: anywhere; }
-.task .task-user { align-self: flex-end; max-width: 100%; padding: var(--boto-space-3) var(--boto-space-4); border-radius: var(--boto-radius-lg); background: var(--boto-color-bubble-user); color: var(--boto-color-on-bubble-user); white-space: pre-wrap; }
-.task .task-message p, .task .task-card p, .task details p, .task .task-step p { white-space: pre-wrap; }
+.task .task-user { display: grid; gap: var(--boto-space-2); max-width: 100%; padding: var(--boto-space-4) var(--boto-space-5); border: var(--boto-size-focus-offset) solid var(--boto-color-border); border-radius: var(--boto-radius-lg); background: var(--boto-color-card); }
+.task .task-user-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task .task-user-files { display: flex; flex-wrap: wrap; gap: var(--boto-space-2); }
+.task .task-chip { display: inline-flex; align-items: center; gap: var(--boto-space-1); max-width: 100%; padding: var(--boto-space-1) var(--boto-space-2); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-full); color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); }
+.task .task-message { display: grid; gap: var(--boto-space-2); }
+.task .task-card p, .task details p, .task .task-step p { white-space: pre-wrap; }
 .task .task-note, .task .task-memory { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
+.task .task-note > .od-icon { vertical-align: -0.15em; margin-inline-end: var(--boto-space-1); }
 .task .task-memory .btn { white-space: normal; text-align: left; height: auto; }
+.task .task-label { display: flex; align-items: center; gap: var(--boto-space-2); margin: 0; color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); }
 .task .task-card { background: var(--boto-color-card); border: var(--boto-size-focus-offset) solid var(--boto-color-border); border-radius: var(--boto-radius-lg); padding: var(--boto-space-5); display: grid; gap: var(--boto-space-3); }
-.task .task-card h3 { display: flex; align-items: center; gap: var(--boto-space-2); font-size: var(--boto-font-size-base); }
+.task .task-card h3 { display: flex; align-items: center; gap: var(--boto-space-2); margin: 0; font-size: var(--boto-font-size-base); }
 .task .task-card[data-pending="true"] { border-color: var(--boto-color-primary); }
-.task .task-card[data-pending="true"] h3 > .od-icon { color: var(--boto-color-primary); }
+.task .task-card[data-pending="true"] .task-label > .od-icon { color: var(--boto-color-primary); }
 .task .task-args { margin: 0; max-height: var(--boto-size-textarea); overflow: auto; padding: var(--boto-space-3); border-radius: var(--boto-radius-md); background: var(--boto-color-muted-surface); font-family: var(--boto-font-mono); font-size: var(--boto-font-size-xs); white-space: pre-wrap; }
 .task .task-actions { display: flex; flex-wrap: wrap; gap: var(--boto-space-2); }
 .task .task-actions .btn { white-space: normal; height: auto; min-height: var(--boto-size-control); }
-.task .task-step { display: flex; align-items: baseline; gap: var(--boto-space-2); }
-.task .task-step > .od-icon { flex-shrink: 0; }
+.task .task-step { display: flex; align-items: flex-start; gap: var(--boto-space-2); }
+.task .task-step > .od-icon { flex-shrink: 0; margin-top: 0.15em; }
+.task .task-time { flex-shrink: 0; min-width: 4ch; margin-top: 0.2em; color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); font-variant-numeric: tabular-nums; }
+.task .task-step-body { display: grid; gap: var(--boto-space-1); min-width: 0; flex: 1; }
+.task .task-step-title { margin: 0; font-size: var(--boto-font-size-sm); overflow-wrap: anywhere; }
+.task .task-kind { font-weight: 600; }
+.task .task-step-status { margin: 0; color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-xs); }
+.task .task-step[data-status="pending"] > .od-icon, .task .task-step[data-status="in_progress"] > .od-icon { color: var(--boto-color-primary); animation: task-spin 1.4s linear infinite; }
+.task .task-step[data-status="completed"] > .od-icon { color: var(--boto-color-success); }
+.task .task-step[data-status="failed"] > .od-icon, .task .task-step[data-status="failed"] .task-step-status { color: var(--boto-color-destructive); }
+.task .task-detail > summary { cursor: pointer; color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task .task-detail[open] > summary { white-space: normal; overflow-wrap: anywhere; }
+.task .task-detail .task-args { margin-top: var(--boto-space-2); }
+.task .task-plan > summary { display: flex; align-items: center; gap: var(--boto-space-3); cursor: pointer; list-style: none; }
+.task .task-plan > summary::-webkit-details-marker { display: none; }
+.task .task-plan > summary .progress { flex: 1; min-width: var(--boto-space-10); }
+.task .task-plan-chev { flex-shrink: 0; color: var(--boto-color-muted-foreground); transition: transform var(--boto-duration-fast) var(--boto-easing-out); }
+.task .task-plan[open] > summary .task-plan-chev { transform: rotate(180deg); }
+.task .task-plan-list { display: grid; gap: var(--boto-space-2); margin: 0; padding: 0; list-style: none; }
+.task .task-plan-list li { display: flex; align-items: center; gap: var(--boto-space-2); font-size: var(--boto-font-size-sm); }
+.task .task-plan-list li > .od-icon { flex-shrink: 0; }
+.task .task-plan-list li[data-status="completed"] > .od-icon { color: var(--boto-color-success); }
+.task .task-plan-list li[data-status="in_progress"] > .od-icon { color: var(--boto-color-primary); animation: task-spin 1.4s linear infinite; }
+.task .task-dot { flex-shrink: 0; width: 0.7em; height: 0.7em; margin-inline: 0.15em; border: 1.5px solid var(--boto-color-muted-foreground); border-radius: var(--boto-radius-full); }
+@keyframes task-spin { to { transform: rotate(360deg); } }
 .task .task-error { color: var(--boto-color-destructive); }
 .task .task-empty { display: grid; justify-items: start; gap: var(--boto-space-4); padding-block: var(--boto-space-10); }
 .task .tl-compose { padding: var(--boto-space-4) var(--boto-space-5); background: var(--boto-color-background); }
-.task .composer { display: flex; align-items: flex-end; gap: var(--boto-space-2); background: var(--boto-color-card); border: var(--boto-size-focus-offset) solid var(--boto-color-input); border-radius: var(--boto-radius-lg); padding: var(--boto-space-3); }
+.task .composer { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--boto-space-2); background: var(--boto-color-card); border: var(--boto-size-focus-offset) solid var(--boto-color-input); border-radius: var(--boto-radius-lg); padding: var(--boto-space-3); }
 .task .composer:focus-within { border-color: var(--boto-color-ring); }
-.task .composer-input { flex: 1; min-width: 0; max-height: var(--boto-size-textarea); resize: none; border: 0; background: transparent; color: var(--boto-color-foreground); font: inherit; font-size: var(--boto-font-size-sm); }
+.task .composer-bar { display: contents; }
+.task .composer-attach { order: -1; }
+.task .composer-files { order: -2; flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: var(--boto-space-2); }
+.task .task-file { max-width: 100%; padding-inline-start: var(--boto-space-2); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-sm); font-size: var(--boto-font-size-sm); }
+.task .composer-input { flex: 1; min-width: 0; max-height: var(--boto-size-textarea); padding-block-end: calc((var(--boto-space-10) - 1.6em) / 2); overflow-y: auto; resize: none; border: 0; background: transparent; color: var(--boto-color-foreground); font: inherit; font-size: var(--boto-font-size-sm); }
+.task .composer-input:focus { outline: none; }
 .task .composer-input::placeholder { color: var(--boto-color-muted-foreground); }
 .task .split { width: var(--boto-space-2); flex-shrink: 0; cursor: col-resize; touch-action: none; background: var(--boto-color-border); }
 .task .split:hover { background: var(--boto-color-input); }

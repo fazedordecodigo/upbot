@@ -3,9 +3,11 @@
 ## Bots (general purpose)
 
 `src/persona.ts`: every fresh session starts with `<boto_context>` (shared workspace path,
-collaboration tools, approval and secret rules). `seedDefaultBot` creates one "Boto" bot
-(claude) on a fresh install (`settings.default_bot_seeded`; `BOTO_DEFAULT_BOT=off` skips it,
-set by the test helper). Shared workspace: `BOTO_WORKSPACE_ROOT` or
+collaboration tools, approval and secret rules). Fresh installs start with no bots — the
+onboarding offers creating the first one, and `AgentStore.create` adopts it as
+`settings.default_bot_id` when unset. `migrateDefaultBot` keeps upgrades working: it renames
+an untouched "UpBot" seed and backfills `default_bot_id` once for installs marked
+`settings.default_bot_seeded`. Shared workspace: `BOTO_WORKSPACE_ROOT` or
 `dirname(agentsRoot)/Workspace` (`~/Boto/Workspace`), passed to local sessions as
 `StartOpts.extraDirs` (Claude `--add-dir`, Codex `writableRoots`).
 

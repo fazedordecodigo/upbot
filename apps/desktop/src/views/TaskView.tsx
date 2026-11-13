@@ -11,12 +11,14 @@ import {
   requiresFullReview,
 } from "../lib/approval-description";
 import { errorFields, logError } from "../lib/log";
+import { attachment, attachmentError } from "../lib/new-task";
 import { readStorage, writeStorage } from "../lib/storage";
 import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
-import { LiveDesk } from "../task/LiveDesk";
 import { SecretApproval } from "../task/SecretApproval";
+import { Workspace } from "../task/Workspace";
 import { Icon, type IconName } from "../ui/icons";
+import { Markdown } from "../ui/Markdown";
 import { useToast } from "../ui/Toast";
 import "./TaskView.css";
 
@@ -35,6 +37,38 @@ const decisions = {
   reject_always: "Não permitido",
 };
 const clampSplit = (value: number) => Math.round(Math.max(30, Math.min(70, value)));
+
+const TOOL_META: Record<string, { label: string; icon: IconName }> = {
+  execute: { label: "Terminal", icon: "terminal" },
+  read: { label: "Leitura", icon: "file-text" },
+  edit: { label: "Editor", icon: "file-code" },
+  delete: { label: "Exclusão", icon: "trash" },
+  move: { label: "Arquivos", icon: "folder" },
+  search: { label: "Busca", icon: "search" },
+  fetch: { label: "Navegador", icon: "globe" },
+  think: { label: "Raciocínio", icon: "cpu" },
+  switch_mode: { label: "Modo", icon: "settings" },
+};
+const toolMeta = (kind: string | null) =>
+  (kind ? TOOL_META[kind] : undefined) ?? {
+    label: "Ferramenta",
+    icon: "app-window" as IconName,
+  };
+
+function ToolDetail({ text }: { text: string | null }) {
+  if (!text?.trim()) return null;
+  const trimmed = text.trim();
+  const first = trimmed.split("\n", 1)[0]?.trim() ?? "";
+  if (trimmed === first && trimmed.length <= 160) {
+    return <p className="task-note">{trimmed}</p>;
+  }
+  return (
+    <details className="task-detail">
+      <summary>{first || "Detalhes"}</summary>
+      <pre className="task-args">{trimmed}</pre>
+    </details>
+  );
+}
 
 function Memory({ item }: { item: Extract<ChatItem, { kind: "agent_message" }> }) {
   const { client } = useDaemon();
@@ -130,20 +164,27 @@ function TaskSurface() {
     writeStorage("boto.task-split", String(split));
   }, [split]);
   useEffect(() => {
+    if (data.deleted) navigate("home");
+  }, [data.deleted, navigate]);
+  useEffect(() => {
     if (session.error) toast(session.error);
   }, [session.error, toast]);
   const confirm = useConfirm();
   const [text, setText] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const scroll = useRef<HTMLDivElement>(null);
   const bottom = useRef(true);
   const input = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const fileIds = useRef(new WeakMap<File, string>());
   const body = useRef<HTMLDivElement>(null);
   const current = useRef(params.id);
   current.current = params.id;
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset task-local controls when routing to another task.
   useEffect(() => {
     setText("");
+    setFiles([]);
     setBusy(false);
     bottom.current = true;
   }, [params.id]);
@@ -151,6 +192,14 @@ function TaskSurface() {
     if (data.items.length && bottom.current)
       scroll.current?.scrollTo({ top: scroll.current.scrollHeight });
   }, [data.items]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: grow the composer to fit the text on every change.
+  useEffect(() => {
+    const el = input.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [text]);
   const act = async (operation: () => Promise<unknown>, success?: () => void, rethrow = false) => {
     const id = params.id;
     setBusy(true);
@@ -167,11 +216,17 @@ function TaskSurface() {
   };
   const send = () => {
     if (!task || !text.trim() || busy || task.outcome === "stopped") return;
+    const pending = files;
     void act(
-      () => client.request("tasks.instruct", { id: task.id, text: text.trim() }),
+      async () =>
+        client.request("tasks.instruct", {
+          id: task.id,
+          text: text.trim(),
+          ...(pending.length ? { attachments: await Promise.all(pending.map(attachment)) } : {}),
+        }),
       () => {
         setText("");
-        if (input.current) input.current.style.height = "auto";
+        setFiles([]);
         bottom.current = true;
       },
     );
@@ -203,6 +258,17 @@ function TaskSurface() {
       approval,
     })),
   ].sort((a, b) => a.createdAt - b.createdAt);
+  const firstRequestId = data.items.find((i) => i.kind === "user_message")?.id;
+  const toolModeLabel = task
+    ? { both: "Navegador e terminal", browser: "Só navegador", terminal: "Só terminal" }[
+        task.toolMode
+      ]
+    : null;
+  const toolModeIcon: Record<string, IconName> = {
+    both: "app-window",
+    browser: "globe",
+    terminal: "terminal",
+  };
   return (
     <section className="view task" id="view-task" aria-labelledby="task-title">
       <header className="task-head">
@@ -417,8 +483,14 @@ function TaskSurface() {
                           data-pending={a.status === "pending"}
                           key={a.id}
                         >
-                          <h3>
+                          <p className="task-label">
                             <Icon name={handover ? "mouse-pointer" : "shield-check"} />
+                            {handover ? "Controle do computador" : "Aprovação"} ·{" "}
+                            <time dateTime={new Date(a.createdAt).toISOString()}>
+                              {time(a.createdAt)}
+                            </time>
+                          </p>
+                          <h3>
                             {handover
                               ? `${data.agentName} precisa que você assuma o controle.`
                               : (described?.description ?? a.title)}
@@ -492,6 +564,13 @@ function TaskSurface() {
                             </div>
                           ) : (
                             <p className="task-note">
+                              <Icon
+                                name={
+                                  a.status === "approved" || a.status === "done"
+                                    ? "circle-check"
+                                    : "circle-slash"
+                                }
+                              />{" "}
                               {
                                 {
                                   approved: "Aprovada",
@@ -509,16 +588,52 @@ function TaskSurface() {
                     }
                     const i = row.item;
                     switch (i.kind) {
-                      case "user_message":
+                      case "user_message": {
+                        const actor =
+                          i.from?.name ??
+                          i.gateway?.userName ??
+                          i.team?.memberName ??
+                          i.routine?.name;
                         return (
-                          <div className="task-user" key={i.id}>
-                            {i.text}
-                          </div>
+                          <article className="task-user" key={i.id}>
+                            <p className="task-label">
+                              {actor ? `${actor} pediu` : "Você pediu"} ·{" "}
+                              <time dateTime={new Date(i.createdAt).toISOString()}>
+                                {time(i.createdAt)}
+                              </time>
+                            </p>
+                            <p className="task-user-text">{i.text}</p>
+                            {i.id === firstRequestId && task && toolModeLabel && (
+                              <div className="task-user-files">
+                                <span className="task-chip">
+                                  <Icon name={toolModeIcon[task.toolMode] ?? "app-window"} />
+                                  <span className="od-truncate">{toolModeLabel}</span>
+                                </span>
+                                <span className="task-chip">
+                                  <Icon name="shield-check" />
+                                  <span className="od-truncate">
+                                    {task.requireApproval ? "Pede aprovação" : "Sem aprovação"}
+                                  </span>
+                                </span>
+                              </div>
+                            )}
+                            {i.attachments && i.attachments.length > 0 && (
+                              <div className="task-user-files">
+                                {i.attachments.map((file) => (
+                                  <span className="task-chip" key={file.path}>
+                                    <Icon name="file-text" />
+                                    <span className="od-truncate">{file.name}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </article>
                         );
+                      }
                       case "agent_message":
                         return (
-                          <article className="task-message" key={i.id}>
-                            <p>{i.text}</p>
+                          <article className="task-message md" key={i.id}>
+                            <Markdown text={i.text} />
                             <Memory item={i} />
                           </article>
                         );
@@ -529,24 +644,87 @@ function TaskSurface() {
                             <p>{i.text}</p>
                           </details>
                         );
-                      case "tool_call":
+                      case "tool_call": {
+                        const meta = toolMeta(i.toolKind);
+                        const running = i.status === "pending" || i.status === "in_progress";
                         return (
-                          <div className="task-step" key={i.id}>
+                          <div className="task-step" data-status={i.status} key={i.id}>
+                            <time
+                              className="task-time"
+                              dateTime={new Date(i.createdAt).toISOString()}
+                            >
+                              {time(i.createdAt)}
+                            </time>
                             <Icon
                               name={
-                                i.status === "failed"
-                                  ? "circle-alert"
-                                  : i.status === "completed"
-                                    ? "circle-check"
-                                    : "loader"
+                                running
+                                  ? "loader"
+                                  : i.status === "failed"
+                                    ? "circle-alert"
+                                    : meta.icon
                               }
                             />
-                            <div>
-                              <p>{i.title}</p>
-                              {i.detail && <p className="task-note">{i.detail}</p>}
+                            <div className="task-step-body">
+                              <p className="task-step-title">
+                                <span className="task-kind">{meta.label}</span>
+                                {i.title ? ` · ${i.title}` : ""}
+                              </p>
+                              <ToolDetail text={i.detail} />
+                              <p className="task-step-status">
+                                {i.status === "completed"
+                                  ? `Concluída às ${time(i.updatedAt)}`
+                                  : i.status === "failed"
+                                    ? `Falhou às ${time(i.updatedAt)}`
+                                    : i.status === "pending"
+                                      ? "Na fila"
+                                      : "Em andamento…"}
+                              </p>
                             </div>
                           </div>
                         );
+                      }
+                      case "plan": {
+                        const done = i.entries.filter((e) => e.status === "completed").length;
+                        const total = i.entries.length;
+                        return (
+                          <details className="task-card task-plan" key={i.id} open>
+                            <summary>
+                              <span className="task-label">
+                                <Icon name="list-checks" />
+                                Plano · {done} de {total}{" "}
+                                {total === 1 ? "etapa concluída" : "etapas concluídas"}
+                              </span>
+                              <span
+                                className="progress"
+                                role="progressbar"
+                                aria-valuenow={done}
+                                aria-valuemin={0}
+                                aria-valuemax={total}
+                                aria-label="Etapas concluídas"
+                              >
+                                <span
+                                  style={{ "--p": total ? done / total : 0 } as CSSProperties}
+                                />
+                              </span>
+                              <Icon name="chevron-down" className="task-plan-chev" />
+                            </summary>
+                            <ul className="task-plan-list">
+                              {i.entries.map((entry) => (
+                                <li key={entry.content} data-status={entry.status}>
+                                  {entry.status === "completed" ? (
+                                    <Icon name="circle-check" />
+                                  ) : entry.status === "in_progress" ? (
+                                    <Icon name="loader" />
+                                  ) : (
+                                    <span className="task-dot" aria-hidden="true" />
+                                  )}
+                                  <span>{entry.content}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        );
+                      }
                       case "permission": {
                         const pending =
                           data.permissionsReady &&
@@ -562,10 +740,14 @@ function TaskSurface() {
                             data-pending={!i.resolution && pending}
                             key={i.id}
                           >
-                            <h3>
+                            <p className="task-label">
                               <Icon name="shield-check" />
-                              {i.title}
-                            </h3>
+                              Permissão de ferramenta ·{" "}
+                              <time dateTime={new Date(i.createdAt).toISOString()}>
+                                {time(i.createdAt)}
+                              </time>
+                            </p>
+                            <h3>{i.title}</h3>
                             <p>O Boto precisa da sua permissão para usar esta ferramenta.</p>
                             {step?.kind === "tool_call" && (
                               <p className="task-note">
@@ -575,6 +757,9 @@ function TaskSurface() {
                             )}
                             {i.resolution ? (
                               <p className="task-note">
+                                <Icon
+                                  name={i.resolution.optionId ? "circle-check" : "circle-slash"}
+                                />{" "}
                                 {
                                   decisions[
                                     i.options.find((o) => o.optionId === i.resolution?.optionId)
@@ -656,6 +841,25 @@ function TaskSurface() {
           </div>
           <div className="tl-compose">
             <div className="composer composer-sm">
+              <div className="composer-files" hidden={!files.length}>
+                {files.map((file) => (
+                  <span className="task-file od-row" key={fileIds.current.get(file)}>
+                    <Icon name="file-text" />
+                    <span className="od-truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-icon btn-sm"
+                      disabled={busy}
+                      aria-label={`Remover ${file.name}`}
+                      onClick={() =>
+                        setFiles((previous) => previous.filter((item) => item !== file))
+                      }
+                    >
+                      <Icon name="x" />
+                    </button>
+                  </span>
+                ))}
+              </div>
               <label className="sr-only" htmlFor="instruct-input">
                 Instrução para o Boto
               </label>
@@ -669,11 +873,7 @@ function TaskSurface() {
                 value={text}
                 disabled={!task || task.outcome === "stopped" || busy}
                 aria-describedby={task?.outcome === "stopped" ? "instruct-help" : undefined}
-                onChange={(event) => {
-                  setText(event.target.value);
-                  event.target.style.height = "auto";
-                  event.target.style.height = `${event.target.scrollHeight}px`;
-                }}
+                onChange={(event) => setText(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
@@ -681,18 +881,52 @@ function TaskSurface() {
                   }
                 }}
               />
-              <button
-                type="button"
-                className="btn btn-secondary btn-icon btn-pill"
-                id="instruct-send"
-                aria-label="Enviar instrução"
-                disabled={!task || !text.trim() || busy || task.outcome === "stopped"}
-                data-tip="Enviar instrução"
-                title="Enviar instrução"
-                onClick={send}
-              >
-                <Icon name="send" />
-              </button>
+              <div className="composer-bar">
+                <button
+                  type="button"
+                  className="btn btn-outline btn-icon btn-pill composer-attach"
+                  data-action="attach"
+                  data-tip="Anexar arquivo"
+                  aria-label="Anexar arquivo"
+                  title="Anexar arquivo"
+                  disabled={!task || task.outcome === "stopped" || busy}
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <Icon name="plus" />
+                </button>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  id="instruct-files"
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  multiple
+                  disabled={!task || task.outcome === "stopped" || busy}
+                  onChange={(event) => {
+                    const added = Array.from(event.target.files ?? []);
+                    for (const file of added) fileIds.current.set(file, crypto.randomUUID());
+                    const next = [...files, ...added];
+                    event.target.value = "";
+                    const invalid = attachmentError(next);
+                    if (invalid) toast(invalid);
+                    else setFiles(next);
+                    input.current?.focus();
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary btn-icon btn-pill composer-send"
+                  id="instruct-send"
+                  aria-label="Enviar instrução"
+                  disabled={!task || !text.trim() || busy || task.outcome === "stopped"}
+                  data-tip="Enviar instrução"
+                  title="Enviar instrução"
+                  onClick={send}
+                >
+                  <Icon name="arrow-up" />
+                </button>
+              </div>
             </div>
             {task?.outcome === "stopped" && (
               <p className="task-note" id="instruct-help">
@@ -735,11 +969,17 @@ function TaskSurface() {
         {/* biome-ignore lint/a11y/useSemanticElements: preserve the desktop pane prototype contract. */}
         <div className="pc" id="pc-pane" role="region" aria-label="Área de trabalho do bot">
           <div className="desk" id="task-desk" data-desk="task">
-            <LiveDesk
+            <Workspace
+              client={client}
               session={session}
               available={!!machine}
-              onRelease={() => void act(session.release)}
+              items={data.items}
+              agentId={task?.agentId}
+              status={status}
+              icon={icon}
+              tone={tone}
               onExpand={machine ? () => setVmOpen(true) : undefined}
+              onRelease={() => void act(session.release)}
             />
           </div>
         </div>

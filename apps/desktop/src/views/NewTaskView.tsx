@@ -6,9 +6,7 @@ import { useDaemon } from "../shell/daemon";
 import { useRouter } from "../shell/router";
 import { usePrivateMode } from "../shell/Topbar";
 import { Icon } from "../ui/icons";
-import { Switch } from "../ui/Switch";
 import { useToast } from "../ui/Toast";
-import { ToolPicker, WhenPicker } from "./new-task/ComposerOptions";
 import "./NewTaskView.css";
 
 export function NewTaskView() {
@@ -53,6 +51,14 @@ function NewTaskComposer() {
       alive.current = false;
     };
   }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: grow the composer to fit the text on every change.
+  useEffect(() => {
+    const el = input.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [text]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry explicitly reloads a failed request.
   useEffect(() => {
@@ -183,7 +189,7 @@ function NewTaskComposer() {
           <Icon name="eye-off" />
           <span>Tarefa privada: ela não fica no histórico nem nas entregas.</span>
         </p>
-        <div className="composer" id="composer" data-when={when} aria-busy={submitting}>
+        <div className="composer" id="composer" aria-busy={submitting}>
           <div className="composer-files" id="composer-files" hidden={!files.length}>
             {files.map((file) => (
               <span className="new-task-file od-row" key={fileIds.current.get(file)}>
@@ -208,7 +214,7 @@ function NewTaskComposer() {
             ref={input}
             className="composer-input"
             id="composer-input"
-            rows={2}
+            rows={1}
             placeholder="Descreva a tarefa e o resultado esperado"
             autoComplete="off"
             maxLength={100_000}
@@ -229,7 +235,7 @@ function NewTaskComposer() {
           <div className="composer-bar">
             <button
               type="button"
-              className="btn btn-ghost btn-icon composer-attach"
+              className="btn btn-outline btn-icon btn-pill composer-attach"
               data-action="attach"
               data-tip="Anexar arquivo"
               aria-label="Anexar arquivo"
@@ -237,7 +243,7 @@ function NewTaskComposer() {
               disabled={busy}
               onClick={() => fileInput.current?.click()}
             >
-              <Icon name="paperclip" />
+              <Icon name="plus" />
             </button>
             <input
               ref={fileInput}
@@ -262,43 +268,17 @@ function NewTaskComposer() {
                 input.current?.focus();
               }}
             />{" "}
-            <WhenPicker
-              when={when}
-              schedule={schedule}
-              disabled={busy}
-              onChange={(value) => {
-                setWhen(value);
-                setSchedule(null);
-                setError(null);
-              }}
-            />{" "}
-            <ToolPicker value={toolMode} disabled={busy} onChange={setToolMode} />
-            <div className="opt-approval od-row">
-              <Icon name="shield-check" />
-              <span id="approval-label">Pedir aprovação</span>
-              <Switch
-                id="approval-switch"
-                checked={requireApproval}
-                onCheckedChange={setRequireApproval}
-                disabled={busy}
-                aria-labelledby="approval-label"
-                aria-describedby="approval-help"
-              />
-              <span className="sr-only" id="approval-help">
-                O Boto para e pergunta antes de ações externas, como enviar e-mail, publicar ou
-                abrir um PR.
-              </span>
-            </div>
-            <span className="composer-spacer" />
             <button
               type="button"
-              className="btn btn-primary btn-pill composer-send"
+              className="btn btn-primary btn-icon btn-pill composer-send"
               id="send"
+              data-tip="Delegar"
+              aria-label={submitting ? "Delegando…" : "Delegar"}
+              title="Delegar"
               disabled={busy || !connected || invalid !== null}
               onClick={() => void submit()}
             >
-              <span id="send-label">{submitting ? "Delegando…" : "Delegar"}</span>
-              <Icon name={submitting ? "loader" : "arrow-right"} />
+              <Icon name={submitting ? "loader" : "arrow-up"} />
             </button>
           </div>
         </div>

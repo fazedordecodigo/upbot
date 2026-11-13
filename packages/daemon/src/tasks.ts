@@ -341,6 +341,7 @@ export class TaskService {
   private recompute(id: string): void {
     const r = this.row(id);
     if (!r || r.situation === "muted" || r.situation === "done") return;
+    if (this.chat.isCollabSession(id)) return;
     const turnId = this.runningTurnId(id);
     let next: TaskSituation;
     if (turnId) {
@@ -408,6 +409,7 @@ export class TaskService {
   private purgeIfPrivateDone(id: string): void {
     const r = this.row(id);
     if (!r || r.private !== 1 || r.situation !== "done" || this.runningTurnId(id)) return;
+    if (this.chat.isCollabSession(id)) return;
     this.chat.purgeTaskItems(id);
     this.queue.purgeTaskTexts(id);
     this.db.query("UPDATE tasks SET prompt = '' WHERE id = ?").run(id);
@@ -598,7 +600,11 @@ export class TaskService {
   }
 
   /** Queues an instruction for the task without interrupting it; reopens a finished task. */
-  instruct(id: string, text: string): { queueId: string; task: Task } {
+  instruct(
+    id: string,
+    text: string,
+    attachments?: MethodParsedParams<"tasks.instruct">["attachments"],
+  ): { queueId: string; task: Task } {
     const r = this.mustRow(id);
     if (r.situation === "done" && r.outcome === "stopped")
       throw new RpcError("bad_request", "this task was stopped and cannot continue");
@@ -606,10 +612,19 @@ export class TaskService {
     if (reopened) this.setState(id, "run", null, null);
     let queueId: string;
     try {
+      let saved: ChatAttachment[] = [];
+      if (attachments?.length) {
+        const agent = this.agents.get(r.agent_id);
+        if (!agent) throw new RpcError("not_found", "agent not found");
+        saved = saveAttachments(agent.workspacePath, attachments);
+      }
       ({ queueId } = this.runtimes().sendFrom(r.agent_id, text, {
         agentId: null,
         hops: 0,
         taskId: id,
+        ...(saved.length
+          ? { prompt: attachmentsBlock(saved) + text, meta: { attachments: saved } }
+          : {}),
       }));
     } catch (e) {
       if (reopened) this.setState(id, "done", r.outcome as TaskOutcome, r.ended_at);
@@ -673,6 +688,29 @@ export class TaskService {
       .query("UPDATE tasks SET title = ?, updated_at = ? WHERE id = ?")
       .run(title, Date.now(), id);
     return this.emit(id) ?? this.get(id);
+  }
+
+  /** Deletes the task and its rows for good; live work is stopped first. */
+  delete(id: string): void {
+    const r = this.mustRow(id);
+    if (r.situation !== "done") {
+      this.runtimes().removeTaskQueue(r.agent_id, id);
+      this.runtimes().cancelTask(r.agent_id, id);
+    }
+    // Broadcast ahead of the row delete so a private task still routes the
+    // event to the connections watching it (the row backs isPrivateTask).
+    this.broadcast("task.deleted", { id });
+    const turns = "SELECT id FROM turns WHERE task_id = ?";
+    this.chat.purgeTaskItems(id);
+    // Rows predating the task_id column still point at the task's turns;
+    // items, queue and turn_memory_usage hold REFERENCES turns(id).
+    this.db.query(`DELETE FROM items WHERE turn_id IN (${turns})`).run(id);
+    this.db.query(`DELETE FROM queue WHERE task_id = ? OR turn_id IN (${turns})`).run(id, id);
+    this.db.query(`DELETE FROM turn_memory_usage WHERE turn_id IN (${turns})`).run(id);
+    this.db.query("DELETE FROM task_deliveries WHERE task_id = ?").run(id);
+    this.db.query("DELETE FROM agent_sessions WHERE task_id = ?").run(id);
+    this.db.query("DELETE FROM turns WHERE task_id = ?").run(id);
+    this.db.query("DELETE FROM tasks WHERE id = ?").run(id);
   }
 
   /** Command palette search over non-private tasks (title, prompt, agent) and routines. */

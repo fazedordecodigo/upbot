@@ -15,6 +15,7 @@ import { type ApprovalService, GateRejection } from "./approvals";
 import type { AppsService } from "./apps";
 import type { BrowserService } from "./browser";
 import type { ChannelService } from "./channels";
+import type { CollaborationService } from "./collaborations";
 import type { ComputerUse } from "./computer";
 import type { Connectors } from "./connectors";
 import { avatarFor } from "./draft";
@@ -78,6 +79,111 @@ export const BRIDGE_TOOLS = [
   {
     name: "list_channels",
     description: "List the Boto channels you belong to, with owner, members and status.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "start_collaboration",
+    description:
+      "Open a collaboration table: you lead it, the listed bots join you to discuss the problem peer-to-peer and solve it. Use when the user asks for a multi-bot discussion. You receive the problem first; conclude with conclude_collaboration once solved.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        problem: { type: "string", description: "The problem the table should solve" },
+        title: { type: "string", description: "Optional short table title" },
+        members: {
+          type: "array",
+          items: { type: "string" },
+          description: "Agent names or ids to invite (2-8 bots at the table including you)",
+        },
+      },
+      required: ["problem", "members"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "table_message",
+    description:
+      'Say something to a member of your collaboration table, or to the user (to: "user") to ask them something — their answer comes back to you. Every message is recorded in the table transcript.',
+    inputSchema: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: 'Member name or id, or "user"' },
+        text: { type: "string", description: "Message text" },
+        table: {
+          type: "string",
+          description: "Table id or title, needed only when you sit at more than one table",
+        },
+      },
+      required: ["to", "text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "table_invite",
+    description:
+      "Invite another bot to your collaboration table (leader only). They receive the transcript so far.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent: { type: "string", description: "Agent name or id" },
+        table: { type: "string", description: "Table id or title (only if ambiguous)" },
+      },
+      required: ["agent"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "table_remove",
+    description: "Remove a member from your collaboration table (leader only).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent: { type: "string", description: "Agent name or id" },
+        table: { type: "string", description: "Table id or title (only if ambiguous)" },
+      },
+      required: ["agent"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "table_phase",
+    description:
+      "Advance your collaboration table's phase (leader only): entender → investigar → corrigir → verificar → avisar.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        phase: {
+          type: "string",
+          enum: ["entender", "investigar", "corrigir", "verificar", "avisar"],
+        },
+        summary: {
+          type: "string",
+          description:
+            "Why the table should move — shown to the user when the table asks before advancing",
+        },
+        table: { type: "string", description: "Table id or title (only if ambiguous)" },
+      },
+      required: ["phase"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "conclude_collaboration",
+    description:
+      "Conclude your collaboration table with a summary (leader only). The summary goes back to the task or chat that started the table.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "What the table concluded" },
+        table: { type: "string", description: "Table id or title (only if ambiguous)" },
+      },
+      required: ["summary"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "list_collaborations",
+    description: "List the collaboration tables you sit at (title, phase, leader, members).",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -503,6 +609,7 @@ export class Bridge {
   skills: SkillLibrary | null = null;
   broadcast: Broadcast | null = null;
   subagents: SubagentService | null = null;
+  collaborations: CollaborationService | null = null;
   /** All running tasks: per-agent bridge tokens cannot identify the calling instance. */
   tasksFor: ((agentId: string) => TaskRuntimeInfo[]) | null = null;
 
@@ -613,6 +720,11 @@ export class Bridge {
     const a = this.agents.get(agentId);
     if (!a) throw new Error("your agent no longer exists");
     return a;
+  }
+
+  private collaborationsOrThrow(): CollaborationService {
+    if (!this.collaborations) throw new Error("collaborations are unavailable");
+    return this.collaborations;
   }
 
   private resolveTarget(selfId: string, to: unknown): Agent {
@@ -937,6 +1049,86 @@ export class Bridge {
           ),
         };
       }
+      case "start_collaboration": {
+        const collabs = this.collaborationsOrThrow();
+        const problem = typeof args.problem === "string" ? args.problem.trim() : "";
+        if (!problem) throw new Error("`problem` is required");
+        const names = Array.isArray(args.members) ? args.members : [];
+        const memberIds: string[] = [];
+        for (const key of names) {
+          const target = this.resolveTarget(me.id, key);
+          if (!memberIds.includes(target.id)) memberIds.push(target.id);
+        }
+        const collab = collabs.create({
+          problem,
+          title: typeof args.title === "string" ? args.title : undefined,
+          memberIds,
+          leaderId: me.id,
+          originTaskId: this.runtimes().currentTurn(me.id)?.taskId ?? null,
+          originAgentId: me.id,
+        });
+        return {
+          text: `table "${collab.title}" opened (${collab.id}); the problem is on its way to your table session`,
+        };
+      }
+      case "table_message": {
+        const collabs = this.collaborationsOrThrow();
+        const text = typeof args.text === "string" ? args.text : "";
+        if (!text.trim()) throw new Error("`text` is required");
+        return {
+          text: collabs.tableMessage(
+            me.id,
+            typeof args.table === "string" ? args.table : undefined,
+            String(args.to ?? ""),
+            text,
+          ),
+        };
+      }
+      case "table_invite": {
+        const collabs = this.collaborationsOrThrow();
+        return {
+          text: collabs.invite(
+            me.id,
+            typeof args.table === "string" ? args.table : undefined,
+            String(args.agent ?? ""),
+          ),
+        };
+      }
+      case "table_remove": {
+        const collabs = this.collaborationsOrThrow();
+        return {
+          text: collabs.remove(
+            me.id,
+            typeof args.table === "string" ? args.table : undefined,
+            String(args.agent ?? ""),
+          ),
+        };
+      }
+      case "table_phase": {
+        const collabs = this.collaborationsOrThrow();
+        return {
+          text: collabs.advancePhase(
+            me.id,
+            typeof args.table === "string" ? args.table : undefined,
+            String(args.phase ?? ""),
+            typeof args.summary === "string" ? args.summary : undefined,
+          ),
+        };
+      }
+      case "conclude_collaboration": {
+        const collabs = this.collaborationsOrThrow();
+        const summary = typeof args.summary === "string" ? args.summary.trim() : "";
+        if (!summary) throw new Error("`summary` is required");
+        const r = collabs.resolveForAgent(
+          me.id,
+          typeof args.table === "string" ? args.table : undefined,
+        );
+        return { text: `table "${collabs.conclude(r.id, summary, me.id).title}" concluded` };
+      }
+      case "list_collaborations":
+        return {
+          text: JSON.stringify(this.collaborations?.listForAgent(me.id) ?? [], null, 2),
+        };
       default:
         throw new Error(`unknown tool ${name}`);
     }

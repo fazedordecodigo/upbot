@@ -1,11 +1,12 @@
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
-import type { ConfigOption, ProviderId } from "@boto/protocol";
+import type { ConfigOption, PlanEntry, ProviderId } from "@boto/protocol";
 import { envPositiveNumber } from "../env/vars";
 import { VERSION } from "../version";
 import {
   authMessage,
   classifyStartupError,
+  isVmCredentialRejection,
   type ProviderProcess,
   providerCommand,
   redactCredential,
@@ -24,6 +25,7 @@ import {
 } from "./types";
 
 const DEFAULT_OPENCODE_FIRST_ACTIVITY_MS = 30000;
+const DEFAULT_DEVIN_BROWSER_AUTH_MS = 300000;
 
 async function boundedRequest<T>(
   provider: ProviderId,
@@ -51,6 +53,10 @@ function opencodeFirstActivityTimeoutMs(): number {
   return envPositiveNumber("BOTO_ACP_FIRST_ACTIVITY_MS", DEFAULT_OPENCODE_FIRST_ACTIVITY_MS);
 }
 
+function devinBrowserAuthTimeoutMs(): number {
+  return envPositiveNumber("BOTO_ACP_BROWSER_AUTH_MS", DEFAULT_DEVIN_BROWSER_AUTH_MS);
+}
+
 type AcpActivityMonitor = {
   sessionId: string | null;
   promptHandler: (() => void) | null;
@@ -64,6 +70,7 @@ const PROMPT_PROGRESS_UPDATES = new Set([
   "tool_call",
   "tool_call_update",
   "plan",
+  "plan_update",
 ]);
 
 function isPromptProgressUpdate(params: unknown): boolean {
@@ -161,6 +168,16 @@ export function mapAcpAuthError(
   opencodeNoProgressPrompt = false,
 ): ProviderError | null {
   const detail = errorDetail(error);
+  if (provider === "devin" && credential && isVmCredentialRejection(detail)) {
+    const safeDetail = redactCredential(detail, credential)
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 180);
+    return new ProviderError(
+      "auth_required",
+      `devin: the saved API key was rejected${safeDetail ? ` (${safeDetail})` : ""}. Update it in Settings → Providers.`,
+    );
+  }
   const auth = startupAuthError(provider, detail, credential);
   if (auth) return auth;
   if (
@@ -251,6 +268,8 @@ type SessionUpdatePayload = {
   status?: string;
   content2?: never;
   locations?: { path?: string }[];
+  entries?: { content?: unknown; status?: unknown; priority?: unknown }[];
+  plan?: { planId?: unknown; type?: unknown; entries?: unknown; content?: unknown };
   currentModeId?: string;
   configOptions?: unknown;
 };
@@ -306,6 +325,32 @@ function mapUpdate(params: unknown): NormalizedUpdate {
       const d = toolDetail(u);
       if (d !== null) out.detail = d;
       return out;
+    }
+    case "plan":
+    case "plan_update": {
+      const raw =
+        u.sessionUpdate === "plan"
+          ? u.entries
+          : u.plan?.type === "items" && Array.isArray(u.plan?.entries)
+            ? (u.plan.entries as unknown[])
+            : [];
+      const entries: PlanEntry[] = [];
+      for (const e of raw as { content?: unknown; status?: unknown }[]) {
+        const content = typeof e?.content === "string" ? e.content.trim() : "";
+        if (!content) continue;
+        entries.push({
+          content,
+          status:
+            e?.status === "completed"
+              ? "completed"
+              : e?.status === "in_progress"
+                ? "in_progress"
+                : "pending",
+        });
+      }
+      return entries.length
+        ? { type: "plan", entries }
+        : { type: "ignored", kind: u.sessionUpdate };
     }
     case "config_option_update":
       return { type: "config_update", configOptions: normalizeConfigOptions(u) };
@@ -478,7 +523,13 @@ export class AcpDriver implements ProviderDriver {
       env: Object.entries(m.env).map(([name, value]) => ({ name, value })),
     }));
     const { bin, args } = providerCommand(this.provider, opts.remote);
-    const credential = Object.values(opts.remote?.credentials ?? {})[0] ?? null;
+    // Devin ignores its own credential store in ACP mode: the saved API key is
+    // delivered in-band via `authenticate` for local and remote sessions alike.
+    const devinApiKey =
+      this.provider === "devin"
+        ? (opts.remote?.credentials.WINDSURF_API_KEY ?? opts.apiKey ?? null)
+        : null;
+    const credential = Object.values(opts.remote?.credentials ?? {})[0] ?? devinApiKey;
     let proc: ProviderProcess;
     try {
       proc = spawnProvider(bin, args, cwd, opts.remote?.credentials, opts.remote);
@@ -639,8 +690,23 @@ export class AcpDriver implements ProviderDriver {
     };
 
     let initRes: Awaited<ReturnType<typeof init>>;
+    // Prefer the advertised browser method (PKCE); any advertised method also
+    // accepts a `_meta.api_key`. Empty means the agent never asks for auth.
+    let devinAuthMethod: string | null = null;
+    // Local Devin sessions retry once after the PKCE browser sign-in: `devin acp`
+    // rejects session calls with -32000 until the host calls `authenticate`,
+    // which opens the browser and blocks until the user approves. Cleared once
+    // an API-key authenticate succeeds.
+    let devinBrowserAuth = !opts.remote && this.provider === "devin";
     try {
       initRes = await init();
+      const authMethodIds = (initRes.authMethods ?? [])
+        .map((m) => (m as { id?: unknown } | null)?.id)
+        .filter((id): id is string => typeof id === "string");
+      devinAuthMethod =
+        this.provider !== "devin"
+          ? null
+          : (authMethodIds.find((id) => id === "devin-browser") ?? authMethodIds[0] ?? null);
       if (this.provider === "grok" && opts.remote?.credentials.XAI_API_KEY) {
         await startupRequest(
           boundedRequest(
@@ -652,6 +718,18 @@ export class AcpDriver implements ProviderDriver {
             } as never),
           ),
         );
+      } else if (devinApiKey && devinAuthMethod) {
+        await startupRequest(
+          boundedRequest(
+            this.provider,
+            "authenticate",
+            conn.agent.request("authenticate", {
+              methodId: devinAuthMethod,
+              _meta: { api_key: devinApiKey },
+            } as never),
+          ),
+        );
+        devinBrowserAuth = false;
       }
     } catch (e) {
       await abortStartup();
@@ -661,6 +739,33 @@ export class AcpDriver implements ProviderDriver {
       throw classifyStartupError(this.provider, errorDetail(e), tail(), credential);
     }
 
+    const sessionCall = async <T>(method: string, params: Record<string, unknown>): Promise<T> => {
+      for (;;) {
+        try {
+          return (await startupRequest(
+            boundedRequest(
+              this.provider,
+              method,
+              conn.agent.request(method as never, params as never),
+            ),
+          )) as T;
+        } catch (e) {
+          if (!devinBrowserAuth || (e as { code?: number })?.code !== -32000) throw e;
+          devinBrowserAuth = false;
+          await startupRequest(
+            boundedRequest(
+              this.provider,
+              "authenticate",
+              conn.agent.request("authenticate", {
+                methodId: devinAuthMethod ?? "devin-browser",
+              } as never),
+              devinBrowserAuthTimeoutMs(),
+            ),
+          );
+        }
+      }
+    };
+
     let sessionId: string;
     let resumed = false;
     let rawConfig: ConfigOption[] = [];
@@ -668,17 +773,11 @@ export class AcpDriver implements ProviderDriver {
       if (resumeSessionId && initRes.agentCapabilities?.loadSession === true) {
         try {
           loading = true;
-          const lr = (await startupRequest(
-            boundedRequest(
-              this.provider,
-              "session/load",
-              conn.agent.request("session/load", {
-                sessionId: resumeSessionId,
-                cwd,
-                mcpServers,
-              } as never),
-            ),
-          )) as { configOptions?: unknown };
+          const lr = await sessionCall<{ configOptions?: unknown }>("session/load", {
+            sessionId: resumeSessionId,
+            cwd,
+            mcpServers,
+          });
           rawConfig = normalizeConfigOptions(lr ?? {});
           sessionId = resumeSessionId;
           resumed = true;
@@ -692,16 +791,10 @@ export class AcpDriver implements ProviderDriver {
           loading = false;
         }
       } else {
-        const res = (await startupRequest(
-          boundedRequest(
-            this.provider,
-            "session/new",
-            conn.agent.request("session/new", {
-              cwd,
-              mcpServers,
-            } as never),
-          ),
-        )) as { sessionId: string; configOptions?: unknown };
+        const res = await sessionCall<{ sessionId: string; configOptions?: unknown }>(
+          "session/new",
+          { cwd, mcpServers },
+        );
         sessionId = res.sessionId;
         rawConfig = normalizeConfigOptions(res);
       }

@@ -1,0 +1,227 @@
+# The bots' computer: a complete local Linux VM on this machine (Lima; vz on macOS,
+# qemu on Linux, wsl2 on Windows — the daemon rewrites vmType/mountType/mounts/images
+# for the host OS when it materializes this file under the data dir, then runs
+# `limactl create --name <instance>` with it; override the instance name with
+# BOTO_LIMA_INSTANCE (default "boto-computer").
+#
+# Manual use from the repo root:
+#   limactl create --name boto-computer vm/boto-computer.yaml && limactl start boto-computer
+#
+# Inside: Debian, Xvfb :0 + Openbox (live desktop via `boto-host guest-desktop`),
+# Chromium (DevTools on 127.0.0.1:9222, forwarded to the host as :47222), noVNC on
+# 127.0.0.1:47080 for direct access, the seven provider CLIs, Bun, Node 22.
+# The bot's files shared with the host live at /workspace (~/Boto/computer/workspace).
+minimumLimaVersion: 2.0.0
+vmType: vz
+cpus: 2
+memory: 4GiB
+disk: 20GiB
+mountType: virtiofs
+mounts:
+  - location: "~/Boto/computer/workspace"
+    mountPoint: /workspace
+    writable: true
+  - location: "~/Boto/computer/shared"
+    mountPoint: /mnt/boto
+    writable: false
+portForwards:
+  - guestPort: 6080 # noVNC (direct live screen in a browser)
+    hostIP: 127.0.0.1
+    hostPort: 47080
+  - guestPort: 9222 # Chromium DevTools (Playwright/CDP)
+    guestIP: 127.0.0.1
+    hostIP: 127.0.0.1
+    hostPort: 47222
+  - guestPortRange: [1, 65535]
+    proto: any
+    ignore: true
+containerd:
+  system: false
+  user: false
+provision:
+  # Runs before Lima's own dependency install. WSL-imported rootfs images
+  # (vmType: wsl2 on Windows — Debian_WSL ships no sshd) need openssh-server or
+  # Lima never gets its SSH channel into the guest; no-op on cloud images.
+  - mode: dependency
+    script: |
+      if ! command -v sshd >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
+        apt-get install -y --no-install-recommends openssh-server
+      fi
+      # Debian's postinst starts sshd when systemd is up; cover the rest.
+      systemctl enable --now ssh 2>/dev/null || service ssh start 2>/dev/null || true
+  - mode: system
+    script: |
+      set -eux
+      export DEBIAN_FRONTEND=noninteractive
+      u="{{.User}}"; h="$(getent passwd "$u" | cut -d: -f6)"
+      if [ ! -f /var/lib/boto-computer-provisioned ]; then
+        apt-get update
+        apt-get install -y --no-install-recommends \
+          xvfb x11vnc openbox xdotool xclip x11-utils xauth dbus-x11 scrot chromium \
+          fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji fonts-dejavu-core \
+          novnc websockify ca-certificates xterm locales plank pcmanfm xfce4-terminal xcompmgr \
+          git curl wget unzip jq python3 python3-pip python3-venv ffmpeg imagemagick build-essential iptables
+        sed -i 's/^# *pt_BR.UTF-8/pt_BR.UTF-8/; s/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
+        # Node.js 22 — checksum-verified, same scheme as packages/host/rootfs/build-rootfs.sh.
+        mkdir -p /tmp/node-dist
+        case "$(dpkg --print-architecture)" in arm64) narch=arm64 ;; amd64) narch=x64 ;; *) exit 1 ;; esac
+        curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt -o /tmp/node-dist/SHASUMS256.txt
+        tarball="$(awk -v a="linux-$narch.tar.xz" '$2 ~ ("^node-v[0-9.]+-" a "$") {print $2; exit}' /tmp/node-dist/SHASUMS256.txt)"
+        [ -n "$tarball" ]
+        grep " $tarball\$" /tmp/node-dist/SHASUMS256.txt > /tmp/node-dist/node.sha256
+        curl -fsSL "https://nodejs.org/dist/latest-v22.x/$tarball" -o "/tmp/node-dist/$tarball"
+        (cd /tmp/node-dist && sha256sum -c node.sha256)
+        tar -xJf "/tmp/node-dist/$tarball" -C /usr/local --strip-components=1
+        rm -rf /tmp/node-dist
+        # Bun — checksum-verified against the release SHASUMS256.
+        mkdir -p /tmp/bun-dist
+        bzip="bun-linux-aarch64.zip"; [ "$narch" = "x64" ] && bzip="bun-linux-x64-baseline.zip"
+        curl -fsSL https://github.com/oven-sh/bun/releases/latest/download/SHASUMS256.txt -o /tmp/bun-dist/SHASUMS256.txt
+        grep " $bzip\$" /tmp/bun-dist/SHASUMS256.txt > /tmp/bun-dist/bun.sha256
+        curl -fsSL "https://github.com/oven-sh/bun/releases/latest/download/$bzip" -o "/tmp/bun-dist/$bzip"
+        (cd /tmp/bun-dist && sha256sum -c bun.sha256)
+        unzip -o "/tmp/bun-dist/$bzip" -d /tmp/bun-dist
+        install -m 0755 "/tmp/bun-dist/${bzip%.zip}/bun" /usr/local/bin/bun
+        ln -sf /usr/local/bin/bun /usr/local/bin/bunx
+        rm -rf /tmp/bun-dist
+        touch /var/lib/boto-computer-provisioned
+      fi
+      # Provider CLIs spawned by name in process placement — the same set the full guest
+      # image carries (see the `case "$p"` block in packages/host/rootfs/build-rootfs.sh).
+      # These run on every boot, each guarded by command -v: a guest provisioned before a
+      # CLI joined the recipe picks it up on the next start instead of needing recreation.
+      # Every install is failure-tolerant — a broken download must not skip the desktop
+      # session setup below; a genuinely missing CLI is reported at bot launch time.
+      command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code || true
+      command -v codex >/dev/null 2>&1 || npm install -g @openai/codex || true
+      command -v gemini >/dev/null 2>&1 || npm install -g @google/gemini-cli || true
+      command -v opencode >/dev/null 2>&1 || npm install -g opencode-ai || true
+      command -v agent >/dev/null 2>&1 || {
+        mkdir -p /opt/cursor-agent-home
+        HOME=/opt/cursor-agent-home bash -c 'curl -fsS https://cursor.com/install | bash'
+        ln -sf /opt/cursor-agent-home/.local/bin/agent /usr/local/bin/agent
+      } || true
+      command -v devin >/dev/null 2>&1 || {
+        mkdir -p /opt/devin-home
+        curl -fsSL https://static.devin.ai/cli/3000.12.43/setup.sh -o /tmp/devin-setup.sh &&
+          HOME=/opt/devin-home bash /tmp/devin-setup.sh &&
+          ln -sf "$(readlink -f /opt/devin-home/.local/bin/devin)" /usr/local/bin/devin
+      } || true
+      command -v grok >/dev/null 2>&1 || {
+        mkdir -p /opt/grok-home
+        [ -f /usr/local/bin/agent ] && mv /usr/local/bin/agent /tmp/boto-saved-agent
+        curl -fsSL https://x.ai/cli/install.sh -o /tmp/grok-install.sh &&
+          HOME=/opt/grok-home GROK_BIN_DIR=/opt/grok-home/.grok/bin bash /tmp/grok-install.sh 1.0.77
+        rm -f /usr/local/bin/agent
+        [ -f /tmp/boto-saved-agent ] && mv /tmp/boto-saved-agent /usr/local/bin/agent
+        ln -sf "$(readlink -f /opt/grok-home/.grok/bin/grok)" /usr/local/bin/grok 2>/dev/null
+      } || true
+      # /run is tmpfs and this script re-runs on every boot: recreate the scratch dir the
+      # guest desktop agent and CODEX_HOME write to (boto-init does the same on Firecracker).
+      install -d -o "$u" -g "$u" -m 0755 /run/boto
+      install -d -o "$u" -g "$u" "$h/.config/openbox" "$h/.vnc" "$h/.boto-chrome"
+      cat > "$h/.config/openbox/autostart" <<'AUTOSTART'
+      # Desktop session: compositor, backdrop color, dock, then Chromium maximized with DevTools
+      # on 127.0.0.1:9222 (forwarded to the host for Playwright/CDP).
+      xcompmgr -n &
+      xsetroot -solid "#101418" &
+      (sleep 1; plank) &
+      (sleep 2; chromium --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
+        --user-data-dir="$HOME/.boto-chrome" --no-first-run --no-default-browser-check \
+        --start-maximized) &
+      AUTOSTART
+      chown -R "$u:$u" "$h/.config" "$h/.boto-chrome"
+      cat > /etc/systemd/system/boto-xvfb.service <<UNIT
+      [Unit]
+      Description=Boto screen
+      [Service]
+      User=$u
+      ExecStart=/usr/bin/Xvfb :0 -screen 0 1280x800x24 -nolisten tcp
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+      cat > /etc/systemd/system/boto-desktop.service <<UNIT
+      [Unit]
+      Description=Boto desktop session
+      After=boto-xvfb.service
+      Requires=boto-xvfb.service
+      [Service]
+      User=$u
+      Environment=DISPLAY=:0
+      Environment=LANG=pt_BR.UTF-8
+      ExecStartPre=/bin/sleep 1
+      ExecStart=/usr/bin/dbus-launch --exit-with-session /usr/bin/openbox-session
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+      cat > /etc/systemd/system/boto-vnc.service <<UNIT
+      [Unit]
+      Description=Boto screen sharing
+      After=boto-xvfb.service
+      Requires=boto-xvfb.service
+      [Service]
+      User=$u
+      ExecStartPre=/bin/sh -c 'x11vnc -storepasswd "\$(cat /mnt/boto/vnc-password)" $h/.vnc/passwd'
+      ExecStart=/usr/bin/x11vnc -display :0 -rfbauth $h/.vnc/passwd -localhost -forever -shared -rfbport 5901 -noxdamage -quiet
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+      cat > /etc/systemd/system/boto-novnc.service <<UNIT
+      [Unit]
+      Description=Boto screen viewer
+      After=boto-vnc.service
+      [Service]
+      User=$u
+      ExecStart=/usr/bin/websockify --web /usr/share/novnc 0.0.0.0:6080 127.0.0.1:5901
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
+      UNIT
+      # systemd units cover real VMs; a rootfs booted without systemd (some WSL
+      # imports) gets the same daemons spawned directly instead.
+      if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+        systemctl enable --now boto-xvfb boto-desktop boto-vnc boto-novnc
+      else
+        x11vnc -storepasswd "$(cat /mnt/boto/vnc-password)" "$h/.vnc/passwd"
+        su - "$u" -c 'nohup Xvfb :0 -screen 0 1280x800x24 -nolisten tcp >/tmp/boto-xvfb.log 2>&1 &'
+        sleep 1
+        su - "$u" -c 'DISPLAY=:0 LANG=pt_BR.UTF-8 nohup dbus-launch --exit-with-session openbox-session >/tmp/boto-desktop.log 2>&1 &'
+        su - "$u" -c 'nohup x11vnc -display :0 -rfbauth "$HOME/.vnc/passwd" -localhost -forever -shared -rfbport 5901 -noxdamage -quiet >/tmp/boto-vnc.log 2>&1 &'
+        su - "$u" -c 'nohup websockify --web /usr/share/novnc 0.0.0.0:6080 127.0.0.1:5901 >/tmp/boto-novnc.log 2>&1 &'
+      fi
+  # The VM can't reach this host: host.lima.internal is the host's own 127.0.0.1 (its admin panel,
+  # voice server...). Replies, DNS and DHCP pass; the rest is refused. Re-applied every boot
+  # because the rules don't survive one. Under vmType wsl2 host.lima.internal may not
+  # resolve; there the host is simply the guest's default gateway, so both are blocked.
+  - mode: system
+    script: |
+      set -eu
+      command -v iptables-restore >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends iptables
+      h=$(getent ahostsv4 host.lima.internal | awk 'NR==1{print $1}')
+      gw=$(ip -4 route show default | awk '{print $3; exit}')
+      iptables-restore --noflush <<'RULES'
+      *filter
+      :BOTO-HOST - [0:0]
+      -F BOTO-HOST
+      -A BOTO-HOST -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+      -A BOTO-HOST -p udp --dport 53 -j RETURN
+      -A BOTO-HOST -p tcp --dport 53 -j RETURN
+      -A BOTO-HOST -p udp --dport 67 -j RETURN
+      -A BOTO-HOST -j REJECT
+      COMMIT
+      RULES
+      for b in "$h" "$gw" 192.168.5.2; do
+        [ -n "$b" ] || continue
+        iptables -C OUTPUT -d "$b" -j BOTO-HOST 2>/dev/null || iptables -I OUTPUT 1 -d "$b" -j BOTO-HOST
+      done
+images:
+  - location: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2
+    arch: aarch64
+  - location: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2
+    arch: x86_64

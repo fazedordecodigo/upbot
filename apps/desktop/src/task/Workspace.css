@@ -1,0 +1,36 @@
+.ws { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--boto-color-rio-negro); color: var(--boto-color-nevoa); }
+.ws-head { display: flex; align-items: center; gap: var(--boto-space-3); padding: var(--boto-space-2) var(--boto-space-3); background: var(--boto-color-igapo); border-bottom: var(--boto-size-focus-offset) solid var(--boto-color-rio-negro); }
+.ws-status { flex-shrink: 0; font-size: var(--boto-font-size-xs); }
+.ws-machine { display: inline-flex; align-items: center; gap: var(--boto-space-2); margin-inline-start: auto; min-width: 0; font-family: var(--boto-font-mono); font-size: var(--boto-font-size-xs); }
+.ws-machine-status { flex-shrink: 0; font-family: var(--boto-font-sans); }
+.ws-bar { display: flex; align-items: center; gap: var(--boto-space-2); padding: var(--boto-space-1) var(--boto-space-2); background: var(--boto-color-igapo); border-bottom: var(--boto-size-focus-offset) solid var(--boto-color-rio-negro); }
+.ws-tabs { display: flex; align-items: center; gap: var(--boto-space-1); }
+.ws-bar > .btn { margin-inline-start: auto; color: var(--boto-color-nevoa); }
+.ws-tab { display: inline-flex; align-items: center; justify-content: center; width: var(--boto-size-control-sm); height: var(--boto-size-control-sm); border: 0; border-radius: var(--boto-radius-md); background: transparent; color: var(--boto-color-nevoa); cursor: pointer; }
+.ws-tab:hover { background: color-mix(in srgb, var(--boto-color-nevoa) 8%, transparent); }
+.ws-tab[aria-selected="true"] { background: color-mix(in srgb, var(--boto-color-nevoa) 14%, transparent); color: var(--boto-color-primary); }
+.ws-tab:focus-visible { outline: var(--boto-size-focus-ring) solid var(--boto-color-ring); outline-offset: calc(var(--boto-size-focus-ring) * -1); }
+.ws-view { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ws-view > .live-desk { flex: 1; min-height: 0; }
+.ws-pane { flex: 1; min-height: 0; overflow: auto; padding: var(--boto-space-4); margin: 0; display: flex; flex-direction: column; gap: var(--boto-space-3); list-style: none; }
+.ws-empty { margin: auto; padding: var(--boto-space-6); max-width: 40ch; text-align: center; font-size: var(--boto-font-size-sm); }
+.ws-dim, .ws-empty { color: var(--boto-color-muted-foreground); }
+.ws-term { font-family: var(--boto-font-mono); font-size: var(--boto-font-size-xs); }
+.ws-term-block { display: grid; gap: var(--boto-space-1); }
+.ws-term-cmd { margin: 0; color: var(--boto-color-success); overflow-wrap: anywhere; }
+.ws-term-prompt { font-weight: 700; }
+.ws-term-block[data-status="failed"] .ws-term-cmd { color: var(--boto-color-destructive); }
+.ws-term-out { margin: 0; max-height: 16em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; }
+.ws-term-block[data-status="failed"] .ws-term-out { color: var(--boto-color-destructive); }
+.ws-file, .ws-browse-row { display: flex; align-items: flex-start; gap: var(--boto-space-2); }
+.ws-file > .od-icon, .ws-browse-row > .od-icon { flex-shrink: 0; margin-top: 0.15em; }
+.ws-file-body, .ws-browse-body { display: grid; gap: var(--boto-space-1); min-width: 0; flex: 1; }
+.ws-file-name, .ws-browse-title { margin: 0; font-size: var(--boto-font-size-sm); overflow-wrap: anywhere; }
+.ws-file-kind { font-weight: 600; }
+.ws-browse-url { margin: 0; font-family: var(--boto-font-mono); font-size: var(--boto-font-size-xs); color: var(--boto-color-muted-foreground); overflow-wrap: anywhere; }
+.ws-file-detail { margin: 0; max-height: 10em; overflow: auto; font-family: var(--boto-font-mono); font-size: var(--boto-font-size-xs); color: var(--boto-color-muted-foreground); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ws-step-status { flex-shrink: 0; margin-top: 0.1em; }
+.ws-step-status[data-status="pending"] .od-icon, .ws-step-status[data-status="in_progress"] .od-icon { color: var(--boto-color-primary); animation: task-spin 1.4s linear infinite; }
+.ws-step-status[data-status="completed"] .od-icon { color: var(--boto-color-success); }
+.ws-step-status[data-status="failed"] .od-icon { color: var(--boto-color-destructive); }
+.ws-section { margin: var(--boto-space-2) 0 0; font-size: var(--boto-font-size-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--boto-color-muted-foreground); }

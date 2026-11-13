@@ -3,7 +3,8 @@
 Settings → Hosts adds a VPS (`user@host`, port, optional identity file). Boto uses your
 system `ssh` with `BatchMode=yes` (keys from `~/.ssh` or your ssh-agent; no keys or passwords
 are stored), uploads a helper to `~/.boto/bin/` on the host and runs a preflight. Then pick,
-per agent, **This Mac**, **Process** (provider CLI on the VPS) or **Firecracker microVM**.
+per agent, **This Mac**, **Process** (provider CLI on the VPS), **Firecracker microVM** or
+**VM local** (a complete Lima VM on this Mac — see [docs/local-vm.md](local-vm.md)).
 
 Host requirements: Linux, [Bun](https://bun.sh), `curl`, Docker, `sudo`, and `e2fsprogs`.
 For the real integration tests, also install `openssh-server`, `socat`, and `unzip`. On
@@ -39,21 +40,19 @@ fresh root disk and an agent-persistent `workspace.ext4`, mounted at `/persist` 
 `/workspace` and `/root` backed by it. The workspace image is sparse and defaults to 8192 MiB;
 set `BOTO_VM_WORKSPACE_MIB` in the remote host environment to change its size. When
 available, `setpriv --pdeathsig KILL` ensures Firecracker dies if its host helper is killed.
-The guest syncs storage when a provider exits. On the Linux x86_64/KVM test host, boot to the
+The guest syncs storage when a provider exits. On the Linux x86*64/KVM test host, boot to the
 first guest output measured 1.7 seconds.
-Provider subprocesses drop inherited `BOTO_*` variables (explicit RunSpec env is retained).
-CONNECT requests are audited at `vms/<agentId>/proxy.log`, rotated to `.1` above 1 MiB.
+Provider subprocesses drop inherited `BOTO*\*`variables (explicit RunSpec env is retained).
+CONNECT requests are audited at`vms/<agentId>/proxy.log`, rotated to `.1` above 1 MiB.
 MicroVMs start signed out. Under **Settings → Hosts → MicroVM sign-in** save a Claude
 subscription token (`claude setup-token`) or Anthropic API key, and/or an OpenAI API key for
 Codex. They are encrypted in the vault, hidden from agents, and sent only inside the run spec
 (SSH stdin, then vsock) as the provider's environment in Firecracker sessions; Codex logs in
 with `account/login/start` (`apiKey`) inside the VM. Codex credentialed sessions use
-`CODEX_HOME=/run/boto/codex-home` on guest tmpfs; fake-key runs left no
-`/root/.codex/auth.json` on the persistent workspace. With fake `OPENAI_API_KEY` or
-`CODEX_API_KEY` alone, Codex `account/read` still reported signed out. Rejected VM credentials
+`CODEX_HOME=/run/boto/codex-home`on guest tmpfs; fake-key runs left no`/root/.codex/auth.json`on the persistent workspace. With fake`OPENAI_API_KEY`or`CODEX_API_KEY`alone, Codex`account/read`still reported signed out. Rejected VM credentials
 show a redacted provider detail and direct the user to **Settings → Hosts**. Process placements
 keep the host's login. Codex's own home and thread cache are ephemeral; if a thread cannot be
-resumed, Boto starts a fresh Codex thread while retaining its chat history. `bun run
+resumed, Boto starts a fresh Codex thread while retaining its chat history.`bun run
 test:firecracker:providers` exercises fake Claude API/OAuth and Codex credentials, rejection
 handling, persistence, and credential leak boundaries.
 

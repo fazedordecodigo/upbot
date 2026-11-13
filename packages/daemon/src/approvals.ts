@@ -235,6 +235,7 @@ export class ApprovalService {
       id: r.id,
       agentId: r.agent_id,
       turnId: r.turn_id,
+      collaborationId: r.turn_id ? this.collaborationForTurn(r.turn_id) : null,
       kind: parsed.kind,
       title: recordTitle(parsed),
       detail: "",
@@ -400,6 +401,17 @@ export class ApprovalService {
       .sort((a, b) => b.createdAt - a.createdAt);
   }
 
+  /** The table a turn belongs to, via its queue row (null when outside any mesa). */
+  private collaborationForTurn(turnId: string): string | null {
+    return (
+      (
+        this.db.query("SELECT collaboration_id FROM queue WHERE turn_id = ?").get(turnId) as {
+          collaboration_id: string | null;
+        } | null
+      )?.collaboration_id ?? null
+    );
+  }
+
   private open(
     agentId: string,
     p: Pick<
@@ -429,6 +441,7 @@ export class ApprovalService {
       id: crypto.randomUUID(),
       agentId,
       turnId: cur?.id ?? null,
+      collaborationId: cur?.id ? this.collaborationForTurn(cur.id) : null,
       ...p,
       background,
       status: "pending",

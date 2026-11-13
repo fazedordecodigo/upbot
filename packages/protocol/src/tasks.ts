@@ -56,21 +56,22 @@ export type TaskDefaults = z.infer<typeof TaskDefaults>;
 
 const TaskId = z.object({ id: z.string() }).strict();
 const TaskText = z.string().trim().min(1).max(100_000);
+const TaskAttachments = z
+  .array(
+    z.object({
+      name: z.string().min(1).max(255),
+      mime: z.string().max(255),
+      dataBase64: z.string().max(36_000_000),
+    }),
+  )
+  .max(10)
+  .optional();
 
 export const TasksCreateParams = z
   .object({
     agentId: z.string().optional(),
     text: TaskText,
-    attachments: z
-      .array(
-        z.object({
-          name: z.string().min(1).max(255),
-          mime: z.string().max(255),
-          dataBase64: z.string().max(36_000_000),
-        }),
-      )
-      .max(10)
-      .optional(),
+    attachments: TaskAttachments,
     private: z.boolean().optional(),
     toolMode: TaskToolMode.optional(),
     requireApproval: z.boolean().optional(),
@@ -99,7 +100,9 @@ export const TasksHistoryParams = z
     limit: z.number().int().min(1).max(500).optional(),
   })
   .strict();
-export const TasksInstructParams = z.object({ id: z.string(), text: TaskText }).strict();
+export const TasksInstructParams = z
+  .object({ id: z.string(), text: TaskText, attachments: TaskAttachments })
+  .strict();
 export const TasksInstructResult = z.object({ queueId: z.string(), task: Task });
 export const TasksIdParams = TaskId;
 export const TasksRenameParams = z

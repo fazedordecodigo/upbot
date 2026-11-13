@@ -44,6 +44,9 @@ h1[tabindex="-1"]:focus-visible, #main:focus-visible { outline: none; }
 .badge-secondary { background: var(--boto-color-secondary); }
 .badge-success { color: var(--boto-color-success); }
 .badge-outline { background: transparent; }
+.progress { display: block; height: var(--boto-space-1); border-radius: var(--boto-radius-full); background: var(--boto-color-muted-surface); overflow: hidden; }
+.progress > span { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--boto-color-success); transform-origin: left center; transform: scaleX(var(--p, 0)); transition: transform var(--boto-duration-slow) var(--boto-easing-out); }
+.progress[data-indeterminate="true"] > span { width: 40%; transform: none; transition: none; animation: progress-slide calc(var(--boto-duration-slow) * 3) var(--boto-easing-standard) infinite; }
 .input, .textarea, select { width: 100%; min-height: var(--boto-space-10); padding: var(--boto-space-2) var(--boto-space-3); border: 1px solid var(--boto-color-input); border-radius: var(--boto-radius-md); background: var(--boto-color-background); font-size: var(--boto-font-size-sm); }
 .textarea { resize: vertical; }
 .label { display: block; font-size: var(--boto-font-size-sm); font-weight: 500; }
@@ -70,6 +73,7 @@ dialog::backdrop { background: var(--boto-color-overlay); }
 .dropdown-separator { border-top: 1px solid var(--boto-color-border); margin-block: var(--boto-space-2); }
 .toaster { position: fixed; bottom: var(--boto-space-6); right: var(--boto-space-6); z-index: 60; max-width: calc(100% - var(--boto-space-12)); padding: var(--boto-space-5); border: 1px solid var(--boto-color-border); border-radius: var(--boto-radius-lg); background: var(--boto-color-popover); box-shadow: var(--boto-shadow-lg); }
 @keyframes eye-pulse { 50% { opacity: .4; } }
+@keyframes progress-slide { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
 
 .input:focus-visible, .textarea:focus-visible { border-color: var(--boto-color-ring); box-shadow: 0 0 0 var(--boto-size-input-halo) color-mix(in srgb, var(--boto-color-ring) 20%, transparent); }
 .tooltip { position: fixed; max-width: calc(var(--boto-space-20) * 3); padding: var(--boto-space-2) var(--boto-space-3); border-radius: var(--boto-radius-sm); background: var(--boto-color-foreground); color: var(--boto-color-background); font-size: var(--boto-size-icon-status); pointer-events: none; }
@@ -78,6 +82,22 @@ dialog::backdrop { background: var(--boto-color-overlay); }
 .tooltip { z-index: 100; }
 .dropdown-menu { min-width: calc(var(--boto-space-20) * 2 + var(--boto-space-16)); }
 .dropdown-item { min-height: var(--boto-size-control); }
+
+/* Markdown body (react-markdown): shared by task messages and the collab rail. */
+.md { display: grid; gap: var(--boto-space-3); font-size: var(--boto-font-size-sm); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.md h1, .md h2 { margin: 0; font-size: var(--boto-font-size-lg); }
+.md h3, .md h4, .md h5, .md h6 { margin: 0; font-size: var(--boto-font-size-base); }
+.md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0; }
+.md ul, .md ol { padding-inline-start: var(--boto-space-5); display: grid; gap: var(--boto-space-1); }
+.md a { color: var(--boto-color-primary); }
+.md code { padding: 0.1em 0.35em; border-radius: var(--boto-radius-sm); background: var(--boto-color-muted-surface); font-family: var(--boto-font-mono); font-size: 0.92em; }
+.md pre { padding: var(--boto-space-3); border-radius: var(--boto-radius-md); background: var(--boto-color-muted-surface); overflow: auto; white-space: pre; }
+.md pre code { padding: 0; background: transparent; }
+.md blockquote { padding-inline-start: var(--boto-space-3); border-inline-start: 2px solid var(--boto-color-border); color: var(--boto-color-muted-foreground); }
+.md hr { border: 0; border-top: 1px solid var(--boto-color-border); }
+.md table { border-collapse: collapse; font-size: var(--boto-font-size-xs); }
+.md th, .md td { padding: var(--boto-space-1) var(--boto-space-2); border: 1px solid var(--boto-color-border); text-align: start; }
+.md img { max-width: 100%; }
 
 @media (pointer: coarse) {
   button:not(.switch), .btn, .tabs-trigger { min-height: var(--boto-size-target); }

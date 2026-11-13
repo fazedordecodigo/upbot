@@ -37,6 +37,7 @@ export class RuntimeManager {
     private remoteFor: (agentId: string) => RemoteLaunch | null = () => null,
     private sharedDirs: () => string[] = () => [],
     private memoryUsage: (turnId: string) => MemoryUsage = () => ({ count: 0, kinds: [] }),
+    private apiKeyFor: (provider: string) => string | null = () => null,
   ) {
     this.scheduler = new AgentScheduler<AgentRuntime>({
       primary: (agentId) => this.runtimeFor(agentId),
@@ -68,6 +69,7 @@ export class RuntimeManager {
       this.sharedDirs,
       () => this.tasks,
       this.memoryUsage,
+      this.apiKeyFor,
       opts,
     );
   }
@@ -165,6 +167,13 @@ export class RuntimeManager {
   cancelChannelTurns(channelId: string): void {
     for (const rt of this.all()) {
       if (rt.currentChannelId() === channelId) rt.cancel();
+    }
+  }
+
+  /** Cancels running table turns — all members', or one member's when agentId is given. */
+  cancelCollaborationTurns(collaborationId: string, agentId?: string): void {
+    for (const rt of agentId ? this.pool(agentId) : this.all()) {
+      if (rt.currentCollaborationId() === collaborationId) rt.cancel({ pauseQueue: false });
     }
   }
 

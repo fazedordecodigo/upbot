@@ -7,6 +7,7 @@ import { attachmentsBlock, saveAttachments } from "./attachments";
 import { type BrowserService, findBrowser } from "./browser";
 import type { ChannelService } from "./channels";
 import type { ChatStore, QueueStore } from "./chat-store";
+import type { CollaborationService } from "./collaborations";
 import type { ComputerUse } from "./computer";
 import { InvalidSettingError } from "./db/settings";
 import type { DesktopService } from "./desktop";
@@ -22,6 +23,7 @@ import { ProviderError } from "./providers/types";
 import type { ProvidersService } from "./providers-service";
 import type { VmCredentials } from "./remote/credentials";
 import type { HostStore } from "./remote/hosts";
+import type { LocalVmService } from "./remote/localvm";
 import type { RoutineService } from "./routines";
 import { asBadRequest, RpcError } from "./runtime/agent-runtime";
 import type { RuntimeManager } from "./runtime/runtime-manager";
@@ -100,13 +102,21 @@ export class Rpc {
       mobile: MobileServer;
       team: TeamClient;
       hosts: HostStore;
+      localvm: LocalVmService;
       subagents: SubagentService;
       tasks: TaskService;
       profile: ProfileService;
       desktop: DesktopService;
       overview?: AgentsOverviewService;
+      collaborations?: CollaborationService;
     },
   ) {}
+
+  private collaborations(): CollaborationService {
+    if (!this.extras.collaborations)
+      throw new RpcError("bad_request", "collaborations are not enabled");
+    return this.extras.collaborations;
+  }
 
   /** Returns the response payload string for one raw incoming message. */
   async handle(raw: string, conn?: RpcConnection): Promise<string> {
@@ -235,6 +245,16 @@ export class Rpc {
         return this.extras.providers.scan();
       case "providers.login":
         return this.extras.providers.login((params as MethodParsedParams<typeof method>).provider);
+      case "providers.install":
+        return this.extras.providers.install(
+          (params as MethodParsedParams<typeof method>).provider,
+        );
+      case "providers.listApiKeys":
+        return this.extras.providers.listApiKeys();
+      case "providers.setEndpoint": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.extras.providers.setEndpoint(p.url, p.apiKey);
+      }
       case "providers.setApiKey": {
         const p = params as MethodParsedParams<typeof method>;
         return this.extras.providers.setApiKey(p.provider, p.value);
@@ -286,6 +306,7 @@ export class Rpc {
         const ok = this.agents.softDelete(p.id);
         if (!ok) throw new RpcError("not_found", "agent not found");
         this.queue.removeAllForAgent(p.id);
+        this.extras.collaborations?.onAgentDeleted(p.id);
         this.runtimes.agentDeleted(p.id);
         queueMicrotask(() => this.broadcast("agent.deleted", { id: p.id }));
         return { ok: true };
@@ -406,6 +427,18 @@ export class Rpc {
         queueMicrotask(() => this.broadcast("hosts.changed", {}));
         return h;
       }
+      case "localvm.status":
+        return this.extras.localvm.status();
+      case "localvm.create":
+        return asBadRequest(() => this.extras.localvm.create());
+      case "localvm.start":
+        return asBadRequest(() => this.extras.localvm.start());
+      case "localvm.stop":
+        return asBadRequest(() => this.extras.localvm.stop());
+      case "localvm.delete":
+        return asBadRequest(() => this.extras.localvm.remove());
+      case "localvm.install":
+        return asBadRequest(() => this.extras.localvm.install());
       case "vmCredentials.list":
         return this.extras.vmCredentials.list();
       case "vmCredentials.set": {
@@ -706,6 +739,34 @@ export class Rpc {
         const p = params as MethodParsedParams<typeof method>;
         return this.channels.reassign(p.channelId, p.ownerId);
       }
+      case "collaborations.list":
+        return this.collaborations().list();
+      case "collaborations.get":
+        return this.collaborations().get((params as MethodParsedParams<typeof method>).id);
+      case "collaborations.history": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.collaborations().history(p.id, p.limit);
+      }
+      case "collaborations.create":
+        return this.collaborations().create(params as MethodParsedParams<typeof method>);
+      case "collaborations.instruct": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.collaborations().instruct(p.id, p.text);
+      }
+      case "collaborations.answer": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.collaborations().answerRequest(p.id, p.messageId, p.text);
+      }
+      case "collaborations.pause":
+        return this.collaborations().pause((params as MethodParsedParams<typeof method>).id);
+      case "collaborations.resume":
+        return this.collaborations().resume((params as MethodParsedParams<typeof method>).id);
+      case "collaborations.stop":
+        return this.collaborations().stop((params as MethodParsedParams<typeof method>).id);
+      case "collaborations.conclude": {
+        const p = params as MethodParsedParams<typeof method>;
+        return this.collaborations().conclude(p.id, p.summary);
+      }
       case "tasks.create":
         return this.extras.tasks.create(params as MethodParsedParams<typeof method>);
       case "tasks.list":
@@ -723,7 +784,7 @@ export class Rpc {
         return this.extras.tasks.history(params as MethodParsedParams<typeof method>);
       case "tasks.instruct": {
         const p = params as MethodParsedParams<typeof method>;
-        return this.extras.tasks.instruct(p.id, p.text);
+        return this.extras.tasks.instruct(p.id, p.text, p.attachments);
       }
       case "tasks.pause":
         return this.extras.tasks.pause((params as MethodParsedParams<typeof method>).id);
@@ -731,6 +792,9 @@ export class Rpc {
         return this.extras.tasks.resume((params as MethodParsedParams<typeof method>).id);
       case "tasks.stop":
         return this.extras.tasks.stop((params as MethodParsedParams<typeof method>).id);
+      case "tasks.delete":
+        this.extras.tasks.delete((params as MethodParsedParams<typeof method>).id);
+        return { ok: true };
       case "tasks.rename": {
         const p = params as MethodParsedParams<typeof method>;
         return this.extras.tasks.rename(p.id, p.title);

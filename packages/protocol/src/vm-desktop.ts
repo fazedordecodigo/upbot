@@ -26,6 +26,8 @@ export const Machine = z.object({
   taskId: z.string().nullable(),
   /** ISO timestamp of the latest thumbnail, null until the first frame arrived. */
   thumbnailAt: z.string().nullable(),
+  /** GUI applications installed in the guest, reported on `ready` (empty before it). */
+  apps: z.array(z.string()),
 });
 export type Machine = z.infer<typeof Machine>;
 

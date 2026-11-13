@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { type Agent, Task, whenToRoutine } from "@boto/protocol";
-import { type Browser, chromium, type Page } from "playwright-core";
+import { type Browser, chromium } from "playwright-core";
 import {
   DaemonClient,
   type DaemonHandle,
@@ -38,14 +38,12 @@ beforeAll(async () => {
   const state = tmp("new-task-acp-");
   dirs.push(data, agents, state);
   daemon = await startDaemon(data, agents, token, {
-    BOTO_DEFAULT_BOT: "on",
     BOTO_ACP_COMMAND_DEVIN: JSON.stringify([process.execPath, FAKE_AGENT]),
     FAKE_ACP_STATE_DIR: state,
   });
   rpc = await DaemonClient.connect(daemon.port, token);
   await rpc.request("onboarding.complete", {});
-  const seeded = (await rpc.request("agents.list", {})).find((agent) => agent.isDefault)!;
-  alpha = await rpc.request("agents.update", { id: seeded.id, name: "Alpha", provider: "devin" });
+  alpha = await rpc.request("agents.create", { name: "Alpha", provider: "devin" });
   beta = await rpc.request("agents.create", { name: "Beta", provider: "devin" });
   base = "http://localhost:1420";
   vite = await startVite();
@@ -90,11 +88,6 @@ async function app(
   return page;
 }
 
-async function choose(page: Page, trigger: string, label: string) {
-  await page.locator(trigger).click();
-  await page.getByRole("menuitemradio", { name: label, exact: true }).click();
-}
-
 async function taskByPrompt(prompt: string) {
   let found: Task | undefined;
   await until(async () => {
@@ -110,12 +103,14 @@ async function taskByPrompt(prompt: string) {
 test(
   "Nova tarefa delegates to the chosen real agent with tools, approval policy and attachments",
   async () => {
+    const profile = await rpc.request("profile.get", {});
+    await rpc.request("profile.update", {
+      defaults: { toolMode: "terminal", requireApproval: false },
+    });
     const page = await app(undefined, beta.id);
     try {
       expect(await page.locator("#send").isDisabled()).toBe(true);
       await page.locator("#composer-input").fill("echo:delegada pelo composer");
-      await choose(page, "#where-trigger", "Só terminal Código, scripts e arquivos");
-      await page.locator("#approval-switch").click();
       await page.locator("#file-input").setInputFiles({
         name: "contexto.txt",
         mimeType: "text/plain",
@@ -145,6 +140,7 @@ test(
       ).toBe(true);
       expect(history.items.some((item) => item.kind === "agent_message")).toBe(true);
     } finally {
+      await rpc.request("profile.update", { defaults: profile.defaults });
       await page.close();
     }
   },
@@ -152,45 +148,49 @@ test(
 );
 
 test(
-  "timing presets persist real one-shot and recurring routines without starting a task",
+  "saved delegation timing and Nova rotina create scheduled routines without starting a task",
   async () => {
+    const profile = await rpc.request("profile.get", {});
+    await rpc.request("profile.update", { defaults: { delegationMode: "scheduled" } });
     const page = await app();
     try {
-      for (const [when, label] of [
-        ["in1h", "Daqui a 1 hora"],
-        ["tomorrow", "Amanhã às 8h"],
-        ["daily", "Todo dia às 8h"],
-        ["weekly", "Toda segunda às 9h"],
-      ] as const) {
-        const prompt = `echo:rotina ${when}`;
-        await page.locator("#composer-input").fill(prompt);
-        await choose(page, "#when-trigger", label);
-        const before = Date.now();
-        await page.locator("#send").click();
-        await until(
-          async () => (await page.locator("#main").getAttribute("data-view")) === "routines",
-        );
-        const routine = (await rpc.request("routines.list", {})).find(
-          (routine) => routine.prompt === prompt,
-        );
-        expect(routine).toMatchObject({
-          agentId: alpha.id,
-          enabled: true,
-          webhook: false,
-          toolMode: "both",
-          requireApproval: true,
-          private: false,
-        });
-        const expected = whenToRoutine(when, before);
-        expect(routine?.schedule).toBe(expected?.schedule ?? null);
-        if (when === "in1h")
-          expect(Math.abs((routine?.runAt ?? 0) - (expected?.runAt ?? 0))).toBeLessThan(10_000);
-        else expect(routine?.runAt).toBe(expected?.runAt ?? null);
-        expect((await rpc.request("routines.runs", { id: routine?.id ?? "" })).length).toBe(0);
-        await page.keyboard.press("Control+Shift+O");
-        await until(() => page.locator("#composer-input").isEnabled());
-      }
+      const prompt = "echo:rotina delegada";
+      await page.locator("#composer-input").fill(prompt);
+      const before = Date.now();
+      await page.locator("#send").click();
+      await until(
+        async () => (await page.locator("#main").getAttribute("data-view")) === "routines",
+      );
+      const routine = (await rpc.request("routines.list", {})).find(
+        (routine) => routine.prompt === prompt,
+      );
+      expect(routine).toMatchObject({
+        agentId: alpha.id,
+        enabled: true,
+        webhook: false,
+        toolMode: "both",
+        private: false,
+      });
+      const expected = whenToRoutine("in1h", before);
+      expect(routine?.schedule).toBe(expected?.schedule ?? null);
+      expect(Math.abs((routine?.runAt ?? 0) - (expected?.runAt ?? 0))).toBeLessThan(10_000);
+      expect((await rpc.request("routines.runs", { id: routine?.id ?? "" })).length).toBe(0);
+
+      await page.locator('#sidebar [data-nav="routines"]').click();
+      await page.getByRole("button", { name: "Nova rotina", exact: true }).click();
+      await until(() => page.locator("#composer-input").isEnabled());
+      await page.locator("#composer-input").fill("echo:rotina diária");
+      await page.locator("#send").click();
+      await until(
+        async () => (await page.locator("#main").getAttribute("data-view")) === "routines",
+      );
+      const daily = (await rpc.request("routines.list", {})).find(
+        (routine) => routine.prompt === "echo:rotina diária",
+      );
+      expect(daily?.schedule).toBe(whenToRoutine("daily")?.schedule);
+      expect((await rpc.request("routines.runs", { id: daily?.id ?? "" })).length).toBe(0);
     } finally {
+      await rpc.request("profile.update", { defaults: profile.defaults });
       await page.close();
     }
   },
@@ -278,15 +278,6 @@ test(
       const page = await app(template.id);
       try {
         expect(await page.locator("#composer-input").inputValue()).toBe(template.prompt);
-        expect(await page.locator("#where-label").innerText()).toBe("Só navegador");
-        expect(await page.locator("#approval-switch").getAttribute("aria-checked")).toBe("false");
-        expect(await page.locator("#when-label").innerText()).toBe(
-          schedule === "daily 08:00"
-            ? "Todo dia às 8h"
-            : schedule === "every 2h"
-              ? "A cada 2 horas"
-              : "Agora",
-        );
         expect((await rpc.request("tasks.list", {})).items.length).toBe(beforeTasks);
         expect((await rpc.request("routines.list", {})).length).toBe(beforeRoutines);
         await page.locator("#send").click();
@@ -325,20 +316,12 @@ test(
 );
 
 test(
-  "keyboard menus restore focus and scheduled attachments persist",
+  "scheduled attachments persist through routine runs",
   async () => {
+    const profile = await rpc.request("profile.get", {});
+    await rpc.request("profile.update", { defaults: { delegationMode: "scheduled" } });
     const page = await app();
     try {
-      await page.locator("#when-trigger").focus();
-      await page.keyboard.press("ArrowDown");
-      await page.keyboard.press("End");
-      await page.keyboard.press("Enter");
-      expect(await page.locator("#when-label").innerText()).toBe("Toda segunda às 9h");
-      expect(await page.evaluate(() => document.activeElement?.id)).toBe("when-trigger");
-      await page.keyboard.press("ArrowDown");
-      await page.keyboard.press("Escape");
-      expect(await page.getByRole("menu").count()).toBe(0);
-      expect(await page.evaluate(() => document.activeElement?.id)).toBe("when-trigger");
       await page.locator("#composer-input").fill("Uma tarefa com anexo");
       const privateSwitch = page.locator("#private-switch");
       if ((await privateSwitch.getAttribute("aria-checked")) === "true")
@@ -356,7 +339,7 @@ test(
       const routine = (await rpc.request("routines.list", {})).find(
         (r) => r.prompt === "Uma tarefa com anexo",
       );
-      expect(routine?.schedule).toBe("weekly mon 09:00");
+      expect(routine?.runAt).not.toBeNull();
       const run = await rpc.request("routines.run", { id: routine!.id });
       await until(
         async () => (await rpc.request("tasks.get", { id: run.taskId! })).situation === "done",
@@ -367,11 +350,13 @@ test(
           (item) => item.kind === "user_message" && item.attachments?.[0]?.name === "arquivo.txt",
         ),
       ).toBe(true);
+
       await page.reload();
       await page.locator("#home-title").waitFor();
-      await page.keyboard.press("Control+Shift+O");
+      await page.locator('#sidebar [data-nav="routines"]').click();
+      await page.getByRole("button", { name: "Nova rotina", exact: true }).click();
+      await until(() => page.locator("#composer-input").isEnabled());
       await page.locator("#composer-input").fill("Outra tarefa");
-      await choose(page, "#when-trigger", "Toda segunda às 9h");
       await page.locator("#file-input").setInputFiles({
         name: "arquivo.txt",
         mimeType: "text/plain",
@@ -382,8 +367,13 @@ test(
       await until(
         async () => (await page.locator("#main").getAttribute("data-view")) === "routines",
       );
-      expect(routine?.attachments?.[0]?.name).toBe("arquivo.txt");
+      const daily = (await rpc.request("routines.list", {})).find(
+        (r) => r.prompt === "Outra tarefa",
+      );
+      expect(daily?.schedule).toBe("daily 08:00");
+      expect(daily?.attachments?.[0]?.name).toBe("arquivo.txt");
     } finally {
+      await rpc.request("profile.update", { defaults: profile.defaults });
       await page.close();
     }
   },
@@ -426,28 +416,17 @@ test(
         await page.locator(".composer-bar").evaluate((bar) =>
           Array.from(bar.children)
             .filter((el) => el.tagName !== "INPUT" && !el.classList.contains("composer-spacer"))
-            .map(
-              (el) =>
-                el.id ||
-                el.getAttribute("data-action") ||
-                (el.classList.contains("opt-approval")
-                  ? "approval"
-                  : el.querySelector("button")?.id),
-            ),
+            .map((el) => el.id || el.getAttribute("data-action") || el.querySelector("button")?.id),
         ),
-      ).toEqual(["attach", "when-trigger", "where-trigger", "approval", "send"]);
+      ).toEqual(["attach", "send"]);
       expect(await page.locator("#agent-trigger").count()).toBe(0);
       await page.locator("#composer-input").fill("Alpha only");
-      await choose(page, "#where-trigger", "Só terminal Código, scripts e arquivos");
-      await page.locator("#approval-switch").click();
       await page
         .locator("#file-input")
         .setInputFiles({ name: "alpha.txt", mimeType: "text/plain", buffer: Buffer.from("alpha") });
       await page.getByRole("button", { name: "Switch route agent" }).click();
       await until(() => page.locator("#composer-input").isEnabled());
       expect(await page.locator("#composer-input").inputValue()).toBe("");
-      expect(await page.locator("#where-label").innerText()).toBe("Navegador e terminal");
-      expect(await page.locator("#approval-switch").getAttribute("aria-checked")).toBe("true");
       expect(await page.locator("#composer-files").isVisible()).toBe(false);
       await page.locator("#composer-input").fill("echo:route Beta");
       await page.locator("#composer-input").press("Enter");
@@ -460,23 +439,77 @@ test(
 );
 
 test(
-  "saved delegation timing and Nova rotina initialize a scheduled composer, while templates override defaults",
+  "sidebar lists the bots and opens a new session with the clicked bot",
   async () => {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    page.setDefaultTimeout(10_000);
+    try {
+      await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
+      await page.locator("#home-title").waitFor();
+      const items = page.locator('#sidebar .sb-sub-item[data-nav="new"]');
+      await until(async () => (await items.count()) >= 2);
+      for (const name of ["Alpha", "Beta"])
+        expect(await items.filter({ hasText: name }).count()).toBe(1);
+      const item = items.filter({ hasText: "Beta" });
+      await item.click();
+      await until(async () => (await page.locator("#main").getAttribute("data-view")) === "new");
+      expect(await item.getAttribute("aria-current")).toBe("page");
+      await until(() => page.locator("#composer-input").isEnabled());
+      await page.locator("#composer-input").fill("echo:sidebar session");
+      await page.locator("#send").click();
+      await until(async () => (await page.locator("#main").getAttribute("data-view")) === "task");
+      expect((await taskByPrompt("echo:sidebar session")).agentId).toBe(beta.id);
+    } finally {
+      await page.close();
+    }
+  },
+  T,
+);
+
+test(
+  "saved delegation timing schedules tasks, Nova rotina presets daily, and templates override defaults",
+  async () => {
+    const profile = await rpc.request("profile.get", {});
     await rpc.request("profile.update", { defaults: { delegationMode: "scheduled" } });
     const page = await app();
     try {
-      expect(await page.locator("#when-label").innerText()).toBe("Daqui a 1 hora");
+      await page.locator("#composer-input").fill("echo:timing padrão");
+      await page.locator("#send").click();
+      await until(
+        async () => (await page.locator("#main").getAttribute("data-view")) === "routines",
+      );
+      expect(
+        (await rpc.request("routines.list", {})).some(
+          (routine) => routine.prompt === "echo:timing padrão",
+        ),
+      ).toBe(true);
+
       await page.locator('#sidebar [data-nav="routines"]').click();
       await page.getByRole("button", { name: "Nova rotina", exact: true }).click();
       await until(() => page.locator("#composer-input").isEnabled());
-      expect(await page.locator("#when-label").innerText()).toBe("Todo dia às 8h");
+      await page.locator("#composer-input").fill("echo:nova rotina");
+      await page.locator("#send").click();
+      await until(
+        async () => (await page.locator("#main").getAttribute("data-view")) === "routines",
+      );
+      expect(
+        (await rpc.request("routines.list", {})).find(
+          (routine) => routine.prompt === "echo:nova rotina",
+        )?.schedule,
+      ).toBe("daily 08:00");
+
       await page.locator('#sidebar [data-nav="templates"]').click();
       await page.locator('[data-template="ci"]').click();
       await until(() => page.locator("#composer-input").isEnabled());
-      expect(await page.locator("#when-label").innerText()).toBe("Agora");
-      expect(await page.locator("#approval-switch").getAttribute("aria-checked")).toBe("true");
+      await page.locator("#send").click();
+      await until(async () => (await page.locator("#main").getAttribute("data-view")) === "task");
+      expect(
+        (await rpc.request("tasks.list", { includePrivate: true })).items.some(
+          (task) => task.templateId === "ci",
+        ),
+      ).toBe(true);
     } finally {
-      await rpc.request("profile.update", { defaults: { delegationMode: "approval" } });
+      await rpc.request("profile.update", { defaults: profile.defaults });
       await page.close();
     }
   },

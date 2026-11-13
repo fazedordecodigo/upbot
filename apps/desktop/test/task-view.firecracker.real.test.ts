@@ -177,7 +177,7 @@ test.skipIf(!enabled)(
         width: 1280,
         height: 800,
       });
-      expect(await page.locator("#task-desk .live-bar").innerText()).toContain("codigo-01");
+      expect(await page.locator("#task-desk .ws-machine").innerText()).toContain("codigo-01");
       await shot("real-live-frame");
 
       // the agent inside the guest drives the real display through the bridge
@@ -327,7 +327,7 @@ test.skipIf(!enabled)(
         120000,
       );
       await frameShown(page, "#task-desk");
-      expect(await page.locator("#task-desk .live-bar").innerText()).toContain("Pronta");
+      expect(await page.locator("#task-desk .ws-machine").innerText()).toContain("Pronta");
       await shot("real-replaced-guest");
 
       // ending the task and leaving the view stops the stream

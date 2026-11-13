@@ -3,9 +3,10 @@ import { z } from "zod";
 import { type Vault, VMCRED_PREFIX } from "../vault";
 
 // Provider logins for Firecracker microVM sessions. Stored encrypted in the vault under
-// `vmcred.<provider>` (hidden from vault.list and never shared with agents). The value only
+// `vmcred.<provider>` (hidden from vault.list and never shared with agents). The value
 // travels inside the run spec over SSH stdin and the guest vsock, and becomes environment
-// variables of the provider process inside the VM.
+// variables of the provider process inside the VM. Providers that authenticate in-band
+// (Devin's ACP `authenticate`) also receive it locally, as a request parameter.
 
 export const VM_CREDENTIAL_ENV: Record<
   VmCredentialProvider,
@@ -17,6 +18,8 @@ export const VM_CREDENTIAL_ENV: Record<
   cursor: { api_key: ["CURSOR_API_KEY"] },
   devin: { api_key: ["WINDSURF_API_KEY"] },
   grok: { api_key: ["XAI_API_KEY"] },
+  openrouter: { api_key: ["OPENROUTER_API_KEY"] },
+  "openai-compatible": { api_key: ["OPENAI_API_KEY"] },
 };
 
 const isProvider = (p: string): p is VmCredentialProvider => p in VM_CREDENTIAL_ENV;
@@ -68,6 +71,13 @@ export class VmCredentials {
     const entry = this.readEntry(provider);
     if (entry?.kind !== "api_key") return null;
     return `••••${entry.value.length >= 12 ? entry.value.slice(-4) : ""}`;
+  }
+
+  /** The stored API key itself, or null when the provider has none saved. */
+  apiKey(provider: string): string | null {
+    if (!isProvider(provider)) return null;
+    const entry = this.readEntry(provider);
+    return entry?.kind === "api_key" ? entry.value : null;
   }
 
   /** Environment variables for a provider session inside a microVM ({} when none is set). */

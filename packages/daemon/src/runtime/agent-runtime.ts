@@ -147,6 +147,7 @@ type PendingEntry = {
   toolKind: string | null;
   options: PermissionOption[];
   itemId: string;
+  createdAt: number;
   resolve: (r: { optionId: string | null }) => void;
 };
 
@@ -197,6 +198,8 @@ export class AgentRuntime {
   private textFlushTimer: ReturnType<typeof setTimeout> | null = null;
   // toolCallId -> cached item for the running turn; skips the items lookup entirely
   private toolCallItems = new Map<string, ChatItem>();
+  // the running turn's single plan card; ACP resends the whole checklist per update
+  private planItem: ChatItem | null = null;
   private pending = new Map<string, PendingEntry>();
   private cancelTimer: ReturnType<typeof setTimeout> | null = null;
   private draining = false;
@@ -204,6 +207,7 @@ export class AgentRuntime {
   private turnStartedAt = 0;
   private turnBackground = false;
   private turnChannelId: string | null = null;
+  private turnCollaborationId: string | null = null;
   private compacting = false;
   private capture: string[] | null = null;
   private disposing = false;
@@ -221,6 +225,7 @@ export class AgentRuntime {
     private sharedDirs: () => string[] = () => [],
     private tasks: () => TaskRuntimeHooks | null = () => null,
     private memoryUsage: (turnId: string) => MemoryUsage = () => ({ count: 0, kinds: [] }),
+    private apiKeyFor: (provider: string) => string | null = () => null,
     private opts: RuntimeOptions = {},
   ) {}
 
@@ -257,6 +262,10 @@ export class AgentRuntime {
 
   currentChannelId(): string | null {
     return this.turn ? this.turnChannelId : null;
+  }
+
+  currentCollaborationId(): string | null {
+    return this.turn ? this.turnCollaborationId : null;
   }
 
   bridgeActivity(): void {
@@ -367,18 +376,26 @@ export class AgentRuntime {
       console.error(`[botod] queue item ${next.id}: ignored invalid meta ${rejected.join(", ")}`);
     this.draining = true;
     try {
-      const turnRow = this.store.createTurn(this.agent.id, next.id, scope);
+      const turnRow = this.store.createTurn(
+        this.agent.id,
+        next.id,
+        scope,
+        next.collaboration_id ?? null,
+      );
       this.turnTaskId = scope;
       this.queue.markStarted(next.id, turnRow.id);
       this.turn = { id: turnRow.id, cancelled: false, byUser: false };
       this.closeTextItem();
       this.toolCallItems.clear();
+      this.planItem = null;
       this.turnHops = next.hops ?? 0;
       this.turnStartedAt = Date.now();
       this.turnChannelId = next.channel_id ?? null;
+      this.turnCollaborationId = next.collaboration_id ?? null;
       this.turnBackground = Boolean(
         next.from_agent_id ||
           next.channel_id ||
+          next.collaboration_id ||
           meta.routine ||
           meta.gateway ||
           meta.team ||
@@ -432,6 +449,7 @@ export class AgentRuntime {
         resumeSessionId,
         hooks: this.hooks(tag, scope),
         mcpServers: remote ? servers.map((s) => remote.mcp(s)) : servers,
+        apiKey: this.apiKeyFor(this.agent.provider),
         ...(remote ? { remote } : { extraDirs: this.sharedDirs() }),
       });
       this.sessionTag = tag;
@@ -608,7 +626,7 @@ export class AgentRuntime {
     }
     this.cancelAllPending();
     const ended = this.store.endTurn(turn.id, status, stopReason, error);
-    this.broadcast("turn.ended", ended);
+    if (ended) this.broadcast("turn.ended", ended);
     if (this.turn === turn) this.turn = null;
     this.opts.onTurnFinished?.();
     this.closeTextItem();
@@ -809,6 +827,7 @@ export class AgentRuntime {
       title: p.title,
       toolKind: p.toolKind,
       options: p.options,
+      createdAt: p.createdAt,
     }));
   }
 
@@ -866,6 +885,7 @@ export class AgentRuntime {
         toolKind: req.toolKind,
         options: req.options,
         itemId: "",
+        createdAt: Date.now(),
         resolve,
       };
       const item = this.store.createItem(this.agent.id, turn?.id ?? null, "permission", {
@@ -875,6 +895,7 @@ export class AgentRuntime {
         resolution: null,
       });
       entry.itemId = item.id;
+      entry.createdAt = item.createdAt;
       this.pending.set(requestId, entry);
       this.broadcast("item.created", item);
       const pending: PendingPermission = {
@@ -884,6 +905,7 @@ export class AgentRuntime {
         title: req.title,
         toolKind: req.toolKind,
         options: req.options,
+        createdAt: entry.createdAt,
       };
       this.broadcast("permission.requested", pending);
       if (!turn?.cancelled) this.setStatus("awaiting_permission");
@@ -941,6 +963,22 @@ export class AgentRuntime {
         });
         this.toolCallItems.set(u.toolCallId, item);
         this.broadcast("item.created", item);
+        break;
+      }
+      case "plan": {
+        this.closeTextItem();
+        const existing = this.planItem?.turnId === turn.id ? this.planItem : null;
+        if (existing?.kind === "plan") {
+          const updatedAt = this.store.writeItemData(existing.id, { entries: u.entries });
+          this.planItem = { ...existing, entries: u.entries, updatedAt };
+          this.broadcast("item.updated", this.planItem);
+        } else {
+          const item = this.store.createItem(this.agent.id, turn.id, "plan", {
+            entries: u.entries,
+          });
+          this.planItem = item;
+          this.broadcast("item.created", item);
+        }
         break;
       }
       case "tool_call_update": {

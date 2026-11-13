@@ -150,6 +150,56 @@ describe("tasks e2e", () => {
   );
 
   test(
+    "an instruction carries attachments to the workspace, the prompt and the user message",
+    async () => {
+      const task = await c.request("tasks.create", {
+        agentId: b.id,
+        text: "echo:primeiro",
+        requireApproval: false,
+      });
+      await waitTask(task.id, (t) => t.situation === "done");
+      await c.request("tasks.instruct", {
+        id: task.id,
+        text: "echo:com anexo",
+        attachments: [
+          {
+            name: "note.txt",
+            mime: "text/plain",
+            dataBase64: Buffer.from("note body").toString("base64"),
+          },
+        ],
+      });
+      await waitTask(task.id, (t) => t.situation === "done" && t.outcome === "completed");
+      const item = (await taskItems(task.id)).filter((i) => i.kind === "user_message").at(-1);
+      if (!item || item.kind !== "user_message") throw new Error("missing user message");
+      expect(item.text).toBe("echo:com anexo");
+      expect(item.attachments).toHaveLength(1);
+      expect(item.attachments![0]!.name).toBe("note.txt");
+      expect(item.attachments![0]!.path.startsWith(join(b.workspacePath, "attachments"))).toBe(
+        true,
+      );
+      expect(readFileSync(item.attachments![0]!.path, "utf8")).toBe("note body");
+      const prompt = readLog(stateDir)
+        .filter((entry) => entry.method === "session/prompt")
+        .at(-1);
+      expect(JSON.stringify(prompt?.params)).toContain("<attachments>");
+      expect(JSON.stringify(prompt?.params)).toContain("note.txt");
+      await expect(
+        c.request("tasks.instruct", {
+          id: task.id,
+          text: "echo:too many",
+          attachments: Array.from({ length: 11 }, () => ({
+            name: "x.txt",
+            mime: "text/plain",
+            dataBase64: "eA==",
+          })),
+        }),
+      ).rejects.toMatchObject({ code: "bad_request" });
+    },
+    T,
+  );
+
+  test(
     "removing queued instructions finishes only idle tasks with no remaining work",
     async () => {
       await c.request("queue.pause", { agentId: b.id });
@@ -402,6 +452,50 @@ describe("tasks e2e", () => {
       await expect(c.request("tasks.resume", { id: task.id })).rejects.toMatchObject({
         code: "bad_request",
       });
+    },
+    T,
+  );
+
+  test(
+    "delete stops a live task, removes its rows and emits task.deleted",
+    async () => {
+      const done = await c.request("tasks.create", {
+        agentId: a.id,
+        text: "echo:apagar",
+        requireApproval: false,
+      });
+      await waitTask(done.id, (t) => t.situation === "done");
+      const deleted = c.waitForEventWhere("task.deleted", (d) => d.id === done.id, 10_000);
+      await c.request("tasks.delete", { id: done.id });
+      await deleted;
+      await expect(c.request("tasks.get", { id: done.id })).rejects.toMatchObject({
+        code: "not_found",
+      });
+      await expect(c.request("tasks.history", { id: done.id })).rejects.toMatchObject({
+        code: "not_found",
+      });
+      expect((await c.request("tasks.list", {})).items.map((t) => t.id)).not.toContain(done.id);
+      expect(await c.request("tasks.deliveries", { taskId: done.id })).toEqual([]);
+      const chat = await c.request("chat.history", { agentId: a.id });
+      expect(chat.items.some((i) => i.taskId === done.id)).toBe(false);
+
+      // deleting a running task cancels its turn and frees the agent for new work
+      const running = await c.request("tasks.create", {
+        agentId: a.id,
+        text: "slow",
+        requireApproval: false,
+      });
+      await waitTask(running.id, (t) => t.sessionId !== null);
+      await c.request("tasks.delete", { id: running.id });
+      await expect(c.request("tasks.get", { id: running.id })).rejects.toMatchObject({
+        code: "not_found",
+      });
+      const next = await c.request("tasks.create", {
+        agentId: a.id,
+        text: "echo:depois",
+        requireApproval: false,
+      });
+      await waitTask(next.id, (t) => t.situation === "done");
     },
     T,
   );

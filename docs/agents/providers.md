@@ -15,6 +15,24 @@ API keys use the encrypted VM credential store and only masked suffixes reach th
 new bots without an explicit provider use it. With no saved default, creation still
 requires a provider, as before.
 
+The catalog covers eight providers: claude, codex, gemini, cursor, opencode, aider
+(`aider --acp`), devin and grok. Each entry carries the display `name`, `vendor`
+and `installHint` shown in Settings. `providers.install` runs a supported
+provider's install hint in the background (`sh -c` on Unix, PowerShell on Windows;
+URL-only hints like Devin's docs link are rejected) while `installRunning` /
+`installError` track it, then rescans and broadcasts `providers.changed`.
+`BOTO_PROVIDER_INSTALL_COMMAND_<PROVIDER>` accepts a JSON command array for tests
+and `BOTO_PROVIDER_INSTALL_MS` bounds the run.
+`providers.listApiKeys` reports masked-key state for every `VmCredentialProvider`
+— the six CLI providers plus `openrouter` (`OPENROUTER_API_KEY`) and
+`openai-compatible`. `providers.setApiKey`/`deleteApiKey` accept the same set;
+results are `ProviderInfo` for catalog providers and `ProviderKeyInfo` for the
+non-catalog ones. `providers.setEndpoint {url, apiKey?}` stores the
+OpenAI-compatible base URL in settings (`openai_compatible_endpoint`) and the
+optional key in the vault; deleting the key also clears the URL. The
+`openai-compatible` driver itself is still unsupported, so a configured endpoint
+cannot run sessions or become the default yet.
+
 ## Native Claude + Codex (Phase 4)
 
 `src/providers/index.ts` routes providers: `claude` -> `ClaudeDriver` (`claude.ts`),
@@ -22,7 +40,7 @@ requires a provider, as before.
 stderr tail, JSONL and auth helpers live in `process.ts`.
 
 - Claude: `claude --output-format stream-json --input-format stream-json --verbose
-  --include-partial-messages --permission-prompt-tool stdio --permission-mode default`
+--include-partial-messages --permission-prompt-tool stdio --permission-mode default`
   plus `--session-id <uuid>` (new) or `--resume <id>`; a failed resume falls back to a
   new session. Approvals arrive as `can_use_tool` control requests; cancel sends an
   `interrupt` control request. Config: `mode` (default/acceptEdits/plan, never bypass) and
@@ -46,7 +64,7 @@ passes `remote.credentials` as env). MicroVM sign-in (`vmCredentials`, Settings 
 claude (OAuth token or API key), codex (`OPENAI_API_KEY`), gemini (`GEMINI_API_KEY`), cursor
 (`CURSOR_API_KEY`), devin (`WINDSURF_API_KEY`), and grok (`XAI_API_KEY`). The seven-provider
 image includes the verified Claude Code 2.1.310, Codex 0.164.0, Gemini 0.65.0,
-OpenCode 1.19.4, Cursor Agent 2026.10.22-27dcf5f, Devin 3000.12.17 and Grok 1.0.77.
+OpenCode 1.19.4, Cursor Agent 2026.10.22-27dcf5f, Devin 3000.12.43 and Grok 1.0.77.
 Building all seven providers needs `--size-mib 8192`. Cursor installs
 under `/opt/cursor-agent-home` because `/root` is bind-mounted from persistent storage.
 Signed-out behavior: Gemini reports `gemini`, OpenCode `opencode auth login`, and Cursor
@@ -62,7 +80,7 @@ Firecracker provider env. Gemini invalid-key errors are explicit; Cursor's
 to `api2.cursor.sh` with a microVM credential set, since Cursor returns no explicit invalid-key
 error. `bun run test:firecracker:providers` checks these real ACP flows, credential delivery,
 placement isolation, and plaintext leaks.
-The image also supports Devin 3000.12.17 (`/opt/devin-home`, `WINDSURF_API_KEY`) and
+The image also supports Devin 3000.12.43 (`/opt/devin-home`, `WINDSURF_API_KEY`) and
 Grok 1.0.77 (`/opt/grok-home`, `XAI_API_KEY`), linked as `devin` and `grok` in
 `/usr/local/bin`. Pins can be overridden with `DEVIN_CLI_VERSION` / `GROK_CLI_VERSION`.
 Grok's installer overwrites `/usr/local/bin/agent`; the build preserves and restores
@@ -70,6 +88,21 @@ Cursor's link so only `grok` is exposed there for Grok.
 Remote Grok runs `grok --no-auto-update agent stdio`; with a VM key the client sends
 `authenticate {methodId:"xai.api_key", _meta:{headless:true}}` after initialize, before
 session/new or load, even though initialize advertises only grok.com authentication.
-Devin runs `devin acp`. Both credentials are configured in Settings → Hosts. Signed-out
-sessions report `devin auth login` / `grok login`; fake API keys report a rejected VM
-credential. Real-provider tests cover delivery, placement isolation and plaintext leaks.
+Devin runs `devin acp`. Its ACP server never reads local CLI credentials: the host must
+call `authenticate` on every spawned process, so `devin auth login` signs in only the
+REPL. With the saved API key (Settings → Providers, `vmcred.devin`, also delivered to
+microVMs as `WINDSURF_API_KEY`) Boto sends `authenticate {methodId, _meta:{api_key}}`
+after initialize — `methodId` is the advertised browser method (`devin-browser`,
+falling back to the first advertised id). A Settings → Providers **Entrar** for Devin
+does more than open `devin auth login`: the daemon watches
+`~/.local/share/devin/credentials.toml` for the `windsurf_api_key` the CLI stores and
+imports it into `vmcred.devin` (`BOTO_DEVIN_LOGIN_WATCH_MS`/`BOTO_DEVIN_LOGIN_POLL_MS`
+bound the watch, `BOTO_DEVIN_CREDENTIALS_PATH` overrides the file for tests), so one
+sign-in reaches local sessions and remote placements alike. Devin's `loggedIn` reads
+the saved key or that file. With no key, a local `session/new` or
+`session/load` failing -32000 triggers `authenticate` on that browser method (PKCE
+opens the user's browser and blocks; `BOTO_ACP_BROWSER_AUTH_MS` overrides the
+five-minute bound) and retries once. Remote sessions without a key fail straight to
+`auth_required` — a VM has no browser. Signed-out sessions report the Settings →
+Providers guidance / `grok login`; fake API keys report a rejected VM credential.
+Real-provider tests cover delivery, placement isolation and plaintext leaks.

@@ -102,7 +102,12 @@ describe("desktop.* (daemon e2e with a fake host desktop stream)", () => {
       (d) => d.id === m1.id && d.status === "ready",
       15000,
     );
-    expect(ready).toMatchObject({ width: 1280, height: 800, name: m1.name });
+    expect(ready).toMatchObject({
+      width: 1280,
+      height: 800,
+      name: m1.name,
+      apps: ["Chromium", "Files", "Xfce Terminal"],
+    });
     const frame = await c.waitForEventWhere("desktop.frame", (d) => d.machineId === m1.id, 15000);
     expect(frame).toMatchObject({ machineId: m1.id, mime: "image/jpeg", width: 1280, height: 800 });
     expect(typeof frame.dataBase64).toBe("string");

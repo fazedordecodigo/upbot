@@ -22,7 +22,7 @@ for (const history of ["active", "deleted", "empty"] as const) {
     db.query("INSERT INTO settings (key,value) VALUES ('default_bot_seeded','1')").run();
     db.close();
     const token = crypto.randomUUID();
-    const daemon = await startDaemon(root, agentsRoot, token, { BOTO_DEFAULT_BOT: "on" });
+    const daemon = await startDaemon(root, agentsRoot, token);
     const client = await DaemonClient.connect(daemon.port, token);
     try {
       const bots = await client.request("agents.list", {});
@@ -47,15 +47,20 @@ for (const history of ["active", "deleted", "empty"] as const) {
   }, 30_000);
 }
 
-test("default identity survives RPC rename, instructions, restart and deletion without selecting a namesake", async () => {
+test("the first created bot stays default after rename, restart and custom bots without selecting a namesake", async () => {
   const root = tmp("default-bot-rpc-");
   const token = crypto.randomUUID();
-  const env = { BOTO_DEFAULT_BOT: "on" };
-  let daemon = await startDaemon(root, join(root, "agents"), token, env);
+  const agentsRoot = join(root, "agents");
+  let daemon = await startDaemon(root, agentsRoot, token);
   let client = await DaemonClient.connect(daemon.port, token);
   try {
-    const seeded = (await client.request("agents.list", {})).find((agent) => agent.isDefault)!;
-    expect(seeded.name).toBe("Boto");
+    expect(await client.request("agents.list", {})).toEqual([]);
+    const seeded = await client.request("agents.create", {
+      name: "Boto",
+      provider: "devin",
+      instructions: "",
+    });
+    expect(seeded.isDefault).toBe(true);
     expect(
       await client.request("agents.update", {
         id: seeded.id,
@@ -66,7 +71,7 @@ test("default identity survives RPC rename, instructions, restart and deletion w
     const custom = await client.request("agents.create", { name: "Boto", provider: "devin" });
     expect(custom.isDefault).toBe(false);
     await stopDaemon(daemon, client);
-    daemon = await startDaemon(root, join(root, "agents"), token, env);
+    daemon = await startDaemon(root, agentsRoot, token);
     client = await DaemonClient.connect(daemon.port, token);
     expect(
       (await client.request("agents.list", {}))
@@ -82,7 +87,7 @@ test("default identity survives RPC rename, instructions, restart and deletion w
     });
     await client.request("agents.delete", { id: seeded.id });
     await stopDaemon(daemon, client);
-    daemon = await startDaemon(root, join(root, "agents"), token, env);
+    daemon = await startDaemon(root, agentsRoot, token);
     client = await DaemonClient.connect(daemon.port, token);
     expect((await client.request("agents.list", {})).some((agent) => agent.isDefault)).toBe(false);
   } finally {

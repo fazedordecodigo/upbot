@@ -50,6 +50,23 @@ export function AgentPanel({
     { agentId },
     { events: { "memories.changed": (data) => data.agentId === agentId } },
   );
+  const placements = useDaemonQuery(
+    client,
+    "placements.list",
+    {},
+    {
+      events: {
+        "placement.updated": (data) => data.agentId === agentId,
+        "hosts.changed": true,
+      },
+    },
+  );
+  const hosts = useDaemonQuery(
+    client,
+    "hosts.list",
+    {},
+    { events: { "hosts.changed": true, "localvm.changed": true } },
+  );
   const config = useDaemonQuery(
     client,
     "agents.configOptions",
@@ -64,6 +81,12 @@ export function AgentPanel({
   const input = useRef<HTMLTextAreaElement>(null);
   const immediate = !overview.paused && overview.instances.active < overview.instances.capacity;
   const last = history.data?.items.filter((item) => item.kind === "agent_message").at(-1);
+  const placement = placements.data?.find((p) => p.agentId === agentId);
+  const placementValue = !placement?.hostId
+    ? ""
+    : placement.isolation === "firecracker"
+      ? `${placement.hostId}:fc`
+      : placement.hostId;
   async function delegate() {
     if (busy) return;
     if (!text.trim()) {
@@ -99,6 +122,23 @@ export function AgentPanel({
       await client.request(overview.paused ? "queue.resume" : "queue.pause", { agentId });
     } catch (e) {
       toast(errorMessage(e));
+    }
+  }
+  async function changePlacement(value: string) {
+    setSaving(true);
+    setSettingsError("");
+    const firecracker = value.endsWith(":fc");
+    const hostId = firecracker ? value.slice(0, -3) : value;
+    try {
+      await client.request("placements.set", {
+        agentId,
+        hostId: hostId || null,
+        isolation: firecracker ? "firecracker" : "none",
+      });
+    } catch (e) {
+      setSettingsError(errorMessage(e));
+    } finally {
+      setSaving(false);
     }
   }
   async function deleteAgent() {
@@ -270,6 +310,37 @@ export function AgentPanel({
               <div className="ap-row od-row">
                 <span className="ap-row-name">Provedor</span>
                 <span>{PROVIDER_NAMES[agent.provider]}</span>
+              </div>
+              <div className="ap-row od-row">
+                <span className="od-field od-fill">
+                  <span className="ap-row-name" id="ap-place-label">
+                    Onde ele trabalha
+                  </span>
+                  <span className="ap-row-help">
+                    Neste Mac, numa VM local ou numa máquina remota.
+                  </span>
+                </span>
+                <select
+                  id="ap-place"
+                  aria-labelledby="ap-place-label"
+                  disabled={saving || !placements.loaded}
+                  value={placementValue}
+                  onChange={(e) => void changePlacement(e.target.value)}
+                >
+                  <option value="">Este Mac</option>
+                  {(hosts.data ?? []).flatMap((h) => [
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                    </option>,
+                    ...(h.preflight?.firecrackerReady
+                      ? [
+                          <option key={`${h.id}:fc`} value={`${h.id}:fc`}>
+                            {h.name} — microVM
+                          </option>,
+                        ]
+                      : []),
+                  ])}
+                </select>
               </div>
               <div className="ap-row od-row">
                 <span className="od-field od-fill">

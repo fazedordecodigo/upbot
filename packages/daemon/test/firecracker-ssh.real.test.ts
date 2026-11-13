@@ -546,7 +546,7 @@ describe.skipIf(!enabled)("real Firecracker SSH integration", () => {
         gemini: "gemini",
         opencode: "opencode auth login",
         cursor: "agent login",
-        devin: "devin auth login",
+        devin: "Devin API key",
         grok: "grok login",
       } as const;
       for (const provider of ["gemini", "opencode", "cursor", "devin", "grok"] as const) {

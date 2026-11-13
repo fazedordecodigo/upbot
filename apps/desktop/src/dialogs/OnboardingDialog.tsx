@@ -1,11 +1,13 @@
+import type { Agent, ProviderInfo } from "@boto/protocol";
 import { type KeyboardEvent, useEffect, useState } from "react";
-import { onboardingErrorMessage } from "../lib/errors";
+import { errorMessage, onboardingErrorMessage } from "../lib/errors";
 import { dayGreeting } from "../lib/greeting";
 import { errorFields, logWarn } from "../lib/log";
 import { isMac } from "../lib/platform";
 import { setThemePreference } from "../lib/theme";
 import { useDaemon } from "../shell/daemon";
 import { Dialog } from "../ui/Dialog";
+import { useToast } from "../ui/Toast";
 import "./OnboardingDialog.css";
 
 const modeLabels = { now: "Executar agora", scheduled: "Agendar", approval: "Pedir aprovação" };
@@ -29,7 +31,8 @@ function radioKeys(event: KeyboardEvent<HTMLButtonElement>) {
   radios[next]?.focus();
 }
 export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { client, connected } = useDaemon();
+  const { client, connected, agents } = useDaemon();
+  const toast = useToast();
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [about, setAbout] = useState("");
@@ -39,12 +42,23 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [botName, setBotName] = useState("");
+  const [botRole, setBotRole] = useState("");
+  const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
+  const [defaultProvider, setDefaultProvider] = useState<ProviderInfo["id"] | null>(null);
+  const [botProvider, setBotProvider] = useState<ProviderInfo["id"] | "">("");
+  const [createdBot, setCreatedBot] = useState<Agent | null>(null);
   useEffect(() => {
     if (!open || !connected) return;
     let active = true;
     setStep(1);
     setLoaded(false);
     setError(null);
+    setBotName("");
+    setBotRole("");
+    setBotProvider("");
+    setProviders(null);
+    setCreatedBot(null);
     void client
       .request("profile.get", {})
       .then((profile) => {
@@ -60,11 +74,30 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
         logWarn("onboarding.load_failed", errorFields(cause));
         if (active) setError("Não foi possível carregar suas preferências. Tente de novo.");
       });
+    void Promise.all([
+      client.request("providers.list", {}),
+      client.request("providers.getDefault", {}),
+    ])
+      .then(([list, fallback]) => {
+        if (!active) return;
+        setProviders(list);
+        setDefaultProvider(fallback.provider);
+        const ready = list.filter((provider) => provider.ready);
+        setBotProvider(
+          ready.find((provider) => provider.id === fallback.provider)?.id ?? ready[0]?.id ?? "",
+        );
+      })
+      .catch((cause: unknown) => {
+        logWarn("onboarding.providers_failed", errorFields(cause));
+        if (active) setProviders([]);
+      });
     return () => {
       active = false;
     };
   }, [client, open, connected]);
   const greeting = `${dayGreeting(new Date().getHours())}${name.trim() ? `, ${name.trim()}` : ""}.`;
+  const readyProviders = (providers ?? []).filter((provider) => provider.ready);
+  const providerName = readyProviders.find((provider) => provider.id === botProvider)?.name;
   const chooseTheme = (value: "dark" | "light") => {
     setTheme(value);
     setThemePreference(value);
@@ -74,6 +107,29 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
     setBusy(true);
     setError(null);
     try {
+      if (step === 5 && !createdBot && botName.trim() && botProvider) {
+        if (!defaultProvider)
+          try {
+            await client.request("providers.setDefault", { provider: botProvider });
+          } catch (cause: unknown) {
+            logWarn("onboarding.set_default_provider_failed", errorFields(cause));
+          }
+        const agent = await client
+          .request("agents.create", {
+            name: botName.trim(),
+            role: botRole.trim(),
+            provider: botProvider,
+            requireApproval: mode !== "now",
+          })
+          .catch((cause: unknown) => {
+            logWarn("onboarding.create_bot_failed", errorFields(cause));
+            setError(errorMessage(cause));
+            return null;
+          });
+        if (!agent) return;
+        setCreatedBot(agent);
+        toast(`${agent.name} foi criado.`);
+      }
       await client.request("profile.update", {
         name,
         about,
@@ -222,6 +278,35 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
             </div>
           </div>
         </div>
+
+        <div className="ob-scene" data-ob-scene="5" hidden={step !== 5}>
+          <div className="ob-mock">
+            <div className="ob-mock-head od-row">
+              <span className="ob-mock-avatar">
+                <img width="15" height="15" src="/assets/boto-simbolo.svg" alt="" />
+              </span>
+              <div className="od-field od-fill">
+                <p className="ob-mock-title" id="ob-card-name">
+                  {botName.trim() || "Seu bot"}
+                </p>
+                <p className="ob-mock-meta" id="ob-card-role">
+                  {botRole.trim() || "Uso geral"}
+                </p>
+              </div>
+              <span className="badge badge-secondary">Padrão</span>
+            </div>
+            <dl className="ob-memory-list">
+              <div>
+                <dt>Provedor</dt>
+                <dd id="ob-card-provider">{providerName ?? "—"}</dd>
+              </div>
+            </dl>
+            <div className="ob-memory-greet">
+              <p className="ob-memory-greet-sub">Ele aparece em Bots e recebe suas tarefas</p>
+              <p className="ob-memory-greet-title">O que eu devo fazer hoje?</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="ob-panel">
@@ -275,9 +360,21 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
                 title="Passo 4: Do seu jeito"
               ></button>
             </li>
+            <li>
+              <button
+                type="button"
+                className="ob-dot"
+                data-ob-go="5"
+                aria-current={step === 5 ? "step" : undefined}
+                onClick={() => setStep(5)}
+                aria-label="Passo 5: Seu primeiro bot"
+                data-tip="Passo 5: Seu primeiro bot"
+                title="Passo 5: Seu primeiro bot"
+              ></button>
+            </li>
           </ol>
           <p className="ob-count od-nowrap" id="ob-count">
-            Passo {step} de 4
+            Passo {step} de 5
           </p>
           <span className="od-fill"></span>
           <button
@@ -291,7 +388,7 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
           </button>
         </div>
         <p className="sr-only" aria-live="polite" id="ob-live">
-          Passo {step} de 4
+          Passo {step} de 5
         </p>
 
         <div className="ob-content od-scroll">
@@ -584,6 +681,95 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
               <span className="kbd">{isMac ? "⌘K" : "Ctrl K"}</span>
             </p>
           </section>
+
+          <section
+            className="ob-step"
+            data-ob-step="5"
+            hidden={step !== 5}
+            aria-labelledby="ob-title-5"
+          >
+            <div className="ob-intro">
+              <p className="ob-eyebrow">Seu primeiro bot</p>
+              <h2 className="ob-title" id="ob-title-5">
+                Crie um bot para começar
+              </h2>
+              <p className="ob-lead">
+                Um bot é um colega com uma especialidade. Ele usa as ferramentas do computador do
+                Boto e pede sua permissão na primeira vez que usa cada uma numa sessão.
+              </p>
+            </div>
+            {createdBot ? (
+              <p className="ob-note" role="status">
+                {createdBot.name} foi criado e já é seu bot padrão.
+              </p>
+            ) : (
+              <>
+                {agents.length > 0 && (
+                  <p className="ob-note" id="ob-bot-existing">
+                    Você já tem {agents.length === 1 ? "um bot" : `${agents.length} bots`}. Preencha
+                    o nome para criar outro ou continue sem criar.
+                  </p>
+                )}
+                <div className="field">
+                  <label className="label" htmlFor="ob-bot-name">
+                    Nome
+                  </label>
+                  <input
+                    className="input"
+                    id="ob-bot-name"
+                    maxLength={32}
+                    autoComplete="off"
+                    placeholder="Por exemplo: Financeiro"
+                    value={botName}
+                    onChange={(event) => setBotName(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="ob-bot-role">
+                    O que ele faz <span className="label-opt">(opcional)</span>
+                  </label>
+                  <textarea
+                    className="textarea"
+                    id="ob-bot-role"
+                    rows={2}
+                    maxLength={140}
+                    placeholder="Por exemplo: confere as notas fiscais e atualiza a planilha do financeiro"
+                    value={botRole}
+                    onChange={(event) => setBotRole(event.target.value)}
+                  ></textarea>
+                </div>
+                {providers === null ? (
+                  <p className="ob-note">Procurando provedores nesta máquina…</p>
+                ) : readyProviders.length ? (
+                  <div className="field">
+                    <label className="label" htmlFor="ob-bot-provider">
+                      Provedor
+                    </label>
+                    <select
+                      className="input"
+                      id="ob-bot-provider"
+                      value={botProvider}
+                      onChange={(event) => setBotProvider(event.target.value as ProviderInfo["id"])}
+                    >
+                      {readyProviders.map((provider) => (
+                        <option key={provider.id} value={provider.id}>
+                          {provider.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="field-help">
+                      É a IA que executa as tarefas do bot. Dá para trocar depois, em Bots.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="ob-note">
+                    Nenhum provedor pronto nesta máquina. Instale uma CLI e entre com a conta em
+                    Configurações → Provedores — você pode criar o bot depois, em Bots.
+                  </p>
+                )}
+              </>
+            )}
+          </section>
         </div>
 
         <div className="ob-foot">
@@ -602,10 +788,16 @@ export function OnboardingDialog({ open, onClose }: { open: boolean; onClose: ()
             className="btn btn-primary"
             id="ob-next"
             disabled={!loaded || busy}
-            onClick={() => (step === 4 ? void finish() : setStep(step + 1))}
+            onClick={() => (step === 5 ? void finish() : setStep(step + 1))}
           >
             <span className="ob-next-label">
-              {busy ? "Salvando…" : step === 4 ? "Começar" : "Continuar"}
+              {busy
+                ? "Salvando…"
+                : step === 5
+                  ? createdBot || !botName.trim() || !botProvider
+                    ? "Começar"
+                    : "Criar bot e começar"
+                  : "Continuar"}
             </span>
             <svg className="od-icon" aria-hidden="true">
               <use href="/assets/icons.svg#i-arrow-right"></use>

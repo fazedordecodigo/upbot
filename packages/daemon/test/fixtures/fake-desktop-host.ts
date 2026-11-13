@@ -48,7 +48,16 @@ rl.on("line", (raw) => {
         process.exit(0);
       }, 50).unref();
     setTimeout(
-      () => send({ type: "ready", width: 1280, height: 800, name: `fake-${agentId}` }),
+      () =>
+        send({
+          type: "ready",
+          width: 1280,
+          height: 800,
+          name: `fake-${agentId}`,
+          apps: process.env.FAKE_DESKTOP_APPS
+            ? JSON.parse(process.env.FAKE_DESKTOP_APPS)
+            : ["Chromium", "Files", "Xfce Terminal"],
+        }),
       20,
     );
     return;

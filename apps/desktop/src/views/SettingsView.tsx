@@ -4,7 +4,7 @@ import { errorFields, logWarn } from "../lib/log";
 import { readSidebarWidth, setSidebarWidth } from "../lib/sidebar-width";
 import { readStorage } from "../lib/storage";
 import { setThemePreference, useThemePref } from "../lib/theme";
-import { Memories } from "../settings/Memories";
+import { LocalVm } from "../settings/LocalVm";
 import { Permissions } from "../settings/Permissions";
 import { Providers } from "../settings/Providers";
 import { QueryState } from "../settings/QueryState";
@@ -18,6 +18,7 @@ import "./SettingsView.css";
 
 const tabs: { id: string; label: string; icon: IconName }[] = [
   { id: "provider", label: "Provedor de IA", icon: "cpu" },
+  { id: "computer", label: "Computador", icon: "monitor" },
   { id: "memory", label: "Você e a memória", icon: "user-check" },
   { id: "appearance", label: "Aparência", icon: "palette" },
   { id: "privacy", label: "Privacidade", icon: "shield-check" },
@@ -159,11 +160,11 @@ export function SettingsView() {
                     event.key === "Home"
                       ? 0
                       : event.key === "End"
-                        ? 3
+                        ? tabs.length - 1
                         : ["ArrowDown", "ArrowRight"].includes(event.key)
-                          ? (index + 1) % 4
+                          ? (index + 1) % tabs.length
                           : ["ArrowUp", "ArrowLeft"].includes(event.key)
-                            ? (index + 3) % 4
+                            ? (index + tabs.length - 1) % tabs.length
                             : null;
                   const nextTab = next === null ? undefined : tabs[next];
                   if (nextTab) {
@@ -189,6 +190,16 @@ export function SettingsView() {
               hidden={tab !== "provider"}
             >
               <Providers />
+            </section>
+            <section
+              className="st-panel"
+              id="st-computer"
+              role="tabpanel"
+              aria-labelledby="st-tab-computer"
+              tabIndex={-1}
+              hidden={tab !== "computer"}
+            >
+              <LocalVm />
             </section>
             <section
               className="st-panel"
@@ -283,7 +294,6 @@ export function SettingsView() {
                   </div>
                 </QueryState>
               </div>
-              <Memories />
               <div className="st-note">
                 <h3 className="st-subtitle">Como o Boto usa a memória</h3>
                 <ul className="st-points">

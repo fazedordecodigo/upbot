@@ -91,6 +91,8 @@ const state = {
     effort: undefined as string | undefined,
   },
 };
+// Per-process like a real ACP agent (never persisted to state.json).
+let authenticated = false;
 try {
   Object.assign(state, JSON.parse(readFileSync(join(STATE_DIR, "state.json"), "utf8")));
 } catch {}
@@ -192,6 +194,7 @@ async function handlePrompt(ctx: Ctx): Promise<{ stopReason: string }> {
   const full = (prompt?.[0]?.text ?? "")
     .replace(/^[\s\S]*<\/agent_message_context>\n/, "")
     .replace(/^[\s\S]*<\/channel_context>\n[^\n]*\n/, "")
+    .replace(/^[\s\S]*<\/collaboration_context>\n[^\n]*\n/, "")
     // group-chat quotes and leading @mentions are addressing, not part of the command
     .replace(/^<in_reply_to[^>]*>[\s\S]*?<\/in_reply_to>\n/, "")
     .replace(/^(?:@[\w-]+\s+)+/, "");
@@ -388,6 +391,25 @@ async function handlePrompt(ctx: Ctx): Promise<{ stopReason: string }> {
     return { stopReason: "end_turn" };
   }
 
+  if (text === "plan") {
+    const entries = (status: string[]) => ({
+      sessionId,
+      update: {
+        sessionUpdate: "plan",
+        entries: [
+          { content: "Clonar o repositório", priority: "high", status: status[0] },
+          { content: "Rodar os testes", priority: "medium", status: status[1] },
+          { content: "Abrir o PR", priority: "low", status: status[2] },
+        ],
+      },
+    });
+    await ctx.client.notify("session/update", entries(["completed", "in_progress", "pending"]));
+    await sleep(50);
+    await ctx.client.notify("session/update", entries(["completed", "completed", "completed"]));
+    await say("agent_message_chunk", "plan:done");
+    return { stopReason: "end_turn" };
+  }
+
   if (text === "slow") {
     while (!cancelledSessions.has(sessionId)) {
       await say("agent_message_chunk", ".");
@@ -464,7 +486,9 @@ acp
         promptCapabilities: { image: false, audio: false, embeddedContext: true },
         mcpCapabilities: { http: false, sse: false },
       },
-      authMethods: [],
+      authMethods: process.env.FAKE_ACP_AUTH_METHODS
+        ? JSON.parse(process.env.FAKE_ACP_AUTH_METHODS)
+        : [],
     } as never;
   })
   .onRequest("authenticate", async (ctx) => {
@@ -472,10 +496,14 @@ acp
     if (process.env.FAKE_ACP_AUTH_ERROR) {
       throw new acp.RequestError(-32603, process.env.FAKE_ACP_AUTH_ERROR);
     }
+    authenticated = true;
     return {};
   })
   .onRequest("session/new", async (ctx) => {
     logRequest("session/new", ctx.params);
+    if (process.env.FAKE_ACP_REQUIRE_AUTH && !authenticated) {
+      throw new acp.RequestError(-32000, "ACP host has not authenticated");
+    }
     if (process.env.FAKE_ACP_NEW_ERROR) {
       const code = Number.parseInt(process.env.FAKE_ACP_NEW_ERROR_CODE ?? "", 10) || -32603;
       throw new acp.RequestError(code, process.env.FAKE_ACP_NEW_ERROR);
@@ -495,6 +523,9 @@ acp
   .onRequest("session/load", async (ctx) => {
     const params = ctx.params as { sessionId: string; cwd?: string; mcpServers?: McpSpec[] };
     logRequest("session/load", params);
+    if (process.env.FAKE_ACP_REQUIRE_AUTH && !authenticated) {
+      throw new acp.RequestError(-32000, "ACP host has not authenticated");
+    }
     if (process.env.FAKE_ACP_LOAD_BEHAVIOR === "close") process.exit(1);
     if (process.env.FAKE_ACP_LOAD_BEHAVIOR === "error") throw new Error("session load failed");
     if (process.env.FAKE_ACP_LOAD_BEHAVIOR === "auth") throw acp.RequestError.authRequired();

@@ -5,6 +5,7 @@ import {
   type AgentsCockpitEventMap,
   agentsCockpitMethods,
 } from "./agents-cockpit";
+import { type CollaborationEventMap, collaborationMethods } from "./collaborations";
 import { MemoryUsage, type Profile, profileMethods } from "./profile";
 import {
   AppSecretSpec,
@@ -12,6 +13,9 @@ import {
   providersCatalogMethods,
   providersCreateParams,
   toolPermissionMethods,
+  VmCredential,
+  VmCredentialKind,
+  VmCredentialProvider,
 } from "./providers-catalog";
 import {
   Task,
@@ -32,6 +36,7 @@ import { ToolMode, templateMethods } from "./templates";
 import { type DesktopEventMap, desktopMethodMap } from "./vm-desktop";
 
 export * from "./agents-cockpit";
+export * from "./collaborations";
 export * from "./profile";
 export * from "./providers-catalog";
 export * from "./tasks";
@@ -46,6 +51,7 @@ export const PROVIDER_PERMISSION_CONFIG: Record<string, string | null> = {
   gemini: "~/.gemini/settings.json",
   claude: "~/.claude/settings.json",
   codex: "~/.codex/config.toml",
+  aider: "~/.aider.conf.yml",
   "openai-compatible": null,
 };
 
@@ -57,6 +63,7 @@ export const ProviderId = z.enum([
   "gemini",
   "claude",
   "codex",
+  "aider",
   "openai-compatible",
 ]);
 export type ProviderId = z.infer<typeof ProviderId>;
@@ -178,6 +185,12 @@ export type PermissionOption = z.infer<typeof PermissionOption>;
 export const ToolCallStatus = z.enum(["pending", "in_progress", "completed", "failed"]);
 export type ToolCallStatus = z.infer<typeof ToolCallStatus>;
 
+export const PlanEntry = z.object({
+  content: z.string(),
+  status: z.enum(["pending", "in_progress", "completed"]),
+});
+export type PlanEntry = z.infer<typeof PlanEntry>;
+
 const ChatItemBase = z.object({
   id: z.string(),
   seq: z.number(),
@@ -222,6 +235,7 @@ export const ChatItem = z.discriminatedUnion("kind", [
     memoryUsage: MemoryUsage.optional(),
   }),
   ChatItemBase.extend({ kind: z.literal("agent_thought"), text: z.string() }),
+  ChatItemBase.extend({ kind: z.literal("plan"), entries: z.array(PlanEntry) }),
   ChatItemBase.extend({
     kind: z.literal("tool_call"),
     toolCallId: z.string(),
@@ -256,6 +270,7 @@ export const PendingPermission = z.object({
   title: z.string(),
   toolKind: z.string().nullable(),
   options: z.array(PermissionOption),
+  createdAt: z.number(),
 });
 export type PendingPermission = z.infer<typeof PendingPermission>;
 
@@ -479,6 +494,8 @@ export const SshTarget = z
   .string()
   .max(255)
   .regex(/^(?:[A-Za-z0-9._][A-Za-z0-9._-]*@)?[A-Za-z0-9][A-Za-z0-9.-]*$/, "expected user@host");
+export const HostKind = z.enum(["ssh", "localvm"]);
+export type HostKind = z.infer<typeof HostKind>;
 export const RemoteHost = z.object({
   id: z.string(),
   name: z.string(),
@@ -488,31 +505,33 @@ export const RemoteHost = z.object({
   root: z.string().nullable(),
   preflight: HostPreflight.nullable(),
   createdAt: z.number(),
+  kind: HostKind.default("ssh"),
 });
 export type RemoteHost = z.infer<typeof RemoteHost>;
+/** The local Lima VM ("VM Linux local") the daemon manages on this machine. */
+export const LocalVmStatus = z.object({
+  /** limactl is installed and callable. */
+  available: z.boolean(),
+  /** Lima instance name. */
+  name: z.string(),
+  state: z.enum(["absent", "stopped", "running", "broken"]),
+  /** In-flight operation description ("Criando…"), null when idle. */
+  busy: z.string().nullable(),
+  /** Synced hosts row (kind "localvm"), null until the VM first runs. */
+  hostId: z.string().nullable(),
+  /** boto-host installed and preflight answered on the VM. */
+  installed: z.boolean(),
+  /** Last error or progress note. */
+  detail: z.string().nullable(),
+});
+export type LocalVmStatus = z.infer<typeof LocalVmStatus>;
 const IdentityFile = z
   .string()
   .max(1000)
-  .regex(/^(?:\/|~\/)[^\n\r]*$/, "absolute path to a private key file")
+  .regex(/^(?:\/|~\/|[A-Za-z]:[\\/])[^\n\r]*$/, "absolute path to a private key file")
   .nullable();
-/** Provider logins injected into Firecracker microVM sessions (values never leave the daemon). */
-export const VmCredentialProvider = z.enum([
-  "claude",
-  "codex",
-  "gemini",
-  "cursor",
-  "devin",
-  "grok",
-]);
-export type VmCredentialProvider = z.infer<typeof VmCredentialProvider>;
-export const VmCredentialKind = z.enum(["oauth_token", "api_key"]);
-export type VmCredentialKind = z.infer<typeof VmCredentialKind>;
-export const VmCredential = z.object({
-  provider: VmCredentialProvider,
-  kind: VmCredentialKind,
-  updatedAt: z.number(),
-});
-export type VmCredential = z.infer<typeof VmCredential>;
+// VmCredentialProvider, VmCredentialKind and VmCredential live in
+// providers-catalog.ts and are re-exported through `export *` above.
 
 export const AgentPlacement = z.object({
   agentId: z.string(),
@@ -704,6 +723,8 @@ export const Approval = z.object({
   id: z.string(),
   agentId: z.string(),
   turnId: z.string().nullable(),
+  /** Table the approval was raised in, when the turn belongs to a collaboration member. */
+  collaborationId: z.string().nullable(),
   kind: z.enum(["tool", "secret", "takeover"]),
   title: z.string(),
   detail: z.string(),
@@ -976,6 +997,12 @@ export const methodMap = {
   },
   "hosts.install": { params: z.object({ id: z.string() }).strict(), result: RemoteHost },
   "hosts.check": { params: z.object({ id: z.string() }).strict(), result: RemoteHost },
+  "localvm.status": { params: z.object({}).strict(), result: LocalVmStatus },
+  "localvm.create": { params: z.object({}).strict(), result: LocalVmStatus },
+  "localvm.start": { params: z.object({}).strict(), result: LocalVmStatus },
+  "localvm.stop": { params: z.object({}).strict(), result: LocalVmStatus },
+  "localvm.delete": { params: z.object({}).strict(), result: LocalVmStatus },
+  "localvm.install": { params: z.object({}).strict(), result: LocalVmStatus },
   "vmCredentials.list": { params: z.object({}).strict(), result: z.array(VmCredential) },
   "vmCredentials.set": {
     params: z
@@ -1316,6 +1343,7 @@ export const methodMap = {
   "tasks.pause": { params: TasksIdParams, result: Task },
   "tasks.resume": { params: TasksIdParams, result: Task },
   "tasks.stop": { params: TasksIdParams, result: Task },
+  "tasks.delete": { params: TasksIdParams, result: z.object({ ok: z.literal(true) }) },
   "tasks.rename": { params: TasksRenameParams, result: Task },
   "tasks.search": {
     params: TasksSearchParams,
@@ -1324,6 +1352,7 @@ export const methodMap = {
   "tasks.deliveries": { params: TasksDeliveriesParams, result: z.array(TaskDelivery) },
   ...desktopMethodMap,
   ...agentsCockpitMethods,
+  ...collaborationMethods,
 } as const;
 
 export type MethodName = keyof typeof methodMap;
@@ -1361,6 +1390,7 @@ export type DaemonEventMap = AgentsCockpitEventMap & {
   "team.updated": TeamStatus;
   "team.message": TeamMessage;
   "hosts.changed": Record<string, never>;
+  "localvm.changed": LocalVmStatus;
   "placement.updated": AgentPlacement;
   "subagent.updated": Subagent;
   "gateway.deleted": { id: string };
@@ -1376,5 +1406,7 @@ export type DaemonEventMap = AgentsCockpitEventMap & {
   "task.created": Task;
   "task.updated": Task;
   "task.delivery": TaskDelivery;
+  "task.deleted": { id: string };
   "task.event": { taskId: string; event: string; data: unknown };
-} & DesktopEventMap;
+} & DesktopEventMap &
+  CollaborationEventMap;

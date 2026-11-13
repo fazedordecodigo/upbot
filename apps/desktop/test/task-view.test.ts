@@ -72,7 +72,7 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
       "Este bot não tem uma área de trabalho",
     );
     expect(await page.locator("#task-desk").innerText()).toContain(
-      "Este bot trabalha sem área de trabalho. Ela está disponível para bots em uma microVM.",
+      "Este bot trabalha sem área de trabalho. Ela está disponível para bots em uma máquina virtual.",
     );
     await page.locator("#instruct-input").fill("echo: oi");
     await page.locator("#instruct-input").press("Enter");
@@ -88,6 +88,12 @@ test("task timeline, real desktop stream, takeover, split, VM dialog and mobile 
     await page.getByRole("button", { name: "Aprovar", exact: true }).click();
     await page.getByText("tool-ok:note-created", { exact: true }).waitFor();
     expect(await page.locator("#timeline").innerText()).toMatch(/Aprovada · \d{2}:\d{2}/);
+    await page.locator("#instruct-input").fill("plan");
+    await page.locator("#instruct-input").press("Enter");
+    const planCard = page.locator(".task-plan");
+    await planCard.getByText("3 de 3 etapas concluídas").waitFor();
+    expect(await planCard.locator(".task-plan-list li").count()).toBe(3);
+    await page.getByText("plan:done", { exact: true }).waitFor();
     await page.reload();
     const approval = page.locator(".task-card").filter({ hasText: "Aprovada" });
     await approval.waitFor();

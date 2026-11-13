@@ -16,19 +16,20 @@ when the task touches that area — do not preload every reference.
 
 ## Topic reference
 
-| When working on… | Read |
-| --- | --- |
-| Bots, persona, email, connected apps, Pages, group chat / nav | [docs/agents/product.md](docs/agents/product.md) |
-| Approvals, audit, notifications, badges, restart leftovers | [docs/agents/approvals.md](docs/agents/approvals.md) |
-| Chat runtime, queue, config, permission cards | [docs/agents/runtime.md](docs/agents/runtime.md) |
-| Claude / Codex drivers, ACP providers, microVM provider auth | [docs/agents/providers.md](docs/agents/providers.md) |
-| Bridge, channels, usage/compaction, memories/skills, routines, browser | [docs/agents/collaboration.md](docs/agents/collaboration.md) |
-| Vault, connectors, Computer Use, voice | [docs/agents/secrets-platform.md](docs/agents/secrets-platform.md) |
-| Gateways, marketplace, mobile companion, teams/relay | [docs/agents/connectivity.md](docs/agents/connectivity.md) |
-| Hosts, Firecracker placement, subagents (implementation) | [docs/agents/remote.md](docs/agents/remote.md) |
-| Host setup / guest image (operator guide) | [docs/remote-hosts.md](docs/remote-hosts.md) |
-| CI, release, updater, branding | [docs/agents/shipping.md](docs/agents/shipping.md) |
-| Rio Negro design system | [DESIGN.md](DESIGN.md) |
+| When working on…                                                       | Read                                                               |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Bots, persona, email, connected apps, Pages, group chat / nav          | [docs/agents/product.md](docs/agents/product.md)                   |
+| Approvals, audit, notifications, badges, restart leftovers             | [docs/agents/approvals.md](docs/agents/approvals.md)               |
+| Chat runtime, queue, config, permission cards                          | [docs/agents/runtime.md](docs/agents/runtime.md)                   |
+| Claude / Codex drivers, ACP providers, microVM provider auth           | [docs/agents/providers.md](docs/agents/providers.md)               |
+| Bridge, channels, usage/compaction, memories/skills, routines, browser | [docs/agents/collaboration.md](docs/agents/collaboration.md)       |
+| Vault, connectors, Computer Use, voice                                 | [docs/agents/secrets-platform.md](docs/agents/secrets-platform.md) |
+| Gateways, marketplace, mobile companion, teams/relay                   | [docs/agents/connectivity.md](docs/agents/connectivity.md)         |
+| Hosts, local VM, Firecracker placement, subagents (implementation)     | [docs/agents/remote.md](docs/agents/remote.md)                     |
+| Host setup / guest image (operator guide)                              | [docs/remote-hosts.md](docs/remote-hosts.md)                       |
+| Local Linux VM via Lima (operator guide)                               | [docs/local-vm.md](docs/local-vm.md)                               |
+| CI, release, updater, branding                                         | [docs/agents/shipping.md](docs/agents/shipping.md)                 |
+| Rio Negro design system                                                | [DESIGN.md](DESIGN.md)                                             |
 
 ## Layout
 
@@ -44,7 +45,13 @@ when the task touches that area — do not preload every reference.
   workspace folders are never removed. Settings use `src/db/settings.ts` (zod-validated;
   invalid rows throw `InvalidSettingError`, surfaced over RPC as `internal` naming the key;
   boot-time mobile/team consumers keep the feature off and log; `default_bot_seeded` is a
-  presence check). Tests: `test/settings.e2e.test.ts`.
+  presence check that only gates the legacy UpBot→Boto migration — no bot is seeded on fresh
+  installs, and the first one created is adopted as `default_bot_id`). Tests:
+  `test/settings.e2e.test.ts`.
+- `vm/boto-computer.yaml` — Lima recipe for the local Linux VM (embedded into the daemon;
+  `LocalVmService` in `packages/daemon/src/remote/localvm.ts` drives `limactl`, synced as a
+  `kind: "localvm"` hosts row). vz on macOS, qemu on Linux, wsl2 on Windows — the recipe is
+  rewritten per host OS at materialize time. See [docs/local-vm.md](docs/local-vm.md).
 - `apps/desktop` — Tauri 2 + React 19 + Vite. Rust spawns the sidecar via
   `tauri-plugin-shell`, parses the READY line, and exposes `daemon_connection` ->
   `{port, token}`. Frontend WS client: `src/lib/daemon.ts`.
@@ -65,8 +72,8 @@ when the task touches that area — do not preload every reference.
   `apps/desktop/src-tauri/binaries/` (Tauri externalBin naming);
   `bun scripts/build-daemon.ts --target <rust-triple>` selects a supported cross-build target.
 - `bun run dev` — build the sidecar, then `tauri dev` (Vite on :1420).
-- `bun run build:app` — build the debug desktop bundle for the host platform (macOS app,
-  Linux AppImage/deb, or Windows NSIS).
+- `bun run build:app` — build the debug desktop bundle for the host platform (macOS
+  app/DMG, Linux AppImage/deb, or Windows NSIS).
 - `bun run test` — `bun test packages/daemon packages/host packages/relay apps/desktop/test` (daemon e2e and desktop browser tests).
 - Process-spawning tests need explicit timeouts beyond their internal startup/polling
   deadlines: apps and voice e2e use 30s; updater metadata allows Python 30s and the test
@@ -89,3 +96,20 @@ when the task touches that area — do not preload every reference.
   and invalid params return `bad_request`.
 - The daemon requires `Authorization: Bearer <token>` on `/health` and `?token=` on
   `/ws`; Origin headers outside the Tauri/localhost allowlist get 403.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as markdown files under `.scratch/<feature-slug>/` (one ticket per file).
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical roles map 1:1 to label strings (`needs-triage`, `needs-info`, `ready-for-agent`,
+`ready-for-human`, `wontfix`), recorded as a `Status:` line in local issue files.
+See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

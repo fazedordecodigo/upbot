@@ -15,6 +15,7 @@ export const DEFAULT_COMMANDS: Record<ProviderId, string[] | null> = {
   gemini: ["gemini", "--acp"],
   claude: ["claude"],
   codex: ["codex", "app-server", "--listen", "stdio://"],
+  aider: ["aider", "--acp"],
   "openai-compatible": null,
 };
 
@@ -33,6 +34,12 @@ const LOGIN_HINTS: Partial<Record<ProviderId, string>> = {
   gemini: "and choose Sign in with Google, Use Gemini API Key or Vertex AI",
 };
 
+/** Sign-in instructions for providers whose terminal login does not cover agent sessions. */
+const AUTH_GUIDANCE: Partial<Record<ProviderId, string>> = {
+  devin:
+    "Save a Devin API key under Settings → Providers, or approve the browser sign-in that opens when a session starts",
+};
+
 export const AUTH_RE =
   /\b(auth(entication)?[ _-]?(required|failed)|failed to authenticate|unauthori[sz]ed|not (logged|signed) in|log ?in required|sign ?in required|please run \/login|please log in)\b/i;
 
@@ -42,7 +49,9 @@ const VM_CREDENTIAL_REJECTION_RE =
 export function authMessage(provider: ProviderId, detail = ""): string {
   const loginCmd = LOGIN_COMMANDS[provider] ?? "its login command";
   const hint = LOGIN_HINTS[provider];
-  return `${provider} requires sign-in. Run \`${loginCmd}\` in a terminal${hint ? ` ${hint}` : ""}.${detail ? ` (${detail})` : ""}`;
+  const how =
+    AUTH_GUIDANCE[provider] ?? `Run \`${loginCmd}\` in a terminal${hint ? ` ${hint}` : ""}`;
+  return `${provider} requires sign-in. ${how}.${detail ? ` (${detail})` : ""}`;
 }
 
 export function redactSecrets(s: string): string {
@@ -114,6 +123,9 @@ export function startupAuthError(
   return null;
 }
 
+/** boto-host's signature when the RunSpec command is missing on the remote host. */
+const REMOTE_MISSING_CLI_RE = /cannot start (\S+):[^\n]*Executable not found/;
+
 /** Translates a provider startup failure into a ProviderError the same way for
  * every driver: a rejected microVM credential or a sign-in hint in the detail
  * or a stderr tail line becomes `auth_required` (quoting only that line); anything else becomes
@@ -125,6 +137,13 @@ export function classifyStartupError(
   credential: string | null,
   fallbackCode: "provider_unavailable" | "internal" = "provider_unavailable",
 ): ProviderError {
+  const missingCli = detail.match(REMOTE_MISSING_CLI_RE) ?? tail.match(REMOTE_MISSING_CLI_RE);
+  if (missingCli) {
+    return new ProviderError(
+      fallbackCode,
+      `${provider}: \`${missingCli[1]}\` is not installed on the remote host. Install it there or pick a different placement.`,
+    );
+  }
   const authLine = tail
     .split("\n")
     .map((line) => line.trim())

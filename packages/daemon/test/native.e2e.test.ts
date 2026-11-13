@@ -203,6 +203,24 @@ describe.each(CASES)("native $provider driver e2e", (cs) => {
     });
   }
 
+  test("plan updates surface a single plan item with the latest entries", async () => {
+    const a = await newAgent("Plan");
+    const t = await turn(a.id, "plan");
+    expect(t.status).toBe("completed");
+    const h = await c.request("chat.history", { agentId: a.id });
+    const plans = h.items.filter((i) => i.kind === "plan" && i.turnId === t.id);
+    expect(plans).toHaveLength(1);
+    const plan = plans[0]!;
+    if (plan.kind === "plan") {
+      expect(plan.entries.map((e) => e.content)).toEqual([
+        "Clonar o repositório",
+        "Rodar os testes",
+        "Abrir o PR",
+      ]);
+      expect(plan.entries.every((e) => e.status === "completed")).toBe(true);
+    }
+  });
+
   test("cancel interrupts a running turn", async () => {
     const a = await newAgent("Slow");
     const { queueId } = await c.request("chat.send", { agentId: a.id, text: "slow" });

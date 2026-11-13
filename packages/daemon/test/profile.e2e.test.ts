@@ -67,7 +67,6 @@ describe("profile and memory provenance e2e", () => {
     stateDir = tmp("profile-fake-");
     sharedRoot = tmp("profile-shared-");
     daemon = await startDaemon(dataDir, agentsRoot, token, {
-      BOTO_DEFAULT_BOT: "off",
       BOTO_ACP_COMMAND_DEVIN: JSON.stringify(["bun", FAKE_AGENT]),
       FAKE_ACP_STATE_DIR: stateDir,
       BOTO_SHARED_ROOT: sharedRoot,

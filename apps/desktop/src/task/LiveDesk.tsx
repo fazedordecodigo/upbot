@@ -16,11 +16,14 @@ export function LiveDesk({
   available,
   onExpand,
   onRelease,
+  bar = true,
 }: {
   session: MachineSession;
   available: boolean;
   onExpand?: (() => void) | undefined;
   onRelease: () => void;
+  /** The machine name/status footer; the workspace header replaces it inside task panes. */
+  bar?: boolean;
 }) {
   const { machine, frame, frameUrl, cursor, owned, input } = session;
   const surface = useRef<HTMLDivElement>(null);
@@ -89,7 +92,7 @@ export function LiveDesk({
   };
   const ready = machine?.status === "ready";
   const copy = !available
-    ? "Este bot trabalha sem área de trabalho. Ela está disponível para bots em uma microVM."
+    ? "Este bot trabalha sem área de trabalho. Ela está disponível para bots em uma máquina virtual."
     : (session.error ??
       (!machine
         ? "Conectando à máquina…"
@@ -198,22 +201,26 @@ export function LiveDesk({
           />
         ))}
       </div>
-      <div className="live-bar">
-        <Icon name="monitor" />
-        <span className="live-machine-name">{machine?.name ?? "Área de trabalho"}</span>
-        <span className="live-machine-status">{machine ? machineStatus[machine.status] : ""}</span>
-        {onExpand && available && (
-          <button
-            type="button"
-            className="btn btn-ghost btn-icon btn-sm"
-            aria-label="Abrir em tela cheia"
-            data-tip="Abrir em tela cheia"
-            onClick={onExpand}
-          >
-            <Icon name="app-window" />
-          </button>
-        )}
-      </div>
+      {bar && (
+        <div className="live-bar">
+          <Icon name="monitor" />
+          <span className="live-machine-name">{machine?.name ?? "Área de trabalho"}</span>
+          <span className="live-machine-status">
+            {machine ? machineStatus[machine.status] : ""}
+          </span>
+          {onExpand && available && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-icon btn-sm"
+              aria-label="Abrir em tela cheia"
+              data-tip="Abrir em tela cheia"
+              onClick={onExpand}
+            >
+              <Icon name="app-window" />
+            </button>
+          )}
+        </div>
+      )}
       <span className="sr-only" aria-live="polite">
         {announcement}
       </span>

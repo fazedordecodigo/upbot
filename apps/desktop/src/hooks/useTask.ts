@@ -26,6 +26,7 @@ const empty = () => ({
   loading: true,
   error: false,
   hasMore: false,
+  deleted: false,
 });
 
 export function useTask(client: DaemonClient, taskId?: string) {
@@ -162,6 +163,9 @@ export function useTask(client: DaemonClient, taskId?: string) {
           eventTask = task;
           setState((s) => ({ ...s, task }));
         }
+      }),
+      listen("task.deleted", ({ id }) => {
+        if (id === taskId) setState((s) => ({ ...s, deleted: true }));
       }),
       listen("item.created", upsert),
       listen("item.updated", upsert),

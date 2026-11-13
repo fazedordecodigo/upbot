@@ -1,7 +1,10 @@
+.dialog.command { width: min(calc(100% - var(--boto-space-8)), var(--boto-size-chat-column)); max-width: none; margin-top: 12dvh; }
 .command-search { padding-bottom: var(--boto-space-4); }
 .command-input { border: 0; background: transparent; min-width: 0; }
-.command-list { max-height: calc(var(--boto-space-20) * 4); }
+.command-list { max-height: calc(var(--boto-size-control) * 12); }
 .command-item[aria-selected="true"] { background: var(--boto-color-accent-surface); }
 .command-empty { color: var(--boto-color-muted-foreground); font-size: var(--boto-font-size-sm); }
 .command-list .dropdown-label { padding: var(--boto-space-2) var(--boto-space-3); }
 .command-item { width: 100%; display: flex; align-items: center; gap: var(--boto-space-2); }
+.command-item > .od-icon { color: var(--boto-color-muted-foreground); }
+.command-item > .kbd { color: var(--boto-color-muted-foreground); }

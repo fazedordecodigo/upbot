@@ -50,7 +50,25 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     await page.locator('[data-ob-theme="light"]').click();
     await page.locator("#ob-private").click();
     await page.locator("#ob-next").click();
+    expect(await page.locator("#ob-count").textContent()).toBe("Passo 5 de 5");
+    await page.locator("#ob-bot-name").fill("Financeiro");
+    await page.locator("#ob-bot-role").fill("Confere notas fiscais");
+    await page.locator("#ob-bot-provider").selectOption("devin");
+    expect(await page.locator(".ob-next-label").textContent()).toBe("Criar bot e começar");
+    expect(await page.locator("#ob-card-name").textContent()).toBe("Financeiro");
+    expect(await page.locator("#ob-card-provider").textContent()).toBe("Devin");
+    await page.locator("#ob-next").click();
     await page.locator("#onboarding[open]").waitFor({ state: "hidden" });
+    const bots = await client.request("agents.list", {});
+    expect(bots).toHaveLength(1);
+    expect(bots[0]).toMatchObject({
+      name: "Financeiro",
+      role: "Confere notas fiscais",
+      provider: "devin",
+      isDefault: true,
+      requireApproval: true,
+    });
+    expect(await client.request("providers.getDefault", {})).toEqual({ provider: "devin" });
     const profile = await client.request("profile.get", {});
     expect(profile.name).toBe("Iara");
     expect(profile.about).toBe("Prefiro respostas curtas.");
@@ -115,9 +133,10 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     expect(await page.locator("#greeting").textContent()).toContain("Boa noite");
     await page.keyboard.press("Control+Shift+o");
     expect(await page.locator("#main").getAttribute("data-view")).toBe("new");
-    await page.locator("#send-label").waitFor();
     await page.waitForFunction(
-      () => document.querySelector("#approval-switch")?.getAttribute("aria-checked") === "true",
+      () =>
+        (document.querySelector("#composer-input") as HTMLTextAreaElement | null)?.disabled ===
+        false,
     );
     await client.request("profile.update", {
       defaults: { delegationMode: "scheduled", requireApproval: false },
@@ -125,9 +144,10 @@ test("onboarding persists real profile, handles errors, and exposes working shor
     await page.locator(".sb").getByText("Início", { exact: true }).click();
     await page.keyboard.press("Control+Shift+o");
     await page.waitForFunction(
-      () => document.querySelector("#when-label")?.textContent === "Daqui a 1 hora",
+      () =>
+        (document.querySelector("#composer-input") as HTMLTextAreaElement | null)?.disabled ===
+        false,
     );
-    expect(await page.locator("#approval-switch").getAttribute("aria-checked")).toBe("false");
     await client.request("profile.update", {
       defaults: { delegationMode: "approval", requireApproval: true },
     });

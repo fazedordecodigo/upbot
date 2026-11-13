@@ -29,6 +29,8 @@ type HostRow = {
   root: string | null;
   preflight_json: string | null;
   created_at: number;
+  kind: "ssh" | "localvm";
+  instance: string | null;
 };
 
 export const HELPER = "bin/boto-host.ts";
@@ -70,7 +72,7 @@ export function sshArgs(host: RemoteHost, extra: string[], remoteCmd: string): [
   ];
 }
 
-async function sshExec(
+export async function sshExec(
   host: RemoteHost,
   remoteCmd: string,
   input?: string,
@@ -127,6 +129,7 @@ export class HostStore {
       root: r.root,
       preflight: r.preflight_json ? parsePreflight(r.preflight_json) : null,
       createdAt: r.created_at,
+      kind: r.kind ?? "ssh",
     };
   }
 
@@ -153,6 +156,40 @@ export class HostStore {
         "INSERT INTO hosts (id, name, target, port, identity_file, created_at) VALUES (?, ?, ?, ?, ?, ?)",
       )
       .run(id, p.name, p.target, p.port ?? 22, p.identityFile ?? null, Date.now());
+    return this.get(id)!;
+  }
+
+  /** The daemon-managed local VM host row, if it exists. */
+  localVmHost(): RemoteHost | null {
+    const r = this.db.query("SELECT * FROM hosts WHERE kind = 'localvm'").get() as HostRow | null;
+    return r ? this.toHost(r) : null;
+  }
+
+  /** Creates or refreshes the local VM host row from the Lima instance's SSH endpoint. */
+  upsertLocalVm(p: {
+    instance: string;
+    name: string;
+    target: string;
+    port: number;
+    identityFile: string | null;
+  }): RemoteHost {
+    const existing = this.db.query("SELECT id FROM hosts WHERE kind = 'localvm'").get() as {
+      id: string;
+    } | null;
+    if (existing) {
+      this.db
+        .query(
+          "UPDATE hosts SET name = ?, target = ?, port = ?, identity_file = ?, instance = ? WHERE id = ?",
+        )
+        .run(p.name, p.target, p.port, p.identityFile ?? null, p.instance, existing.id);
+      return this.get(existing.id)!;
+    }
+    const id = crypto.randomUUID();
+    this.db
+      .query(
+        "INSERT INTO hosts (id, name, target, port, identity_file, created_at, kind, instance) VALUES (?, ?, ?, ?, ?, ?, 'localvm', ?)",
+      )
+      .run(id, p.name, p.target, p.port, p.identityFile ?? null, Date.now(), p.instance);
     return this.get(id)!;
   }
 
@@ -282,8 +319,10 @@ export class HostStore {
     const agent = this.db.query("SELECT provider FROM agents WHERE id = ?").get(agentId) as {
       provider: string;
     } | null;
-    const credentials =
-      p.isolation === "firecracker" && agent ? this.credentialEnv(agent.provider) : {};
+    // MicroVMs boot signed out and the local VM is equally credential-less from Boto's view,
+    // so stored provider logins ride the RunSpec env in both cases.
+    const credentialed = p.isolation === "firecracker" || h.kind === "localvm";
+    const credentials = credentialed && agent ? this.credentialEnv(agent.provider) : {};
     return remoteLaunch(
       h,
       p,
@@ -319,6 +358,9 @@ export function remoteLaunch(
   const root = host.root!;
   const helper = `${root}/${HELPER}`;
   const vm = placement.isolation === "firecracker";
+  // Stored provider logins ride the run spec env only for credentialed placements:
+  // Firecracker microVMs and the local VM (both start signed out).
+  const credentialed = vm || host.kind === "localvm";
   const socket = `/tmp/boto-${randomBytes(8).toString("hex")}.sock`;
   return {
     cwd: vm ? "/workspace" : `${root}/agents/${placement.agentId}`,
@@ -356,7 +398,7 @@ export function remoteLaunch(
           agentId: placement.agentId,
           isolation: placement.isolation,
           cmd,
-          env: vm ? { ...env, ...credentials } : env,
+          env: credentialed ? { ...env, ...credentials } : env,
           bridgeSocket: bridgePort ? socket : undefined,
           vcpus: placement.vcpus,
           memMib: placement.memMib,

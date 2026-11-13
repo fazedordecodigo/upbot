@@ -10,6 +10,7 @@
 //   split:<t>   -> assistant message split inside a multi-byte UTF-8 character, result success
 //   think:<t>   -> thinking delta, then text <t>
 //   tool        -> tool_use Bash + can_use_tool -> tool_result -> "permission:<behavior>"
+//   plan        -> two TodoWrite tool_use updates -> "plan:done"
 //   whoami      -> "mode=<m> model=<m> session=<id>"
 //   slow        -> a delta every 100ms until an interrupt control request
 //   authfail    -> synthetic "Not logged in" error result
@@ -195,6 +196,50 @@ async function runPrompt(raw: string) {
     }
     const always = Array.isArray(res.updatedPermissions) ? "+always" : "";
     streamText(`msg-${Date.now()}`, `permission:${String(res.behavior)}${always}`);
+    result();
+  } else if (text === "plan") {
+    const writeTodos = (id: string, statuses: string[]) => {
+      send({
+        type: "assistant",
+        session_id: sessionId,
+        message: {
+          id: `m-${id}`,
+          model: "fake",
+          content: [
+            {
+              type: "tool_use",
+              id,
+              name: "TodoWrite",
+              input: {
+                todos: [
+                  { content: "Clonar o repositório", status: statuses[0] },
+                  { content: "Rodar os testes", status: statuses[1] },
+                  { content: "Abrir o PR", status: statuses[2] },
+                ],
+              },
+            },
+          ],
+        },
+      });
+      send({
+        type: "user",
+        session_id: sessionId,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: id,
+              is_error: false,
+              content: "Todos have been modified successfully.",
+            },
+          ],
+        },
+      });
+    };
+    writeTodos(`toolu_${Date.now()}`, ["completed", "in_progress", "pending"]);
+    writeTodos(`toolu_${Date.now() + 1}`, ["completed", "completed", "completed"]);
+    streamText(`msg-${Date.now()}`, "plan:done");
     result();
   } else if (text === "whoami") {
     streamText(`msg-${Date.now()}`, `mode=${mode} model=${model} session=${sessionId}`);

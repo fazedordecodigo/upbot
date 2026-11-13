@@ -115,7 +115,7 @@ test("home paginates paused tasks without letting completed tasks crowd out acti
     expect(await page.locator("#lane-running .lane-item").count()).toBe(202);
     expect(await page.locator("#lane-running").innerText()).toContain("Running pagination");
     expect(await page.locator("#lane-running").innerText()).not.toContain("Completed pagination");
-    expect(await page.locator("#lane-waiting-count").innerText()).toBe("0");
+    expect(await page.locator("#lane-waiting-count").count()).toBe(0);
   } finally {
     await page.close();
     db.query("DELETE FROM tasks WHERE agent_id = ?").run(agent.id);
@@ -132,7 +132,11 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
   page.setDefaultTimeout(30000);
   try {
     await page.goto(`${base}/#port=${daemon.port}&token=${token}`);
-    await page.getByText("Nada em andamento agora.", { exact: true }).waitFor();
+    await page
+      .getByText("Nenhuma tarefa em andamento. Clique em Nova tarefa e o Boto começa na hora.", {
+        exact: true,
+      })
+      .waitFor();
     expect(await page.getByText("Nada aguardando você.", { exact: true }).count()).toBe(1);
     expect(await page.getByText("Nenhuma entrega ainda.", { exact: true }).count()).toBe(1);
     expect(
@@ -154,8 +158,9 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
     expect(await page.locator("#lane-running-count").innerText()).toBe("1");
     await rpc.request("tasks.create", { agentId: waiter.id, text: "tool" });
     await page
-      .locator("#lane-waiting .lane-item")
-      .filter({ hasText: "Permissão pendente: Fake tool" })
+      .locator("#lane-waiting .wait-item")
+      .filter({ hasText: "Pede permissão" })
+      .filter({ hasText: "Fake tool" })
       .waitFor();
     expect(await page.locator("#lane-waiting-count").innerText()).toBe("1");
     await rpc.request("tasks.create", { agentId: writer.id, text: "echo:Resumo entregue" });
@@ -164,10 +169,7 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
     await page.reload();
     await page.locator("#lane-running .lane-item").waitFor();
     expect(await page.locator("#lane-running").innerText()).not.toContain("Private runner");
-    await page
-      .locator("#lane-waiting .lane-item")
-      .filter({ hasText: "Permissão pendente: Fake tool" })
-      .waitFor();
+    await page.locator("#lane-waiting .wait-item").filter({ hasText: "Fake tool" }).waitFor();
     expect(await page.locator("#lane-running-count").innerText()).toBe("1");
     expect(await page.locator("#lane-waiting-count").innerText()).toBe("1");
     if (process.env.HOME_SCREEN_DIR) {
@@ -199,11 +201,17 @@ test("home reflects real profile, running and waiting tasks, deliveries and navi
     await page.locator("#lane-running .lane-item").first().click();
     expect(await page.locator("#main").getAttribute("data-view")).toBe("task");
     await page.locator('[data-nav="home"]').click();
-    await page.locator("#lane-waiting .lane-item").first().click();
+    await page
+      .locator("#lane-waiting .wait-item")
+      .getByRole("button", { name: "Ver detalhes" })
+      .click();
     await page.getByRole("button", { name: "Permitir nesta sessão", exact: true }).waitFor();
     expect((await rpc.request("permissions.list", {})).length).toBe(1);
-    await page.getByRole("button", { name: "Permitir nesta sessão", exact: true }).click();
     await page.locator('[data-nav="home"]').click();
+    await page
+      .locator("#lane-waiting .wait-item")
+      .getByRole("button", { name: "Permitir nesta sessão" })
+      .click();
     await page.getByText("Nada aguardando você.", { exact: true }).waitFor();
     await page
       .locator("#view-home")

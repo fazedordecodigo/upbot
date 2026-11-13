@@ -24,7 +24,7 @@ O cartão "Áreas de trabalho dos agentes" fica no fim. As miniaturas são ilust
 
 ## Agentes
 
-`AgentsView.tsx` é o cockpit. O título é "Agentes". O resumo conta Trabalhando, Aguardando você, Livres e Fila pausada. O filtro usa esses mesmos cortes, mais Todos. Cada card mostra o papel, o status com ícone e texto, a miniatura, instâncias (0/1), fila e máquina, e as ações Abrir painel, Pausar fila ou Retomar fila, e Ver área.
+`AgentsView.tsx` é o cockpit. O resumo conta agentes em atividade, instâncias em uso, tarefas na fila e pedidos esperando você. O filtro usa Todos, Trabalhando, Aguardando você, Livres e Pausados. Cada card mostra o papel, o status com ícone e texto em pílula ao lado das instâncias (0/1) com barra de progresso no tom da situação, as áreas de trabalho ao vivo (miniatura, nome em mono, tarefa e estado como "Pede permissão"), a fila com a próxima tarefa, e as ações Abrir painel e Pausar fila ou Retomar fila.
 
 "Novo agente" abre `CreateAgentDialog`: nome, o que ele faz, provedor e pedir aprovação. A ação principal é "Criar agente".
 

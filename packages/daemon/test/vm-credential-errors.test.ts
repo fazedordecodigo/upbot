@@ -63,11 +63,11 @@ describe("microVM credential rejection messages", () => {
     expect(isVmCredentialRejection("network connection timed out")).toBe(false);
   });
 
-  test("maps signed-out Devin and Grok messages to login commands", () => {
+  test("maps signed-out Devin and Grok messages to login guidance", () => {
     expect(
       mapAcpAuthError("devin", new Error("Please log in to use Devin. Use `/login`"), null)
         ?.message,
-    ).toContain("devin auth login");
+    ).toContain("Save a Devin API key under Settings → Providers");
     expect(
       mapAcpAuthError(
         "grok",
@@ -163,6 +163,17 @@ describe("classifyStartupError", () => {
     expect(error.message).toBe(
       "codex requires sign-in. Run `codex login` in a terminal. (Authentication failed)",
     );
+  });
+
+  test("maps a remote missing provider CLI to a not-installed error", () => {
+    const error = classifyStartupError(
+      "devin",
+      "ACP connection closed",
+      'boto-host: cannot start devin: Executable not found in $PATH: "devin"',
+      null,
+    );
+    expect(error.code).toBe("provider_unavailable");
+    expect(error.message).toContain("`devin` is not installed on the remote host");
   });
 
   test("honors the internal fallback code for resume attempts", () => {
